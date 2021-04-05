@@ -1,816 +1,1329 @@
+module tqtec
 
-      PROGRAM MAIN
-C     MAIN PROGRAM TQTec.FOR
-C     BUR-ERO-THRUST:UPPER OR LOWER PLATE 
-C     CALCULATES THE ONE-DIMENSIONAL TRANSIENT THERMAL FIELD WITHIN
-C     AN AREA THAT UNDERGOES EPISODES OF:  BURIAL, EROSION, AND 
-C     THRUSTING.  THIS PROGRAM CAN BE USED TO MONITOR POINTS THAT
-C     MOVE FROM THE UPPER TO LOWER (or v.v) PLATES.
-C     --------------------------------------------------------------
-C     VARIABLE LIST:  MAIN
-C     RESP = RESPONSE TO:  WANT TO CREATE A NEW INPUT DATA FILE?
-C     INFIL = NAME OF INPUT DATA FILE
-C     OUTFIL = NAME OF OUTPUT DATA FILE
-C     Q1 = TOTAL TIME (LATER, Q1=(TOTAL TIME/TIME STEP LENGTH)=
-C        NUMBER OF TIME STEPS
-C     M1 = TIME/OUTPUT (LATER, M1=((TIME/OUTPUT)/TIME STEP LENGTH)=
-C        NUMBER OF TIME STEPS BETWEEN DISPLAY INTERVALS
-C     W(1) = SURFACE TEMPERATURE
-C     G1 = SURFACE HEAT FLOW
-C     Y(I) = INITIAL DEPTH OF POINTS
-C     N = NUMBER OF SPACE STEPS (NODES)
-C     H1 = VERTICAL HEIGHT OF NODES
-C     K1 = TIME STEP
-C     C1 = CONDUCTIVITY
-C     A1 = HEAT PRODUCTION
-C     B1 = DEPTH OF HEAT PRODUCTION
-C     D1 = DIFFUSIVITY
-C     W1 = D1*K1/C1 = (A SCALING FACTOR USED TO GET TEMPERATURES)
-C     II(1) = H1
-C     II(2) = K1
-C     II(3) = A1
-C     II(4) = B1
-C     II(5) = Q1
-C     II(6) = D1
-C     R1 = D1*K1/(H1*H1) PART OF WHAT IS INSERTED IN THE TRIDIAGONAL
-C        MATRIX WHEN FINITE DIFFERENCE IS USED TO SOLVE THE PROBLEM
-C     W(3) = TEMPERATURE AT BOTTOM NODE + CHANGE IN TEMPERATURE 
-C        WITHOUT HEAT PRODUCTION = TEMP AT NODE N+1
-C     V = A COUNTER IN THE P-MATRIX, V'S ARE THE TIME STEPS
-C     P(V) = SEE P(I) IN SUBROUTINE HISTI
-C     Q(V) = SURFACE HEAT FLOW AT EACH TIME STEP
-C     TTI(V,K) = TTI CALCULATED AT EACH TIME STEP
-C     --------------------------------------------------------------
-      CHARACTER INFIL*20, OUTFIL*20, RESP*1, OUT1*25
-      INTEGER P, V, E1, Q1,THTYPE,THNUMB, QSTEP
-      REAL II, K1
-      COMMON /COM1/ R(50000,2,10), A(5000,3), B(5000), C(5000), D(5000),
-     *   E(5000), H(5000), P(50000), Q(50000), T(5000), II(10), Z(5,3),
-     *   Y(10), NN(4),W(3),THTYPE(5),QTIME(10),QVALUE(10),QVTIME(50000)
-      COMMON /COM2/ H1, A1, B1, C1, W1, E1, R1, N
-      COMMON /COM3/ COND(5000),BCOND(50000),BASGRAD(50000)
-      COMMON /COM4/ INL,TOP(50),THICK(50),ACOND(50)
-      WRITE (*,*) 'DO YOU WANT TO CREATE A NEW INPUT DATA_FILE
-     *   (Y/N)?'
-      READ (*,130) RESP
-      IF (RESP.EQ.'Y') THEN
-         WRITE (*,*) 'NAME OF INPUT DATA_FILE: ? '
-         READ (*,140) INFIL
-         OPEN (UNIT=8, FILE=INFIL)
-         CALL INPUT(INFIL)
-      ELSE
-         WRITE (*,*) 'NAME OF INPUT DATA_FILE: ? '
-         READ (*,140) INFIL
-         OPEN (UNIT=8, FILE=INFIL)
-      ENDIF
-      WRITE(*,*) 'NAME OF OUTPUT DATA_FILE: ? '
-      READ(*,140) OUTFIL
-      OPEN(UNIT=7, FILE=OUTFIL)
-      REWIND 8
-      READ (8,110) Q1,M1,W(1),G1,C1,A1,B1
-      READ (8,150) INL
-      IF (INL.GT.0) THEN
-         DO 2, I=1,INL
-            READ(8,160)TOP(I),THICK(I),ACOND(I)
-2        CONTINUE
-      ENDIF
-      READ (8,120) (Y(I), I=1,10)
-      N=1200
-      DO 1, I=1,N
-         COND(I)=C1
-1     CONTINUE
-      H1=0.05
-      K1=0.005
-C      A1=0.0
-C      B1=10.0
-      D1=32.0
-      W1=D1*K1/C1
-      II(1)=H1
-      II(2)=K1
-      II(3)=A1
-      II(4)=B1
-      II(5)=Q1
-      II(6)=D1
-      II(7)=W(1)
-      Q1=NINT(FLOAT(Q1)/K1)
-      M1=M1/K1
-      R1=D1*K1/(H1*H1)
-      V=0
-      CALL INIT(G1)
-	  CALL HIST(G1)
-5     W(3)=B(N)+BASGRAD(V+1)
-      CALL MAT
-	  CALL TRID
-	   V=V+1
-      WRITE(*,*) 'Did cycle', V
-C      WRITE(*,*) 'BASGRAD=', BASGRAD(V)
-	   IF(E1.NE.0)WRITE(*,*)'*****ERROR EXIT FROM TRID*****'
-      IF(P(V).EQ.1)CALL BURIAL(V)
-      IF(P(V).EQ.2)CALL EROS
-      IF(P(V).GE.3) THEN
-          THNUMB = P(V)-2
-         IF (THTYPE(THNUMB).EQ.1) CALL THSTUP(V)
-         IF (THTYPE(THNUMB).EQ.2) CALL THSTLP(V)
-      ENDIF
-      Q(V)=(B(10)-B(5))/(5.0*H1)
-      SURCON=0.0
-      coninv = 0.0
-      DO 6, I=1,5
-C         coninv = coninv + (1.0/COND(I))
-		 		 SURCON=SURCON+COND(I+4)
-6     CONTINUE
-      SURCON=SURCON/5.0
-C      SURCON = (1.0/coninv)/25.0
-      Q(V)=Q(V)*SURCON
-      DO 10 I=1,10
-         IARG=NINT(Y(I))
-         IF(IARG.EQ.0) THEN
-           R(V,1,I)=W(1)
-         ELSEIF(IARG.LT.0) THEN
-           R(V,1,I)=0.0
-         ELSEIF(IARG.GT.0) THEN
-           R(V,1,I)=B(IARG)
-         ENDIF
-         R(V,2,I)=Y(I)
-C         EMP = (R(V,1,I)-105)/10
-C         IF (V.EQ.1) THEN
-C           TTI(V,I)= II(2)*2**EMP 
-C         ELSE
-C           TTI(V,I)= TTI(V-1,I) + II(2)*2**EMP
-C         ENDIF
-10    CONTINUE
-      IF(V.GE.Q1)THEN
-        CALL OUTPUT(Q1,M1,OUTFIL)
-      ELSE
-        GOTO 5
-      ENDIF
-110   FORMAT(/,2I10,5F10.4)
-120   FORMAT(10F8.4)
-130   FORMAT(A1)
-140   FORMAT(A20)
-150   FORMAT(I10)
-160   FORMAT(3F10.4)
-      CLOSE (8)
-      CLOSE (7)
-      STOP
-      END
-C     **************************************************************
-C     **************************************************************
-C     PROGRAM INPUT.FOR
-C     INPUT DATA SET FOR LOWPL.FOR AND UPRPL.FOR
-      SUBROUTINE INPUT(FILNM)
-C     --------------------------------------------------------------
-C     VARIABLES:  INPUT
-C     IQ1 = TOTAL TIME
-C     IM1 = TIME/OUTPUT
-C     AW2 = SURFACE TEMPERATURE
-C     AG1 = SURFACE HEAT FLOW
-C     AY(I) = INITIAL DEPTH OF POINTS 1 TO 10
-C     FILNM = NAME OF INPUT FILE
-C     INBP = NUMBER OF BURIAL PERIODS
-C     AN(1) = BEGINNING OF A BURIAL, EROSION, OR THRUST PERIOD AFTER
-C        START OF MODEL
-C     AN(2) = DURATION OF BURIAL OR EROSION PERIOD
-C     AN(3) = TOTAL BURIAL OR EROSION OF THAT PERIOD
-C        (NOTE:  THERE ARE AN'S FOR EACH BURIAL OR EROSION PERIOD)
-C     INUEP = NUMBER OF UPLIFT/EROSION PERIODS
-C     INTP = NUMBER OF THRUST PERIODS
-C     AZ(I,1) = INITIAL BASE OF THRUST FOR EACH THRUST EVENT
-C     AZ(I,2) = INITIAL DEPTH OF THRUST
-C     AZ(I,3) = INITIAL THICKNESS OF THRUST
-C     --------------------------------------------------------------
-      CHARACTER FILNM*20
-	  COMMON /COM2/ H1, A1, B1, C1, W1, E1, R1, N
-      REAL AZ(5,3), AY(10), AN(4), AM1, TOP(5000), THICK(5000), 
-     *     ACOND(5000),QTIME(10),QVALUE(10)
-      INTEGER QSTEP
-      WRITE(*,*)'TOTAL TIME FOR MODEL (MA): ?'
-      READ(*,*) IQ1
-C      WRITE(*,*) 'TIME INTERVAL FOR OUTPUT TO BE DISPLAYED: ?'
-C      READ(*,*) IM1
-      IM1=5
-      WRITE(*,*)'TEMPERATURE AT UPPER SURFACE BOUNDARY: ?'
-      READ(*,*) AW2
-      WRITE(*,*) 'SURFACE HEAT FLOW (mW/m2): ?'
-      READ(*,*) AG1
-      WRITE(*,*) 'INITIAL (BASEMENT) THERMAL CONDUCTIVITY (W/m K): ?'
-      READ(*,*) C1
-	  WRITE(*,*) 'Surface Heat Production (uW/m3):?'
-	  READ(*,*) A1
-      WRITE(*,*)'DO YOU WANT TO ACCOUNT FOR VARIATIONS IN'
-      WRITE(*,*)'THERMAL CONDUCTIVITY AT THE START OF THE'
-      WRITE(*,*)'MODEL? (1=YES)'
-      READ(*,*)IREPLY
-      IF(IREPLY.EQ.1)THEN
-         WRITE(*,*)'NUMBER OF LAYERS TO INPUT CONDUCTIVITY FOR?'
-         READ(*,*) INL
-         DO 9, I=1,INL
-            WRITE(*,*)'DEPTH (KM) OF TOP OF LAYER',I,'?'
-            READ(*,*)TOP(I)
-            WRITE(*,*)'THICKNESS OF LAYER (KM) ',I,'?'
-            READ(*,*)THICK(I)
-            WRITE(*,*)'CONDUCTIVITY (W/m K) OF LAYER',I,'?'
-            READ(*,*)ACOND(I)
-9        CONTINUE
-      ENDIF
-      DO 10 I=1,10
-         WRITE(*,*) 'INITIAL DEPTH (KM) OF POINT',I,' ? '
-         READ(*,*) AY(I)
-10    CONTINUE
-      WRITE(8,100)FILNM
-      WRITE(8,110)IQ1,IM1,AW2,AG1,C1,A1
-      IF(IREPLY.EQ.1)THEN
-      WRITE(8,130)INL
-         DO 11, I=1,INL
-            WRITE(8,140)TOP(I),THICK(I),ACOND(I)
-11       CONTINUE
-      ELSE
-      INL=0
-      WRITE(8,130)INL
-      ENDIF
-      WRITE(8,120) (AY(I),I=1,10)
-      WRITE(*,*)'NUMBER OF BURIAL PERIODS: ?'
-      READ(*,*)INBP
-      WRITE(8,130)INBP
-      DO 20 I=1,INBP
-         WRITE(*,*)'BEGINNING (MA AFTER START) OF BURIAL',I,' ? '
-         READ(*,*)AN(1)
-         WRITE(*,*)'DURATION (MA) OF BURIAL',I,' ? '
-         READ(*,*)AN(2)
-         WRITE(*,*)'TOTAL BURIAL (KM) EPISODE',I,' ? '
-         READ(*,*)AN(3)
-         WRITE(*,*)'THERMAL CONDUCTIVITY (W/m K) OF SEDIMENTS'
-         WRITE(*,*)'BURIAL EPISODE',I,'?'
-         READ(*,*)AN(4)
-         WRITE(8,150)(AN(J),J=1,4)
-20    CONTINUE
-      WRITE(*,*)'NUMBER OF UPLIFT/EROSION PERIODS: ?'
-      READ(*,*)INUEP
-      WRITE(8,130)INUEP
-      DO 30 I=1,INUEP
-         WRITE(*,*)'BEGINNING (MA AFTER START) OF UPLIFT',I,' ? '
-         READ(*,*)AN(1)
-         WRITE(*,*)'DURATION (MA) OF UPLIFT',I,' ? '
-         READ(*,*)AN(2)
-         WRITE(*,*)'TOTAL UPLIFT (KM) PERIOD',I,' ? '
-         READ(*,*)AN(3)
-         WRITE(8,140)(AN(J),J=1,3)
-30    CONTINUE
-      WRITE(*,*)'NUMBER OF THRUST PERIODS: ?'
-      READ(*,*)INTP
-      WRITE(8,130)INTP
-      DO 40 I=1,INTP
-         WRITE(*,*)'TIME OF THRUSTING (MA) OF PERIOD',I,' ? '
-         READ(*,*)AN(1)
-         WRITE(*,*)'POINTS IN UPPER (1) OR LOWER (2) PLATE ?'
-         READ(*,*)AN(2)
-         WRITE(*,*)'INITIAL BASE (KM) OF THRUST: ?'
-         READ(*,*)AZ(I,1)
-         WRITE(*,*)'INITIAL DEPTH (KM) OF THRUST FAULT: ?'
-         READ(*,*)AZ(I,2)
-         WRITE(*,*)'INITIAL  THICKNESS (KM) OF THRUST: ?'
-         READ(*,*)AZ(I,3)
-         WRITE(8,160)AN(1),AN(2),(AZ(I,J),J=1,3)
-40    CONTINUE
-      WRITE(*,*) 'NUMBER OF Q VARIATIONS (max=10)'
-      READ(*,*) QSTEP
-      WRITE(8,130) QSTEP
-      DO 50 I=1,QSTEP
-         WRITE(*,*) 'TIME OF Q VALUE CHANGE (Ma)', I
-         READ(*,*) QTIME(I)
-         WRITE(*,*)'VALUE OF Q AT STEP',I
-         READ(*,*) QVALUE(I)
-         WRITE(8,170) QTIME(I), QVALUE(I)
-50    CONTINUE
-100   FORMAT(A20)
-110   FORMAT(2I10,4F10.4)
-120   FORMAT(10F8.4)
-130   FORMAT(I10)
-140   FORMAT(3F10.4)
-150   FORMAT(4F10.4)
-160   FORMAT(5F10.4)
-170   FORMAT(2F10.4)
-      RETURN
-      END
-C     **************************************************************
-C     **************************************************************
-C     PROGRAM INIT.FOR
-      SUBROUTINE INIT(G1)
-C     --------------------------------------------------------------
-C     VARIABLES:  INIT
-C     W(2)=(SURFACE HEAT FLOW - (HEAT PRODUCTION*DEPTH OF HEAT PROD)/
-C        CONDUCTIVITY = REDUCED HEAT FLOW/CONDUCTIVITY (K/m)=dT/dz
-C        GRADIENT WITHOUT HEAT PRODUCTION.  LATER,
-C        W(2)=W(2)*NODE SIZE=CHANGE IN TEMPERATURE WITHOUT HEAT PROD.
-C     Y(I) = INITIAL DEPTH OF POINTS/NODE SIZE = INITIAL DEPTH IN
-C        TERMS OF NODES
-C     G1 = SURFACE HEAT FLOW * NODE SIZE / CONDUCTIVITY = CHANGE
-C        IN TEMPERATURE WITH HEAT PRODUCTION (K)
-C     ARG1 = z/D  FOR HEAT PRODUCTION (z=DEPTH, D=DEPTH OF HEAT PROD.)
-C     H(I) = A*exp(-z/D) = EXPONENTIALLY DECAYING HEAT PROD. 
-C        IN TERMS OF NODES (I'S) HERE.
-C     B(I) = To + qo*z/k + Ao*D*D/k(z/D + exp(z/D) - 1.0)
-C        STEADY STATE, ONE-DIMENSIONAL HEAT CONDUCTION EQUATION,
-C        IN TERMS OF I'S HERE.
-C     Q(1) = k(T(node1) - T(surface)) / dz = SURFACE HEAT FLOW
-C     --------------------------------------------------------------
-      INTEGER P,V,E1,TN,BN,THTYPE
-      REAL II
-      COMMON /COM1/ R(50000,2,10), A(5000,3), B(5000), C(5000), D(5000),
-     *   E(5000), H(5000), P(50000), Q(50000), T(5000), II(10), Z(5,3),
-     *   Y(10), NN(4), W(3),THTYPE(5),QTIME(10),QVALUE(10),QVTIME(50000)
-      COMMON /COM2/ H1,A1,B1,C1,W1,E1,R1,N
-      COMMON /COM3/ COND(5000),BCOND(50000),BASGRAD(50000)
-	  COMMON /COM4/ INL,TOP(50),THICK(50),ACOND(50)
-      IF(INL.EQ.0)GOTO 7
-      DO 5, I=1,INL
-         TN=INT(TOP(I)/H1)
-         BN=INT((TOP(I)+THICK(I))/H1)
-         IF(TN+1.EQ.BN)THEN 
-            COND(TN+1)=ACOND(I)
-         ELSE
-            DO 6, J=TN+1,BN
-               COND(J)=ACOND(I)
-6           CONTINUE
-         ENDIF
-5     CONTINUE
-7     W(2)=(G1-(A1*B1))/C1
-      W(2)=W(2)*H1
-      DO 10 I=1,10
-         Y(I)=Y(I)/H1
-10    CONTINUE
-      DO 20 I=1,N
-         ARG1=FLOAT(I)*H1/B1
-C        H(I) IS THE VOLUMETRIC HEAT PRODUCTION AT EACH NODE, BASED
-C           ON EXPONENTIALLY DECAYING HEAT PRODUCTION BUT DISCRETIZED
-         H(I)=A1*EXP(-ARG1)
-20    CONTINUE
-C     COMPUTE TEMPERATURE IN LAYER 1, SURFACE TO NODE 1
-      B(1) = W(1) + G1*H1/COND(1) - H(1)*H1**2/(2.*COND(1))
-      HTHT = H(1)*H1
-      QBASE = G1-HTHT
-      DO 30 I=2,N
-         B(I)=B(I-1)+QBASE*H1/COND(I)-H(I)*H1**2/(2.*COND(I))
-         HTHT = H(I)*H1
-         QBASE=QBASE-HTHT
-30    CONTINUE
-      Q(1)=(COND(1)*(B(1)-W(1)))/H1
-      RETURN
-      END
-C     **************************************************************
-C     **************************************************************
-C     PROGRAM HIST(HISTORY).FOR
-      SUBROUTINE HIST(G1)
-C     --------------------------------------------------------------
-C     VARIABLES:  HIST
-C     NBP = # OF BURIAL PERIODS
-C     NUEP = # OF UPLIFT AND EROSION PERIODS
-C     NTP = # OF THRUST PERIODS
-C     XN(1) = BEGINNING OF BURIAL, EROSION, OR THRUST FOR EACH PERIOD
-C     XN(2) = DURATION OF BURIAL, EROSION PERIOD
-C     XN(3) = TOTAL BURIAL OR EROSION FOR EACH PERIOD
-C     NN(1) = TIME STEP # WHERE BURIAL OR EROSION BEGINS
-C     NN(2) = DURATION OF BURIAL OR EROSION IN TERMS OF TIME STEPS.
-C     NN(3) = TOTAL BURIAL OR EROSION IN TERMS OF NODES.
-C     R2 = RATE OF BURIAL IN TERMS OF NODES AND TIME STEPS
-C     JBEG = TIME NODE WHERE BURIAL OR EROSION FIRST TAKES PLACE 
-C        = NN(1)+1
-C     JEND = LAST TIME NODE FOR BURIAL FOR EACH BURIAL OR EROSION
-C        PERIOD
-C     ARG = INTERMEDIATE VALUE TO DETERMINE WHETHER OR NOT BURIAL OR 
-C        EROSION TAKES PLACE.  IF AMOUNT BETWEEN TWO TIME NODES IS
-C        GREATER THAN ONE THEN ONE NODE IS ADDED (OR SUBTRACTED).  IF 
-C        NOT, IT IS TESTED UNTIL ENOUGH TO MAKE UP ONE NODE IS ADDED 
-C        OR SUBTRACTED.  ONLY ONE NODE IS ADDED OR SUBTRACTED AT A 
-C        TIME.
-C     P(J) = J'S ARE THE TIME STEPS.  WHEN P(J)=1 BURIAL OCCURS.
-C        WHEN P(J)=2 EROSION OCCURS.  WHEN P(J)>2 IT IS A THRUST
-C        EVENT, WHERE J=3 IS THE FIRST THRUST, J=4 IS THE SECOND ETC.
-C     ---------------------------------------------------------------
-      INTEGER P,E1,F,THTYPE,QSTEP,INTQT(10),Q1
-      REAL XN(4),II
-      COMMON /COM1/ R(50000,2,10), A(5000,3), B(5000), C(5000), D(5000),
-     *   E(5000), H(5000), P(50000), Q(50000), T(5000), II(10), Z(5,3),
-     *   Y(10), NN(4), W(3),THTYPE(5),QTIME(10),QVALUE(10),QVTIME(50000)
-      COMMON /COM2/ H1,A1,B1,C1,W1,E1,R1,N
-      COMMON /COM3/ COND(5000),BCOND(50000),BASGRAD(50000)
-C     HISTORY OF BURIAL PERIODS
-      READ(8,100)NBP
-      DO 20 I=1,NBP
-         READ(8,120) (XN(J),J=1,4)
-         NN(1)=INT(XN(1)/II(2))
-         NN(2)=INT(XN(2)/II(2))
-         NN(3)=INT(XN(3)/II(1))
-         F=0
-         R2=FLOAT(NN(3))/FLOAT(NN(2))
-         JBEG=NN(1)+1
-         JEND=NN(1)+NN(2)
-         DO 10 J=JBEG,JEND
-            ARG=((J-NN(1))*R2)-FLOAT(F)
-            IF(ARG.GE.1.0)THEN
-               P(J)=1
-               BCOND(J)=XN(4)
-               F=F+1
-            ENDIF
-10       CONTINUE
-20    CONTINUE
-C     HISTORY OF UPLIFT/EROSION PERIODS
-      READ(8,100)NUEP
-      DO 40 I=1,NUEP
-         READ(8,110)(XN(J),J=1,3)
-         NN(1)=INT(XN(1)/II(2))
-         NN(2)=INT(XN(2)/II(2))
-         NN(3)=INT(XN(3)/II(1))
-         F=0
-         R2=FLOAT(NN(3))/FLOAT(NN(2))
-         JBEG=NN(1)+1
-         JEND=NN(1)+NN(2)
-         DO 30 J=JBEG,JEND
-            ARG=((J-NN(1))*R2)-FLOAT(F)
-            IF(ARG.GE.1.0)THEN
-               P(J)=2
-               F=F+1
-            ENDIF
-30    CONTINUE
-40    CONTINUE
-C     HISTORY OF THRUST PERIODS
-      READ(8,100)NTP
-      DO 50 I=1,NTP
-         READ(8,130)XN(1),XN(2),(Z(I,J),J=1,3)
-         NN(1)=INT(XN(1)/II(2))
-         P(NN(1))=2+I
-         THTYPE(I)= XN(2)
-50    CONTINUE
-C     HISTORY OF BASAL HEAT FLOW
-      READ(8,100) QSTEP
-      IF(QSTEP.NE.0) GOTO 55
-      Q1=NINT(II(5)/II(2))
-      DO 53 I=1,Q1
-      QVTIME(I)=G1
-53    CONTINUE
-55    CONTINUE
-      DO 60 I=1,QSTEP
-         READ(8,140) QTIME(I), QVALUE(I)
-         INTQT(I)=INT(QTIME(I)/II(2))
-60    CONTINUE
-      DO 70 I=1,QSTEP-1
-        JBEG=INTQT(I)
-        JEND=INTQT(I+1)
-        DO 65 J=JBEG,JEND
-           QVTIME(J)=QVALUE(I)
-65    CONTINUE
-        JBEG=INTQT(QSTEP)
-        JEND=INT(II(5)/II(2))
-        DO 67 J=JBEG,JEND
-           QVTIME(J)=QVALUE(QSTEP)
-67    CONTINUE
-70    CONTINUE
-      DO 80 I=1,JEND
-         BASGRAD(I)= ((QVTIME(I)-(A1*B1))/C1)*H1
-80    CONTINUE
-100   FORMAT(I10)
-110   FORMAT(3F10.4)
-120   FORMAT(4F10.4)
-130   FORMAT(5F10.4)
-140   FORMAT(2F10.4)
-      RETURN
-      END
-C     **************************************************************
-C     **************************************************************
-C     PROGRAM MAT.FOR
-      SUBROUTINE MAT
-C     --------------------------------------------------------------
-C     VARIABLES:  MAT
-C     B(I) = INITIAL TEMPERATURES, LATER AT END OF ROUTINE, BECOMES
-C        NEW TEMPERATURES.
-C     T(I) = NEW TEMPERATURES
-C     --------------------------------------------------------------
-      INTEGER P,E1,THTYPE
-      REAL II
-      DIMENSION BET(5000), GAM(5000)
-      COMMON /COM1/ R(50000,2,10), A(5000,3), B(5000), C(5000), D(5000),
-     *   E(5000), H(5000), P(50000), Q(50000), T(5000), II(10), Z(5,3),
-     *   Y(10), NN(4), W(3),THTYPE(5),QTIME(10),QVALUE(10),QVTIME(50000)
-      COMMON /COM2/ H1,A1,B1,C1,W1,E1,R1,N
-      COMMON /COM3/ COND(5000),BCOND(50000),BASGRAD(50000)
-      DO 5, I=2,N
-         BET(I)=1/(1/COND(I)+1/COND(I-1))
-         GAM(I)=1/COND(I)
-5     CONTINUE
-C     FOR UPPERMOST NODE
-      BET(1)=1/(1/COND(1)+1/COND(1))
-      GAM(1)=1/COND(1)
-      C(1)=-R1*BET(1)*GAM(1)
-      E(1)=-R1*BET(2)*GAM(1)
-      D(1)=1+R1*(BET(2)*GAM(1)+BET(1)*GAM(1))
-      A(1,1)=-C(1)
-      A(1,3)=-E(1)
-      A(1,2)=2-D(1)
-      DO 10 I=2,N-1
-         C(I)=-R1*BET(I)*GAM(I)
-         E(I)=-R1*BET(I+1)*GAM(I)
-         D(I)=1+R1*(BET(I)*GAM(I)+BET(I+1)*GAM(I))
-         A(I,1)=-C(I)
-         A(I,3)=-E(I)
-         A(I,2)=2-D(I)
-10    CONTINUE
-C     FINAL NODE
-      C(N)=-R1*BET(N)*GAM(N)
-      E(N)=C(N)
-      D(N)=1+R1*2*BET(N)*GAM(N)
-      A(N,1)=-C(N)
-      A(N,3)=-E(N)
-      A(N,2)=2-D(N)
-      T(1)=A(1,2)*B(1)+A(1,3)*B(2)+2.0*A(1,1)*W(1)+II(6)*II(2)*H(1)/
-     *     COND(1) 
-      DO 20 I=2,N-1
-         T(I)=A(I,1)*B(I-1)+A(I,2)*B(I)+A(I,3)*B(I+1)+II(6)*II(2)*H(I)/
-     *          COND(I)
-20    CONTINUE
-      T(N)=A(N,1)*B(N-1)+A(N,2)*B(N)+2.0*A(N,3)*W(3)+W1*H(N)
-      DO 30 I=1,N
-         B(I)=T(I)
-30    CONTINUE
-      RETURN
-      END
-C     **************************************************************
-C     **************************************************************
-C     PROGRAM TRID.FOR
-      SUBROUTINE TRID
-C     --------------------------------------------------------------
-      INTEGER P,E1,THTYPE
-      REAL II
-      COMMON /COM1/ R(50000,2,10), A(5000,3), B(5000), C(5000), D(5000),
-     *   E(5000), H(5000), P(50000), Q(50000), T(5000), II(10), Z(5,3),
-     *   Y(10), NN(4), W(3),THTYPE(5),QTIME(10),QVALUE(10),QVTIME(50000)
-      COMMON /COM2/ H1,A1,B1,C1,W1,E1,R1,N
-      E1=0
-      C(1)=D(1)
-      IF(N-1.LT.1)GOTO 40
-      D(1)=E(1)
-      E(1)=0.0
-      E(N)=E(1)
-      DO 30 K=1,N-1
-         IF(ABS(C(K+1)).LT.ABS(C(K)))GOTO 10
-         T1=C(K+1)
-         C(K+1)=C(K)
-         C(K)=T1
-         T1=D(K+1)
-         D(K+1)=D(K)
-         D(K)=T1
-         T1=E(K+1)
-         E(K+1)=E(K)
-         E(K)=T1
-         T1=B(K+1)
-         B(K+1)=B(K)
-         B(K)=T1
-10       IF(C(K).NE.0.0)GOTO 20
-         E1=K
-         RETURN
-20       T1=(-C(K+1)/C(K))
-         C(K+1)=D(K+1)+(T1*D(K))
-         D(K+1)=E(K+1)+(T1*E(K))
-         E(K+1)=0.0
-         B(K+1)=B(K+1)+(T1*B(K))
-30    CONTINUE
-40    IF(C(N).NE.0.0) GOTO 50
-      E1=N
-      RETURN
-50    B(N)=B(N)/C(N)
-      IF(N.EQ.1) RETURN
-      B(N-1)=(B(N-1)-(D(N-1)*B(N)))/C(N-1)
-      IF((N-2).LT.1)RETURN
-      DO 60 L=1,N-2
-         K=N-2-L+1
-         B(K)=(B(K)-(D(K)*B(K+1))-(E(K)*B(K+2)))/C(K)
-60    CONTINUE
-      RETURN
-      END
-C     **************************************************************
-C     **************************************************************
-C     PROGRAM BURIAL.FOR
-      SUBROUTINE BURIAL(V)
-C     --------------------------------------------------------------
-      INTEGER P,E1,V,THTYPE
-      REAL II
-      COMMON /COM1/ R(50000,2,10), A(5000,3), B(5000), C(5000), D(5000),
-     *   E(5000), H(5000), P(50000), Q(50000), T(5000), II(10), Z(5,3),
-     *   Y(10), NN(4), W(3),THTYPE(5),QTIME(10),QVALUE(10),QVTIME(50000)
-      COMMON /COM2/ H1,A1,B1,C1,W1,E1,R1,N
-      COMMON /COM3/ COND(5000),BCOND(50000),BASGRAD(50000)
-      DO 10 I=1,N-1
-         J=N-I
-         B(J+1)=B(J)
-         H(J+1)=H(J)
-         COND(J+1)=COND(J)
-10    CONTINUE
-      B(1)=W(1)
-      H(1)=0.0
-      COND(1)=BCOND(V)
-      DO 20 I=1,10
-         Y(I)=Y(I)+1.0
-20    CONTINUE
-      RETURN
-      END
-C     **************************************************************
-C     **************************************************************
-C     PROGRAM EROS(EROSION).FOR
-      SUBROUTINE EROS
-C     --------------------------------------------------------------
-      INTEGER P,E1,THTYPE
-      REAL II
-      COMMON /COM1/ R(50000,2,10), A(5000,3), B(5000), C(5000), D(5000),
-     *   E(5000), H(5000), P(50000), Q(50000), T(5000), II(10), Z(5,3),
-     *   Y(10), NN(4), W(3),THTYPE(5),QTIME(10),QVALUE(10),QVTIME(50000)
-      COMMON /COM2/ H1,A1,B1,C1,W1,E1,R1,N
-      COMMON /COM3/ COND(5000),BCOND(50000),BASGRAD(50000)
-      DO 10 I=2,N
-         B(I-1)=B(I)
-         H(I-1)=H(I)
-         COND(I-1)=COND(I)
-10    CONTINUE
-      B(N)=B(N-1)+W(2)
-      H(N)=0.0
-      COND(N)=C1
-      DO 20 I=1,10
-         Y(I)=Y(I)-1.0
-C        IF(Y(I).LE.0.0) Y(I)=0.0
-20    CONTINUE
-      RETURN
-      END
-C     **************************************************************
-C     **************************************************************
-C     PROGRAM THSTUP.FOR:  THRUST FOR UPPER PLATE BOUNDARY
-      SUBROUTINE THSTUP(V)
-C     --------------------------------------------------------------
-      INTEGER P,E1,V,THTYPE
-      REAL II
-      DIMENSION UPLC(300), UPLH(300), UPLB(300)
-      COMMON /COM1/ R(50000,2,10), A(5000,3), B(5000), C(5000), D(5000),
-     *   E(5000), H(5000), P(50000), Q(50000), T(5000), II(10), Z(5,3),
-     *   Y(10), NN(4), W(3),THTYPE(5),QTIME(10),QVALUE(10),QVTIME(50000)
-      COMMON /COM2/ H1,A1,B1,C1,W1,E1,R1,N
-      COMMON /COM3/ COND(5000),BCOND(50000),BASGRAD(50000)
-      K=P(V)-2
-C     NN(1)=THICKNESS PRIOR TO THRUSTING
-C     NN(2)=DEPTH OF EMPLACEMENT
-C     NN(3)=FINAL THICKNESS OF THRUST SHEET
-      NN(1)=INT(Z(K,1)/II(1))
-      NN(2)=INT(Z(K,2)/II(1))
-      NN(3)=INT(Z(K,3)/II(1))
-C     COPY THE PART OF THE ARRAY THAT WILL BE THRUSTED AND ERODE OFF 
-C     AMOUNT THAT GETS ERODED DURING THRUST EVENT.
-      IERO=NN(1)-NN(3)
-      DO 1, I=IERO+1,NN(1)
-         UPLC(I-IERO)=COND(I)
-         UPLH(I-IERO)=H(I)
-         UPLB(I-IERO)=B(I)
-1     CONTINUE
-C     REMOVE THE OLD ARRAY (LOWER PLATE) DOWN TO THE DEPTH OF 
-C     EMPLACEMENT AND MOVE THE REST OF THE ARRAY DOWN TO MAKE ROOM
-C     FOR THE UPPER PLATE.
-      DO 2, I=NN(2)+1,N
-         COND(I-NN(2))=COND(I)
-         H(I-NN(2))=H(I)
-         B(I-NN(2))=B(I)
-2     CONTINUE
-      DO 3, I=N,NN(3)+1,-1
-         COND(I)=COND(I-NN(3))
-         H(I)=H(I-NN(3))
-         B(I)=B(I-NN(3))
-3     CONTINUE
-C     PUT THE TWO ARRAYS TOGETHER
-      DO 4, I=1,NN(3)
-         COND(I)=UPLC(I)
-         H(I)=UPLH(I)
-         B(I)=UPLB(I)
-4     CONTINUE
-C     MOVE POINTS OF INTEREST AROUND
-C     FOR UPPER PLATE:
-      DO 20 I=1,10
-         Y(I)=Y(I)-FLOAT(IERO)
-         IF(Y(I).LE.0.0) Y(I)=0.0
-20    CONTINUE
-      DO 50 J=1,10
-         B(1)=(W(1)+B(2))/2.0
-         B(2)=(B(1)+B(2)+B(3))/3.0
-         DO 40 I=3, 2*NN(1)
-            B(I)=(B(I-2)+B(I-1)+B(I)+B(I+1)+B(I+2))/5.0
-40       CONTINUE
-50    CONTINUE
-      RETURN
-      END
-C     **************************************************************
-C     **************************************************************
-C     PROGRAM OUTPUT.FOR
-      SUBROUTINE OUTPUT(Q1,M1,OUTFIL)
-C     --------------------------------------------------------------
-      CHARACTER OUTFIL*20
-      INTEGER P,E1,Q1,THTYPE
-      REAL II
-      COMMON /COM1/ R(50000,2,10), A(5000,3), B(5000), C(5000), D(5000),
-     *   E(5000), H(5000), P(50000), Q(50000), T(5000), II(10), Z(5,3),
-     *   Y(10), NN(4), W(3),THTYPE(5),QTIME(10),QVALUE(10),QVTIME(50000)
-      COMMON /COM2/ H1,A1,B1,C1,W1,E1,R1,N
-      COMMON /COM3/ COND(5000),BCOND(50000),BASGRAD(50000)
-      WRITE(7,100)OUTFIL
-      DO 5, J=1,10
-         WRITE(7,110) II(J)
-5     CONTINUE
-C      DO 8 I=1,N
-C		 WRITE (*,117) H(I), COND(I)
-C 8     CONTINUE	
-       WRITE (*,117) W(1), W(2)	 
-      DO 10, J=2,Q1,2
-         WRITE(7,115)Q(J)
-10    CONTINUE
-      DO 15, K=1,10
-         DO 20, J=1,2
-            DO 25, I=2,Q1,2
-               WRITE(7,120) R(I,J,K)
-25          CONTINUE
-20       CONTINUE
-15    CONTINUE
-C      DO 19, K = 1,5
-C         DO 18, I = 2, Q1, 2
-C            WRITE (7,120) TTI(I,K)
-C18       CONTINUE
-C19    CONTINUE  
-      DO 30, I=1,10
-         WRITE(7,130) Y(I)
-         WRITE(*,130) Y(I)
-C         WRITE(*,120) TTI(Q1,I)
-30    CONTINUE
-100   FORMAT(A20)
-110   FORMAT(F7.3)
-115   FORMAT(F6.2)
-117   FORMAT(2F6.2)
-120   FORMAT(F7.1)
-130   FORMAT(F11.4)
-      RETURN
-      END
-C     **************************************************************
-C     **************************************************************
-C     PROGRAM THSTLP.FOR:  THRUST FOR UPPER PLATE BOUNDARY
-      SUBROUTINE THSTLP(V)
-C     --------------------------------------------------------------
-      INTEGER P,E1,V,THTYPE
-      REAL II
-      DIMENSION UPLC(300), UPLH(300), UPLB(300)
-      COMMON /COM1/ R(50000,2,10), A(5000,3), B(5000), C(5000), D(5000),
-     *   E(5000), H(5000), P(50000), Q(50000), T(5000), II(10), Z(5,3),
-     *   Y(10), NN(4), W(3),THTYPE(5),QTIME(10),QVALUE(10),QVTIME(50000)
-      COMMON /COM2/ H1,A1,B1,C1,W1,E1,R1,N
-      COMMON /COM3/ COND(5000),BCOND(50000),BASGRAD(50000)
-      K=P(V)-2
-C     NN(1) = THICKNESS PRIOR TO THRUSTING
-C     NN(2) = DEPTH OF EMPLACEMENT
-C     NN(3) = FINAL THICKNESS OF THRUST SHEET
-      NN(1)=INT(Z(K,1)/II(1))
-      NN(2)=INT(Z(K,2)/II(1))
-      NN(3)=INT(Z(K,3)/II(1))
-      I1=NN(3)-NN(2)
-C     COPY THE PAART OF THE ARRAY THAT WILL BE THRUSTED AND ERODE OFF
-C     THE AMOUNT THAT GETS ERODED DURING THE THRUST EVENT.
-      IERO = NN(1) - NN(3)
-      DO 1, I=IERO+1, NN(1)
-         UPLC(I-IERO)=COND(I)
-         UPLH(I-IERO)=H(I)
-         UPLB(I-IERO)=B(I)
-1     CONTINUE
-C     REMOVE THE OLD ARRAY (LOWER PLATE) DOWN TO THE DEPTH OF
-C     EMPLACEMENT AND MOVE THE REST OF THE ARRAY DOWN TO MAKE ROOM 
-C     FOR THE UPPER PLATE.
-      DO 2, I=NN(2)+1, N
-         COND(I-NN(2))=COND(I)
-         H(I-NN(2))=H(I)
-         B(I-NN(2))=B(I)
-2     CONTINUE
-      DO 3, I=N,NN(3)+1,-1
-         COND(I)=COND(I-NN(3))
-         H(I)=H(I-NN(3))
-         B(I)=B(I-NN(3))
-3     CONTINUE
-C     PUT THE TWO ARRAYS TOGETHER
-      DO 4, I=1,NN(3)
-         COND(I)=UPLC(I)
-         H(I)=UPLH(I)
-         B(I)=UPLB(I)
-4     CONTINUE
-C     MOVE POINTS OF INTEREST AROUND
-C     FOR LOWER PLATE:
-      DO 20, I=1,10
-         Y(I)=Y(I)+FLOAT(I1)
-20    CONTINUE
-      DO 50 J=1,10
-         B(1)=(W(1)+B(2))/2.0
-         B(2)=(B(1)+B(2)+B(3))/3.0
-         DO 40 I=3, 2*NN(1)
-            B(I)=(B(I-2)+B(I-1)+B(I)+B(I+1)+B(I+2))/5.0
-40       CONTINUE
-50    CONTINUE
-      RETURN
-      END
-      
-         
-      
+! Inputs/outputs
+character(len=512) :: input_file                  ! name of input file          INFIL
+character(len=8) :: input_mode                    ! how to read input parameters
+character(len=512) :: output_file
+
+! Finite difference parameters
+integer :: nnodes                                 ! number of spatial nodes     N
+integer :: nt_total                               ! number of time steps        Q1 (updated), II(5)
+integer :: istep                                  ! current time step           V
+double precision :: dz                            ! node spacing (km)           H1, II(1)
+double precision :: dt                            ! time step interval (Ma)     K1, II(2)
+double precision :: r1                            ! matrix stabilizing factor   R1
+
+! Timing
+double precision :: t_total                       ! total model time (Ma)       Q1 (initial), II(5)
+double precision :: t_output                      ! time per output (Ma)        M1 (initial)
+integer :: nt_output                              ! time steps between outputs  M1 (updated)
+
+! Nodal parameters
+double precision, allocatable :: conductivity(:)  ! conductivity                COND
+double precision, allocatable :: temp(:)          ! temperature                 B
+double precision, allocatable :: hp(:)            ! heat production             H
+double precision, allocatable :: hf(:)            ! heat flow                   Q
+
+! Horizons of interest
+integer :: nhorizons
+double precision, allocatable :: depth(:)         ! depth of horizons           Y
+integer, allocatable :: depth_node(:)             ! horizon nodes               Y
+
+! Material properties
+integer :: nlayers                                ! number of layers            INL
+double precision, allocatable :: layer(:,:)       ! layer top, thickness, conductivity (TOP, THICK, ACOND)
+double precision :: diffusivity                   ! diffusivity                 D1, II(6)
+double precision :: cond_base                     ! basal conductivity          C1
+
+! Boundary conditions
+double precision :: temp_surf                     ! surface temperature (C)     W(1)
+double precision :: hp_surf                       ! surface heat production     A1, II(3)
+double precision :: hp_dep                        ! depth of heat production    B1, II(4)
+double precision :: hf_surf                       ! surface heat flow           G1
+double precision :: hf_base                       ! basal heat flow             QBASE
+
+
+double precision :: dtemp_wo_hp                   ! temp change w/o heat prod   W(2)
+double precision :: temp_factor                   ! temp scaling factor         W1
+double precision :: temp_base_adj                 ! temp at node nnodes+1       W(3)
+! C     W(3) = TEMPERATURE AT BOTTOM NODE + CHANGE IN TEMPERATURE
+! C        WITHOUT HEAT PRODUCTION = TEMP AT NODE N+1
+
+! Tectonic events
+integer :: nburial
+double precision, allocatable :: burial_dat(:,:)  ! (1) start (2) duration (3) thickness (4) conductivity
+integer :: nuplift
+double precision, allocatable :: uplift_dat(:,:)  ! (1) start (2) duration (3) uplift
+integer :: nthrust
+double precision, allocatable :: thrust_dat(:,:)  ! (1) start (2) upper/lower (3) initial base (4) initial depth (5) initial thickness
+integer :: nhfvars                                !                             QSTEP
+double precision, allocatable :: hfvar(:,:)       ! (1) start (2) new heat flow QVTIME
+double precision, allocatable :: bas_grad(:)      !                             BASGRAD
+integer, allocatable :: action(:)                 ! burial, erosion, or thrust  P
+double precision, allocatable :: bcond(:)         ! boundary condition mag      BCOND
+
+! Results array
+double precision, allocatable :: results(:,:,:)
+
+end module
+
+
+!==============================================================================!
+
+
+program main
+
+! C     CALCULATES THE ONE-DIMENSIONAL TRANSIENT THERMAL FIELD WITHIN
+! C     AN AREA THAT UNDERGOES EPISODES OF:  BURIAL, EROSION, AND
+! C     THRUSTING.  THIS PROGRAM CAN BE USED TO MONITOR POINTS THAT
+! C     MOVE FROM THE UPPER TO LOWER (or v.v) PLATES.
+
+! C     Q(V) = SURFACE HEAT FLOW AT EACH TIME STEP
+! C     TTI(V,K) = TTI CALCULATED AT EACH TIME STEP
+
+
+use tqtec
+
+implicit none
+
+integer :: ierr
+integer :: i, np
+double precision :: SURCON
+
+
+! Initialize default model parameters
+nnodes = 1200
+nhorizons = 10
+dt = 0.005d0
+dz = 0.05d0
+diffusivity = 32.0d0
+t_total = 50.0d0
+t_output = 5.0d0
+
+
+! Parse command line
+! Matt's note: this is a totally new subroutine for tqtec (which I use in all my other programs)
+! that allows better control over user input/output. In tqtec, most of the model I/O is done via
+! a control file, so gcmdln() is much simpler, only allowing specification of user or file inputs.
+call gcmdln()
+
+
+! Read control file or user input (formerly INPUT)
+call read_inputs()
+
+
+! Calculate model parameters and allocate arrays
+nt_total = int(t_total/dt)
+nt_output = int(t_output/dt)
+temp_factor = diffusivity*dt/cond_base
+r1 = diffusivity*dt/(dz*dz)
+dtemp_wo_hp = (hf_surf-hp_surf*hp_dep)*dz/cond_base
+allocate(depth_node(nhorizons))
+allocate(conductivity(nnodes))
+allocate(temp(nnodes))
+allocate(hp(nnodes))
+allocate(hf(nt_total))
+allocate(results(nt_total,2,nhorizons))
+
+
+! Set up action timing arrays (formerly: HIST)
+call setup_action_arrays()
+
+
+! Initialize the temperature, heat flow, and heat production at each node (formerly: INIT)
+call initialize_thermal_parameters()
+
+
+write(0,*) 'nnodes:        ',nnodes
+write(0,*) 'nt_total:      ',nt_total
+write(0,*) 'istep:         ',istep
+write(0,*) 'dz:            ',dz
+write(0,*) 'dt:            ',dt
+write(0,*) 'r1:            ',r1
+write(0,*) 't_total:       ',t_total
+write(0,*) 't_output:      ',t_output
+write(0,*) 'nt_output:     ',nt_output
+write(0,*) 'nhorizons:     ',nhorizons
+write(0,*) 'depth:         ',depth
+write(0,*) 'depth_node:    ',depth_node
+write(0,*) 'nlayers:       ',nlayers
+write(0,*) 'layer(:,1):    ',layer(:,1)
+write(0,*) 'layer(:,2):    ',layer(:,2)
+write(0,*) 'layer(:,3):    ',layer(:,3)
+write(0,*) 'diffusivity:   ',diffusivity
+write(0,*) 'cond_base:     ',cond_base
+write(0,*) 'temp_surf:     ',temp_surf
+write(0,*) 'hp_surf:       ',hp_surf
+write(0,*) 'hp_dep:        ',hp_dep
+write(0,*) 'hf_surf:       ',hf_surf
+write(0,*) 'hf_base:       ',hf_base
+write(0,*) 'dtemp_wo_hp:   ',dtemp_wo_hp
+write(0,*) 'dtemp_wo_hp:   ',dtemp_wo_hp
+write(0,*) 'temp_factor:   ',temp_factor
+write(0,*) 'temp_base_adj:  ',temp_base_adj
+write(0,*) 'nburial:        ',nburial
+write(0,*) 'burial_dat(:,1):',burial_dat(:,1)
+write(0,*) 'burial_dat(:,2):',burial_dat(:,2)
+write(0,*) 'burial_dat(:,3):',burial_dat(:,3)
+write(0,*) 'burial_dat(:,4):',burial_dat(:,4)
+write(0,*) 'nuplift:        ',nuplift
+write(0,*) 'uplift_dat(:,1):',uplift_dat(:,1)
+write(0,*) 'uplift_dat(:,2):',uplift_dat(:,2)
+write(0,*) 'uplift_dat(:,3):',uplift_dat(:,3)
+write(0,*) 'nthrust:        ',nthrust
+write(0,*) 'thrust_dat(:,1):',thrust_dat(:,1)
+write(0,*) 'thrust_dat(:,2):',thrust_dat(:,2)
+write(0,*) 'thrust_dat(:,3):',thrust_dat(:,3)
+write(0,*) 'thrust_dat(:,4):',thrust_dat(:,4)
+write(0,*) 'thrust_dat(:,5):',thrust_dat(:,5)
+write(0,*) 'nhfvars:        ',nhfvars
+write(0,*) 'hfvar(:,1):     ',hfvar(:,1)
+write(0,*) 'hfvar(:,2):     ',hfvar(:,2)
+
+
+istep = 0
+do while (istep.lt.nt_total)
+
+    ! Update the adjusted temperature at the base of the model
+! 5     W(3)=B(N)+BASGRAD(V+1)
+    temp_base_adj = temp(nnodes) + bas_grad(istep+1)
+
+    ! Calculate the updated temperatures at each node (the main finite difference procedure)
+    ! (formerly: MAT and TRID)
+    call update_temps(nnodes,ierr)
+    if (ierr.ne.0) then
+        write(0,*) 'tqtec: error in update_temps TRID algorithm'
+        stop
+    endif
+
+    ! Increment the time step
+    istep = istep + 1
+    write(*,*) 'tqtec: working on cycle', istep
+
+    ! Tectonic action!
+    if (action(istep).eq.1) then
+        call bury() ! (Formerly: BURIAL)
+        print *,'Burying...'
+    elseif (action(istep).eq.2) then
+        call erode() ! (Formerly: EROS)
+        print *,'Uplifting/eroding...'
+    elseif (action(istep).ge.3) then
+        if (int(thrust_dat(action(istep)-2,2)).eq.1) then
+            call thrust_upperplate() ! (Formerly: THSTUP)
+        elseif (int(thrust_dat(action(istep)-2,2)).eq.2) then
+            call thrust_lowerplate() ! (Formerly: THSTLP)
+        endif
+    endif
+
+!       Q(V)=(B(10)-B(5))/(5.0*H1)
+    hf(istep) = (temp(10)-temp(5))/(5.0d0*dz)
+
+!       SURCON=0.0
+!       coninv = 0.0
+!       DO 6, I=1,5
+! C         coninv = coninv + (1.0/COND(I))
+! 		 		 SURCON=SURCON+COND(I+4)
+! 6     CONTINUE
+!       SURCON=SURCON/5.0
+    SURCON = 0.0d0
+    do i = 1,5
+        SURCON = SURCON + conductivity(i+4)
+    enddo
+    SURCON = SURCON/5.0d0
+! C      SURCON = (1.0/coninv)/25.0
+
+!       Q(V)=Q(V)*SURCON
+    hf(istep) = hf(istep)*SURCON
+
+!       DO 10 I=1,10
+!          IARG=NINT(Y(I))
+!          IF(IARG.EQ.0) THEN
+!            R(V,1,I)=W(1)
+!          ELSEIF(IARG.LT.0) THEN
+!            R(V,1,I)=0.0
+!          ELSEIF(IARG.GT.0) THEN
+!            R(V,1,I)=B(IARG)
+!          ENDIF
+!          R(V,2,I)=Y(I)
+! C         EMP = (R(V,1,I)-105)/10
+! C         IF (V.EQ.1) THEN
+! C           TTI(V,I)= II(2)*2**EMP
+! C         ELSE
+! C           TTI(V,I)= TTI(V-1,I) + II(2)*2**EMP
+! C         ENDIF
+! 10    CONTINUE
+    do i = 1,nhorizons
+        np = depth_node(i)
+        if (np.eq.0) then
+            results(istep,1,i) = temp_surf
+        elseif (np.lt.0) then
+            results(istep,1,i) = 0.0d0
+        elseif (np.gt.0) then
+            results(istep,1,i) = temp(np)
+        endif
+        results(istep,2,i) = dble(depth_node(i))
+    enddo
+
+!       IF(V.GE.Q1)THEN
+!         CALL OUTPUT(Q1,M1,OUTFIL)
+!       ELSE
+!         GOTO 5
+!       ENDIF
+    if (istep.ge.nt_total) then
+        call output()
+    endif
+enddo
+
+
+
+end
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+subroutine read_inputs()
+
+use tqtec, only: input_mode, &
+                 input_file, &
+                 t_total, &
+                 t_output, &
+                 temp_surf, &
+                 hf_surf, &
+                 hp_surf, &
+                 hp_dep, &
+                 cond_base, &
+                 nlayers, &
+                 layer, &
+                 nhorizons, &
+                 depth, &
+                 nburial, &
+                 burial_dat, &
+                 nuplift, &
+                 uplift_dat, &
+                 nthrust, &
+                 thrust_dat, &
+                 nhfvars, &
+                 hfvar
+
+implicit none
+
+! Local variables
+integer :: i, j, ios
+character(len=32) :: reply
+character(len=512) :: input_line
+logical :: inWhitespace
+
+
+write(0,*) 'read_inputs: starting'
+
+if (input_mode.eq.'user') then
+    write(*,*) 'Total time for model? (Ma)'
+    read(*,*) t_total
+    write(*,*) 'Time interval for output to be displayed? (Ma)'
+    read(*,*) t_output
+    t_output = 5.0d0 ! HARD-CODED
+
+    write(*,*) 'Temperature at upper surface boundary? (C)'
+    read(*,*) temp_surf
+    write(*,*) 'Surface heat flow? (mW/m^2)'
+    read(*,*) hf_surf
+    write(*,*) 'Initial (basement) thermal conductivity? (W/(m*K))'
+    read(*,*) cond_base
+    write(*,*) 'Surface heat production? (uW/m^3)'
+    read(*,*) hp_surf
+    write(*,*) 'Heat production depth? (km)'
+    read(*,*) hp_dep
+
+
+    write(*,*) 'Do you want to account for variations in thermal conductivity at the start ',&
+               'of the model? (y/n)'
+    read(*,*) reply
+    if (reply.eq.'y'.or.reply.eq.'Y'.or.reply.eq.'1') then
+        write(*,*) 'Number of layers to input conductivity for?'
+        read(*,*) nlayers
+        do i = 1,nlayers
+            write(*,*) 'Depth of top of layer',i,'? (km)'
+            read(*,*) layer(i,1)
+            write(*,*) 'Thickness of layer',i,'? (km)'
+            read(*,*) layer(i,2)
+            write(*,*) 'Conductivity of layer',i,'? (W/(m*K))'
+            read(*,*) layer(i,3)
+        enddo
+    endif
+
+
+    write(*,*) 'Number of horizons to track? (Press <return> to use default: 10)'
+    read(*,'(A)') reply
+    if (reply.ne.'') then
+        read(reply,*) nhorizons
+    endif
+    if (allocated(depth)) then
+        deallocate(depth)
+    endif
+    allocate(depth(nhorizons))
+    do i = 1,nhorizons
+        write(*,*) 'Initial depth of point/horizon',i,'? (km)'
+        read(*,*) depth(i)
+    enddo
+
+
+    write(*,*) 'Number of burial periods?'
+    read(*,*) nburial
+    if (allocated(burial_dat)) then
+        deallocate(burial_dat)
+    endif
+    allocate(burial_dat(nburial,4))
+    do i = 1,nburial
+        write(*,*) 'Beginning of burial period',i,'? (Ma after start)'
+        read(*,*) burial_dat(i,1)
+        write(*,*) 'Duration of burial period',i,'? (Ma)'
+        read(*,*) burial_dat(i,2)
+        write(*,*) 'Total burial during episode',i,'? (km)'
+        read(*,*) burial_dat(i,3)
+        write(*,*) 'Thermal conductivity of sediments in burial episode',i,'? (W/(m*K))'
+        read(*,*) burial_dat(i,4)
+    enddo
+
+
+    write(*,*) 'Number of uplift/erosion periods?'
+    read(*,*) nuplift
+    if (allocated(uplift_dat)) then
+        deallocate(uplift_dat)
+    endif
+    allocate(uplift_dat(nuplift,3))
+    do i = 1,nuplift
+        write(*,*) 'Beginning of uplift period',i,'? (Ma after start)'
+        read(*,*) uplift_dat(i,1)
+        write(*,*) 'Duration of uplift period',i,'? (Ma)'
+        read(*,*) uplift_dat(i,2)
+        write(*,*) 'Total uplift during episode',i,'? (km)'
+        read(*,*) uplift_dat(i,3)
+    enddo
+
+
+    write(*,*) 'Number of thrust periods?'
+    read(*,*) nthrust
+    if (allocated(thrust_dat)) then
+        deallocate(thrust_dat)
+    endif
+    allocate(thrust_dat(nthrust,5))
+    do i = 1,nthrust
+        write(*,*) 'Time of thrust period',i,'? (Ma after start)'
+        read(*,*) thrust_dat(i,1)
+        write(*,*) 'Points in upper(1) or lower(2) plate during thrust period',i,'?'
+        read(*,*) thrust_dat(i,2)
+        write(*,*) 'Initial base of thrust during episode',i,'? (km)'
+        read(*,*) thrust_dat(i,3)
+        write(*,*) 'Initial depth of thrust during episode',i,'? (km)'
+        read(*,*) thrust_dat(i,4)
+        write(*,*) 'Initial thickness of thrust during episode',i,'? (km)'
+        read(*,*) thrust_dat(i,5)
+    enddo
+
+
+    write(*,*) 'Number of heat flow variations?'
+    read(*,*) nhfvars
+    if (allocated(hfvar)) then
+        deallocate(hfvar)
+    endif
+    allocate(hfvar(nhfvars,2))
+    do i = 1,nhfvars
+        write(*,*) 'Time of heat flow value change',i,'? (Ma after start)'
+        read(*,*) hfvar(i,1)
+        write(*,*) 'Value of heat flow at change',i,'?'
+        read(*,*) hfvar(i,2)
+    enddo
+
+
+elseif (input_mode.eq.'file') then
+
+    ! Open the input file
+    open(unit=8,file=input_file,iostat=ios)
+    if (ios.ne.0) then
+        write(0,*) 'read_inputs: something went wrong trying to open input file "', &
+                   trim(input_file),'"'
+        stop
+    endif
+    rewind(8)
+
+
+    read(8,'(A)') input_line ! first line is name of file
+    read(8,'(A)') input_line ! second line contains first useful parameters
+    read(input_line,*) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf, &
+                       hp_dep
+
+
+    ! Read material layers
+    read(8,*) nlayers
+    if (allocated(layer)) then
+        deallocate(layer)
+    endif
+    allocate(layer(nlayers,3))
+    do i = 1,nlayers
+        read(8,*) (layer(i,j),j=1,3)
+    enddo
+
+
+    ! Read horizon depths
+    ! Any number of horizons can be listed here, so reset nhorizons and deallocate depth array
+    nhorizons = 0
+    if (allocated(depth)) then
+        deallocate(depth)
+    endif
+    read(8,'(A)') input_line
+    ! Parse the input line for the number of depth horizons
+    i = 1
+    inWhitespace = .true.
+    do while (i.le.len_trim(input_line))
+        if (input_line(i:i).eq.' ') then
+            inWhitespace = .true.
+        else
+            if (inWhitespace) then
+                nhorizons = nhorizons + 1
+            endif
+            inWhitespace = .false.
+        endif
+        i = i + 1
+    enddo
+    ! Reallocate depth array and read depths
+    allocate(depth(nhorizons))
+    read(input_line,*) (depth(i),i=1,nhorizons)
+
+
+    ! Read burial episodes
+    read(8,*) nburial
+    if (allocated(burial_dat)) then
+        deallocate(burial_dat)
+    endif
+    allocate(burial_dat(nburial,4))
+    do i = 1,nburial
+        read(8,*) (burial_dat(i,j),j=1,4)
+    enddo
+
+
+    ! Read uplift/erosion episodes
+    read(8,*) nuplift
+    if (allocated(uplift_dat)) then
+        deallocate(uplift_dat)
+    endif
+    allocate(uplift_dat(nuplift,4))
+    do i = 1,nuplift
+        read(8,*) (uplift_dat(i,j),j=1,3)
+    enddo
+
+
+    ! Read thrust episodes
+    read(8,*) nthrust
+    if (allocated(thrust_dat)) then
+        deallocate(thrust_dat)
+    endif
+    allocate(thrust_dat(nthrust,4))
+    do i = 1,nthrust
+        read(8,*) (thrust_dat(i,j),j=1,5)
+    enddo
+
+
+    ! ! Read basal heat flow variations
+    ! read(8,*) nhfvars
+    ! if (allocated(hfvar)) then
+    !     deallocate(hfvar)
+    ! endif
+    ! allocate(hfvar(nhfvars,2))
+    ! do i = 1,nhfvars
+    !     read(8,*) (hfvar(i,j),j=1,2)
+    ! enddo
+
+
+else
+    write(0,*) 'tqtec: no input mode named "',trim(input_mode),'"'
+    stop
+endif
+
+write(0,*) 'read_inputs: finished'
+
+
+return
+end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+subroutine setup_action_arrays()
+
+
+use tqtec, only: nt_total, &
+                 dz, &
+                 dt, &
+                 cond_base, &
+                 hf_surf, &
+                 hp_surf, &
+                 hp_dep, &
+                 nburial, &
+                 burial_dat, &
+                 nuplift, &
+                 uplift_dat, &
+                 nthrust, &
+                 thrust_dat, &
+                 nhfvars, &
+                 hfvar, &
+                 bas_grad, &
+                 action, &
+                 bcond
+
+implicit none
+
+
+! Local variables
+integer :: i, ct
+integer :: j, jbeg, jend
+integer :: nstart, nduration, nthick
+double precision :: rate, arg
+double precision :: hf_surf_var(nt_total)
+integer :: intqt(nhfvars)
+
+
+write(0,*) 'setup_action_arrays: starting'
+
+! Allocate memory to tectonic action arrays
+if (allocated(action)) then
+    deallocate(action)
+endif
+if (allocated(bcond)) then
+    deallocate(bcond)
+endif
+allocate(action(nt_total))
+allocate(bcond(nt_total))
+allocate(bas_grad(nt_total))
+
+
+! Burial periods
+do i = 1,nburial
+    nstart = int(burial_dat(i,1)/dt)
+    nduration = int(burial_dat(i,2)/dt)
+    nthick = int(burial_dat(i,3)/dz)
+    rate = dble(nthick)/dble(nduration)
+    jbeg = nstart + 1
+    jend = nstart + nduration
+    ct = 0
+    do j = jbeg,jend
+        arg = dble(j-nstart)*rate - dble(ct)
+        if (arg.ge.1.0d0) then
+            action(j) = 1
+            bcond(j) = burial_dat(i,4)
+            ct = ct + 1
+        endif
+    enddo
+enddo
+
+
+! Uplift periods
+do i = 1,nuplift
+    nstart = int(uplift_dat(i,1)/dt)
+    nduration = int(uplift_dat(i,2)/dt)
+    nthick = int(uplift_dat(i,3)/dz)
+    rate = dble(nthick)/dble(nduration)
+    jbeg = nstart + 1
+    jend = nstart + nduration
+    ct = 0
+    do j = jbeg,jend
+        arg = dble(j-nstart)*rate - dble(ct)
+        if (arg.ge.1.0d0) then
+            action(j) = 2
+            ct = ct + 1
+        endif
+    enddo
+enddo
+
+
+! Thrust events
+do i = 1,nthrust
+    nstart = int(thrust_dat(i,1)/dt)
+    action(nstart) = i+2
+    ! THTYPE(I): thrust_dat(i,2)
+enddo
+
+
+! Basal heat flow
+! Initialize heat flow over time to be surface heat flow
+hf_surf_var = hf_surf
+
+! Timing of heat flow changes
+do i = 1,nhfvars
+    intqt(i) = int(hfvar(i,1)/dt)
+enddo
+do i = 1,nhfvars-1
+    jbeg = intqt(i)
+    jend = intqt(i+1)
+    do j = jbeg,jend
+        hf_surf_var(j) = hfvar(i,2)
+    enddo
+enddo
+if (nhfvars.ge.1) then
+    jbeg = intqt(nhfvars)
+    jend = nt_total
+    do j = jbeg,jend
+        hf_surf_var(j) = hfvar(nhfvars,2)
+    enddo
+endif
+
+! Propagate down to base
+do j = 1,nt_total
+    bas_grad(j) = (hf_surf_var(j)-hp_surf*hp_dep)*dz/cond_base
+enddo
+
+
+write(0,*) 'setup_action_arrays: finished'
+
+return
+end subroutine
+
+!--------------------------------------------------------------------------------------------------!
+
+subroutine initialize_thermal_parameters()
+
+!----
+! Calculate the steady state temperature at each node based on the surface heat flow, surface
+! temperature, conductivity, and heat production
+!----
+
+
+use tqtec, only: nnodes, &
+                 dz, &
+                 conductivity, &
+                 hp, &
+                 hf, &
+                 nlayers, &
+                 layer, &
+                 hf_surf, &
+                 hf_base, &
+                 hp_surf, &
+                 hp_dep, &
+                 temp_surf, &
+                 cond_base, &
+                 nhorizons, &
+                 temp, &
+                 depth, &
+                 depth_node
+
+implicit none
+
+! Local variables
+integer :: i, j
+integer :: ntop, nbot
+double precision :: hfhp
+
+
+
+! Initialize the conductivity at each node to be the basal conductivity
+do i = 1,nnodes
+    conductivity(i) = cond_base
+enddo
+
+
+! If there are multiple layers with different conductivities, then locate each node within a layer
+! and set the nodal conductivity to be the corresponding layer conductivity
+if (nlayers.gt.0) then
+    do i = 1,nlayers
+        ! Find node numbers at the top and bottom of the layer
+        ntop = int(layer(i,1)/dz)
+        nbot = int((layer(i,1)+layer(i,2))/dz)
+        ! Set the conductivity at all of the nodes within the layer
+        if (ntop+1.eq.nbot) then
+            conductivity(ntop+1) = layer(i,3)
+        else
+            do j = ntop+1,nbot
+                conductivity(j) = layer(i,3)
+            enddo
+        endif
+    enddo
+endif
+
+
+! Divide horizon depths by vertical node spacing to place horizons at a node
+do i = 1,nhorizons
+    depth_node(i) = int(depth(i)/dz)
+enddo
+
+
+! Calculate volumetric heat production at each node based on exponentially decaying heat production
+do i = 1,nnodes
+    hp(i) = hp_surf*exp(-dble(i)*dz/hp_dep)
+enddo
+
+
+! Calculate steady state temperature at each node
+! Start with node 1 and work from the surface downward
+temp(1) = temp_surf + hf_surf*dz/conductivity(1) - hp(1)*dz**2/(2.0d0*conductivity(1))
+! Subtract the heat production between nodes to get the heat flow at node 2
+hfhp = hp(1)*dz
+hf_base = hf_surf - hfhp
+! Work downward for all nodes
+do i = 2,nnodes
+    temp(i) = temp(i-1) + hf_base*dz/conductivity(i) - hp(i)*dz**2/(2.0d0*conductivity(i))
+    hfhp = hp(i)*dz
+    hf_base = hf_base - hfhp
+enddo
+
+
+! Initialize surface heat flow at time step 1
+hf(1) = (conductivity(1)*(temp(1)-temp_surf))/dz
+
+
+return
+end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+subroutine update_temps(nnodes,ierr)
+!----
+! A combination of old subroutines MAT (setting up the matrix equations for temperature) and TRID
+! (solving the tridiagonal matrix equation for the new temperatures).
+!----
+
+
+use tqtec, only: r1, conductivity, temp, hp, temp_surf, temp_factor, temp_base_adj, dt, diffusivity
+
+implicit none
+
+! Arguments
+integer :: nnodes
+integer :: ierr
+
+! Local variables
+integer :: i, k, l
+double precision :: bet(nnodes), gam(nnodes)
+double precision :: c(nnodes), d(nnodes), e(nnodes)
+double precision :: a(nnodes,3)
+double precision :: temp_new(nnodes)
+double precision :: tmp
+
+
+
+! write(0,*) 'update_temps: starting'
+
+
+! Pre-calculate some terms for the thermal matrix
+gam(1) = 1.0d0/conductivity(1)
+bet(1) = 1.0d0/(gam(1)+gam(1))
+do i = 2,nnodes
+    gam(i) = 1.0d0/conductivity(i)
+    bet(i) = 1.0d0/(gam(i)+gam(i-1))
+enddo
+
+
+! Load the thermal matrix (calculate local c, d, and e arrays that will be used later)
+c(1) = -r1*bet(1)*gam(1)
+e(1) = -r1*bet(2)*gam(1)
+d(1) = 1.0d0 - c(1) - e(1)
+a(1,1) = -c(1)
+a(1,2) = 2.0d0 - d(1)
+a(1,3) = -e(1)
+do i = 2,nnodes-1
+    c(i) = -r1*bet(i)*gam(i)
+    e(i) = -r1*bet(i+1)*gam(i)
+    d(i) = 1.0d0 - c(i) - e(i)
+    a(i,1) = -c(i)
+    a(i,2) = 2.0d0 - d(i)
+    a(i,3) = -e(i)
+enddo
+c(nnodes) = -r1*bet(nnodes)*gam(nnodes)
+e(nnodes) = c(nnodes)
+d(nnodes) = 1.0d0 - 2.0d0*c(nnodes)
+a(nnodes,1) = -c(nnodes)
+a(nnodes,2) = 2.0d0 - d(nnodes)
+a(nnodes,3) = -e(nnodes)
+
+
+! Calculate temperature at each node
+temp_new(1) = a(1,2)*temp(1) + a(1,3)*temp(2) + 2.0d0*a(1,1)*temp_surf + &
+              diffusivity*dt*hp(1)/conductivity(1)
+do i = 2,nnodes-1
+    temp_new(i) = a(i,1)*temp(i-1) + a(i,2)*temp(i) + a(i,3)*temp(i+1) + &
+                  diffusivity*dt*hp(i)/conductivity(i)
+enddo
+temp_new(nnodes) = a(nnodes,1)*temp(nnodes-1) + a(nnodes,2)*temp(nnodes) + &
+               2.0d0*a(nnodes,3)*temp_base_adj + temp_factor*hp(nnodes)
+
+
+! Update temperatures in global temperature array
+temp = temp_new
+
+
+
+! END SUBROUTINE MAT
+! BEGIN SUBROUTINE TRID
+
+
+
+! Initialize error flag
+ierr = 0
+
+
+! Update c array for node 1
+c(1) = d(1)
+if (nnodes-1.ge.1) then
+    ! Update d and e arrays for node 1 and last node
+    d(1) = e(1)
+    e(1) = 0.0d0
+    e(nnodes) = e(1)
+
+    ! Loop through nodes and do forward substitution for matrix solution
+    do k = 1,nnodes-1
+        ! Flip equation order?
+        if (abs(c(k+1)).ge.abs(c(k))) then
+            tmp = c(k+1)
+            c(k+1) = c(k)
+            c(k) = tmp
+            tmp = d(k+1)
+            d(k+1) = d(k)
+            d(k) = tmp
+            tmp = e(k+1)
+            e(k+1) = e(k)
+            e(k) = tmp
+            tmp = temp(k+1)
+            temp(k+1) = temp(k)
+            temp(k) = tmp
+        endif
+        ! Problem solving matrix equation if c is 0
+        if (abs(c(k)).lt.1.0d-8) then
+            ierr = k
+            return
+        endif
+        ! Decomposition and forward substitution
+        tmp = -c(k+1)/c(k)
+        c(k+1) = d(k+1) + tmp*d(k)
+        d(k+1) = e(k+1) + tmp*e(k)
+        e(k+1) = 0.0d0
+        temp(k+1) = temp(k+1) + tmp*temp(k)
+    enddo
+endif
+
+! Again, c should not be 0
+if (abs(c(nnodes)).lt.1.0d-8) then
+    ierr = nnodes
+    return
+endif
+
+! Update last node
+temp(nnodes) = temp(nnodes)/c(nnodes)
+
+! Not much else to do with only one node
+if (nnodes.eq.1) then
+    return
+endif
+
+! Update second to last node
+temp(nnodes-1) = (temp(nnodes-1)-d(nnodes-1)*temp(nnodes))/c(nnodes-1)
+
+! Not much else to do with only two nodes
+if (nnodes-2.lt.1) then
+    return
+endif
+
+
+! Backsubstitution
+do l = 1,nnodes-2
+    k = nnodes-2-l+1
+    temp(k) = (temp(k)-d(k)*temp(k+1)-e(k)*temp(k+2))/c(k)
+enddo
+
+
+! write(0,*) 'update_temps: finished'
+
+
+return
+end subroutine
+
+
+
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!----------------------------------- TECTONIC ACTIONS ---------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+
+
+subroutine bury()
+!----
+! Bury the horizons by shifting physical parameters down node list and updating the surface node
+!----
+
+use tqtec, only: nnodes, &
+                 istep, &
+                 conductivity, &
+                 temp, &
+                 hp, &
+                 nhorizons, &
+                 depth_node, &
+                 temp_surf, &
+                 bcond
+
+implicit none
+
+! Local variables
+integer :: i, j
+
+
+! Shift physical parameters (temperature, heat production, conductivity) down by one node
+do i = 1,nnodes-1
+    j = nnodes-i
+    temp(j+1) = temp(j)
+    hp(j+1) = hp(j)
+    conductivity(j+1) = conductivity(j)
+enddo
+
+! Update the top node temperature, heat production, and conductivity
+temp(1) = temp_surf
+hp(1) = 0.0d0
+conductivity(1) = bcond(istep)
+
+! Move all of the tracked horizons down by one node
+do i = 1,nhorizons
+    depth_node(i) = depth_node(i)+1
+enddo
+
+return
+end subroutine
+
+!--------------------------------------------------------------------------------------------------!
+
+subroutine erode()
+!----
+! Erode and uplift the horizons by shifting physical parameters up node list and removing surface node
+!----
+
+use tqtec, only: nnodes, &
+                 temp, &
+                 hp, &
+                 conductivity, &
+                 nhorizons, &
+                 depth_node, &
+                 cond_base, &
+                 dtemp_wo_hp
+
+implicit none
+
+! Local variables
+integer :: i
+
+! Shift physical parameters (temperature, heat production, conductivity) up by one node
+do i = 2,nnodes
+    temp(i-1) = temp(i)
+    hp(i-1) = hp(i)
+    conductivity(i-1) = conductivity(i)
+enddo
+
+! Update the bottom node temperature, heat production, and conductivity
+temp(nnodes) = temp(nnodes-1) + dtemp_wo_hp
+hp(nnodes) = 0.0d0
+conductivity(nnodes) = cond_base
+
+! Move horizons upward by one node
+do i = 1,nhorizons
+    depth_node(i) = depth_node(i)-1
+    if (depth_node(i).le.0) then
+        depth_node(i) = 0
+    endif
+enddo
+
+return
+end subroutine
+
+!--------------------------------------------------------------------------------------------------!
+
+subroutine thrust_upperplate()
+!----
+! Generate a thrust fault, keeping the horizons in the upper plate
+!----
+
+
+! C     **************************************************************
+! C     **************************************************************
+! C     PROGRAM THSTUP.FOR:  THRUST FOR UPPER PLATE BOUNDARY
+!       SUBROUTINE THSTUP(V)
+! C     --------------------------------------------------------------
+
+use tqtec, only: nnodes, &
+                 istep, &
+                 dz, &
+                 conductivity, &
+                 temp, &
+                 hp, &
+                 nhorizons, &
+                 depth_node, &
+                 temp_surf, &
+                 thrust_dat, &
+                 action
+
+implicit none
+
+! Local variables
+integer :: i, k
+integer :: thick_init, thrust_dep, thick_end, ierosion
+double precision :: upl_conductivity(nnodes), upl_hp(nnodes), upl_temp(nnodes)
+
+!       INTEGER P,E1,V,THTYPE
+!       REAL II
+!       DIMENSION UPLC(300), UPLH(300), UPLB(300)
+!       COMMON /COM1/ R(50000,2,10), A(5000,3), B(5000), C(5000), D(5000),
+!      *   E(5000), H(5000), P(50000), Q(50000), T(5000), II(10), Z(5,3),
+!      *   Y(10), NN(4), W(3),THTYPE(5),QTIME(10),QVALUE(10),QVTIME(50000)
+!       COMMON /COM2/ H1,A1,B1,C1,W1,E1,R1,N
+!       COMMON /COM3/ COND(5000),BCOND(50000),BASGRAD(50000)
+
+
+! Set the thrust number
+k = action(istep) - 2
+
+! Save thrust sheet parameters
+thick_init = int(thrust_dat(k,3)/dz)  ! Thickness prior to thrusting, in nodes
+thrust_dep = int(thrust_dat(k,4)/dz)  ! Depth of emplacement, in nodes
+thick_end = int(thrust_dat(k,5)/dz)   ! Final thickness of thrust sheet, in nodes
+if (thick_init.lt.thick_end) then
+    write(0,*) 'thrust_upperplate: final thickness must be less than or equal to initial thickness'
+endif
+
+! C     COPY THE PART OF THE ARRAY THAT WILL BE THRUSTED AND ERODE OFF
+! C     AMOUNT THAT GETS ERODED DURING THRUST EVENT.
+ierosion = thick_init - thick_end
+do i = ierosion+1,thick_init
+    upl_conductivity(i-ierosion) = conductivity(i)
+    upl_hp(i-ierosion) = hp(i)
+    upl_temp(i-ierosion) = temp(i)
+enddo
+
+! C     REMOVE THE OLD ARRAY (LOWER PLATE) DOWN TO THE DEPTH OF
+! C     EMPLACEMENT AND MOVE THE REST OF THE ARRAY DOWN TO MAKE ROOM
+! C     FOR THE UPPER PLATE.
+do i = thrust_dep+1,nnodes
+    conductivity(i-thrust_dep) = conductivity(i)
+    hp(i-thrust_dep) = hp(i)
+    temp(i-thrust_dep) = temp(i)
+enddo
+do i = nnodes,thick_end+1,-1
+    conductivity(i) = conductivity(i-thick_end)
+    hp(i) = hp(i-thick_end)
+    temp(i) = temp(i-thick_end)
+enddo
+
+! C     PUT THE TWO ARRAYS TOGETHER
+! I.e., put the thrust sheet on top
+do i = 1,thick_end
+    conductivity(i) = upl_conductivity(i)
+    hp(i) = upl_hp(i)
+    temp(i) = upl_temp(i)
+enddo
+
+! C     MOVE POINTS OF INTEREST AROUND FOR UPPER PLATE:
+! I.e., move the specified horizons into the upper plate
+do i = 1,nhorizons
+    depth_node(i) = depth_node(i) - ierosion
+    if (depth_node(i).le.0) then
+        depth_node(i) = 0
+    endif
+enddo
+! WHAT HAPPENS IF THE THRUST SHEET IS THINNER THAN THE DEEPEST HORIZON? THIS HORIZON CANNOT GO INTO
+! THE UPPER PLATE THEN...
+
+! Update temperatures at tracked horizons
+temp(1) = (temp_surf+temp(2))/2.0d0
+temp(2) = (temp(1)+temp(2)+temp(3))/3.0d0
+do i = 3,2*thick_init
+    temp(i) = (temp(i-2)+temp(i-1)+temp(i)+temp(i+1)+temp(i+2))/5.0d0
+enddo
+
+return
+end subroutine
+
+!--------------------------------------------------------------------------------------------------!
+
+subroutine thrust_lowerplate()
+!----
+! Generate a thrust fault, keeping the horizons in the upper plate
+!----
+
+use tqtec, only: nnodes, &
+                 istep, &
+                 dz, &
+                 conductivity, &
+                 temp, &
+                 hp, &
+                 nhorizons, &
+                 depth_node, &
+                 temp_surf, &
+                 thrust_dat, &
+                 action
+
+implicit none
+
+! Local variables
+integer :: i, k
+integer :: thick_init, thrust_dep, thick_end, ierosion, dnode
+double precision :: upl_conductivity(nnodes), upl_hp(nnodes), upl_temp(nnodes)
+
+! Set the thrust number
+k = action(istep) - 2
+
+! Save thrust sheet parameters
+thick_init = int(thrust_dat(k,3)/dz)  ! Thickness prior to thrusting, in nodes
+thrust_dep = int(thrust_dat(k,4)/dz)  ! Depth of emplacement, in nodes
+thick_end = int(thrust_dat(k,5)/dz)   ! Final thickness of thrust sheet, in nodes
+if (thick_init.lt.thick_end) then
+    write(0,*) 'thrust_lowerplate: final thickness must be less than or equal to initial thickness'
+endif
+
+dnode = thick_end - thrust_dep
+
+! C     COPY THE PART OF THE ARRAY THAT WILL BE THRUSTED AND ERODE OFF
+! C     THE AMOUNT THAT GETS ERODED DURING THE THRUST EVENT.
+ierosion = thick_init - thick_end
+do i = ierosion+1,thick_init
+    upl_conductivity(i-ierosion) = conductivity(i)
+    upl_hp(i-ierosion) = hp(i)
+    upl_temp(i-ierosion) = temp(i)
+enddo
+
+! C     REMOVE THE OLD ARRAY (LOWER PLATE) DOWN TO THE DEPTH OF
+! C     EMPLACEMENT AND MOVE THE REST OF THE ARRAY DOWN TO MAKE ROOM
+! C     FOR THE UPPER PLATE.
+do i = thrust_dep+1,nnodes
+    conductivity(i-thrust_dep) = conductivity(i)
+    hp(i-thrust_dep) = hp(i)
+    temp(i-thrust_dep) = temp(i)
+enddo
+do i = nnodes,thick_end+1,-1
+    conductivity(i) = conductivity(i-thick_end)
+    hp(i) = hp(i-thick_end)
+    temp(i) = temp(i-thick_end)
+enddo
+
+! C     PUT THE TWO ARRAYS TOGETHER
+! I.e., put the thrust sheet on top
+do i = 1,thick_end
+    conductivity(i) = upl_conductivity(i)
+    hp(i) = upl_hp(i)
+    temp(i) = upl_temp(i)
+enddo
+
+! C     MOVE POINTS OF INTEREST AROUND
+! C     FOR LOWER PLATE:
+do i = 1,nhorizons
+    depth_node(i) = depth_node(i) + dnode
+enddo
+
+! Update temperatures
+temp(1) = (temp_surf+temp(2))/2.0d0
+temp(2) = (temp(1)+temp(2)+temp(3))/3.0d0
+do i = 3,2*thick_init
+    temp(i) = (temp(i-2)+temp(i-1)+temp(i)+temp(i+1)+temp(i+2))/5.0d0
+enddo
+
+return
+end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+subroutine output()
+
+! C     **************************************************************
+! C     **************************************************************
+! C     PROGRAM OUTPUT.FOR
+!       SUBROUTINE OUTPUT(Q1,M1,OUTFIL)
+! C     --------------------------------------------------------------
+
+use tqtec
+
+implicit none
+
+! Local variables
+integer :: i, j, k
+
+write(7,*) output_file
+
+write(7,*) dz
+write(7,*) dt
+write(7,*) hp_surf
+write(7,*) hp_dep
+write(7,*) t_total
+write(7,*) diffusivity
+write(7,*) temp_factor
+write(7,*) 0.0 ! II(8)
+write(7,*) 0.0 ! II(9)
+write(7,*) 0.0 ! II(10)
+
+do j = 2,nt_total,2
+    write(7,*) hf(j)
+enddo
+
+do k = 1,nhorizons
+    do j = 1,2
+        do i = 2,nt_total,2
+            write(7,*) results(i,j,k)
+        enddo
+    enddo
+enddo
+
+do i = 1,nhorizons
+    write(7,*) depth(i)
+enddo
+
+return
+end subroutine
+
+!--------------------------------------------------------------------------------------------------!
+
+subroutine gcmdln()
+
+use tqtec, only: input_mode, &
+                 input_file, &
+                 output_file
+implicit none
+
+! Local variables
+character(len=512) arg
+integer :: i, ios, narg
+
+! Initialize control variables
+ios = 0
+
+input_file = ''
+input_mode = 'user'
+output_file = ''
+
+narg = command_argument_count()
+! if (narg.eq.0) then
+!     call usage('')
+! endif
+
+i = 1
+do while (i.le.narg)
+
+    call get_command_argument(i,arg)
+
+    if (arg.eq.'-f') then
+        input_mode = 'file'
+        i = i + 1
+        call get_command_argument(i,input_file,status=ios)
+
+    elseif (arg.eq.'-user') then
+        input_mode = 'user'
+
+    ! else
+    !     call usage('tqtec: no option '//trim(arg))
+    endif
+
+    ! 9001 if (ios.ne.0) then
+    !     call usage('tqtec: error parsing "'//trim(arg)//'" flag arguments')
+    ! endif
+
+    i = i + 1
+enddo
+
+return
+end subroutine
