@@ -1,69 +1,78 @@
 module tqtec
 
 ! Inputs/outputs
-character(len=512) :: input_file                  ! name of input file          INFIL
-character(len=8) :: input_mode                    ! how to read input parameters
-character(len=512) :: output_file
+character(len=512) :: input_file                  ! name of input file                              INFIL
+character(len=8) :: input_mode                    ! how to read input parameters (user, file)
+character(len=512) :: output_file                 ! name of output file                             OUTFIL
 
 ! Finite difference parameters
-integer :: nnodes                                 ! number of spatial nodes     N
-integer :: nt_total                               ! number of time steps        Q1 (updated), II(5)
-integer :: istep                                  ! current time step           V
-double precision :: dz                            ! node spacing (km)           H1, II(1)
-double precision :: dt                            ! time step interval (Ma)     K1, II(2)
-double precision :: r1                            ! matrix stabilizing factor   R1
+integer :: nnodes                                 ! number of spatial nodes                         N
+integer :: nt_total                               ! number of time steps                            Q1 (updated), II(5)
+integer :: istep                                  ! current time step                               V
+double precision :: dz                            ! node spacing (km)                               H1, II(1)
+double precision :: dt                            ! time step interval (Ma)                         K1, II(2)
+double precision :: r1                            ! finite difference time factor                   R1
 
 ! Timing
-double precision :: t_total                       ! total model time (Ma)       Q1 (initial), II(5)
-double precision :: t_output                      ! time per output (Ma)        M1 (initial)
-integer :: nt_output                              ! time steps between outputs  M1 (updated)
+double precision :: t_total                       ! total model time (Ma)                           Q1 (initial), II(5)
+double precision :: t_output                      ! time per output (Ma)                            M1 (initial)
+integer :: nt_output                              ! time steps between outputs                      M1 (updated)
 
 ! Nodal parameters
-double precision, allocatable :: conductivity(:)  ! conductivity                COND
-double precision, allocatable :: temp(:)          ! temperature                 B
-double precision, allocatable :: hp(:)            ! heat production             H
-double precision, allocatable :: hf(:)            ! heat flow                   Q
+double precision, allocatable :: conductivity(:)  ! conductivity                                    COND
+double precision, allocatable :: temp(:)          ! temperature                                     B
+double precision, allocatable :: hp(:)            ! heat production                                 H
+double precision, allocatable :: hf(:)            ! heat flow                                       Q
 
 ! Horizons of interest
-integer :: nhorizons
-double precision, allocatable :: depth(:)         ! depth of horizons           Y
-integer, allocatable :: depth_node(:)             ! horizon nodes               Y
+integer :: nhorizons                              ! number of horizons                              10
+double precision, allocatable :: depth(:)         ! depth of horizons                               Y (initial)
+integer, allocatable :: depth_node(:)             ! horizon nodes                                   Y (updated)
 
 ! Material properties
-integer :: nlayers                                ! number of layers            INL
-double precision, allocatable :: layer(:,:)       ! layer top, thickness, conductivity (TOP, THICK, ACOND)
-double precision :: diffusivity                   ! diffusivity                 D1, II(6)
-double precision :: cond_base                     ! basal conductivity          C1
+integer :: nlayers                                ! number of distinct material layers              INL
+double precision, allocatable :: layer(:,:)       ! layer(:,1): depth to top (km)                   TOP
+                                                  ! layer(:,2): thickness (km)                      THICK
+                                                  ! layer(:,3): conductivity (W/(m*K))              ACOND
+double precision :: diffusivity                   ! diffusivity                                     D1, II(6)
+double precision :: cond_base                     ! basal conductivity                              C1
 
 ! Boundary conditions
-double precision :: temp_surf                     ! surface temperature (C)     W(1)
-double precision :: hp_surf                       ! surface heat production     A1, II(3)
-double precision :: hp_dep                        ! depth of heat production    B1, II(4)
-double precision :: hf_surf                       ! surface heat flow           G1
-double precision :: hf_base                       ! basal heat flow             QBASE
-
-
-double precision :: dtemp_wo_hp                   ! temp change w/o heat prod   W(2)
-double precision :: temp_factor                   ! temp scaling factor         W1
-double precision :: temp_base_adj                 ! temp at node nnodes+1       W(3)
+double precision :: temp_surf                     ! surface temperature (C)                         W(1)
+double precision :: hp_surf                       ! surface heat production                         A1, II(3)
+double precision :: hp_dep                        ! depth of heat production                        B1, II(4)
+double precision :: hf_surf                       ! surface heat flow                               G1
+double precision :: hf_base                       ! basal heat flow                                 QBASE
+double precision :: dtemp_wo_hp                   ! temp change w/o heat prod                       W(2)
+double precision :: temp_factor                   ! temp scaling factor                             W1
+double precision :: temp_base_adj                 ! temp at node nnodes+1                           W(3)
 ! C     W(3) = TEMPERATURE AT BOTTOM NODE + CHANGE IN TEMPERATURE
 ! C        WITHOUT HEAT PRODUCTION = TEMP AT NODE N+1
 
 ! Tectonic events
-integer :: nburial
-double precision, allocatable :: burial_dat(:,:)  ! (1) start (2) duration (3) thickness (4) conductivity
-integer :: nuplift
-double precision, allocatable :: uplift_dat(:,:)  ! (1) start (2) duration (3) uplift
-integer :: nthrust
-double precision, allocatable :: thrust_dat(:,:)  ! (1) start (2) upper/lower (3) initial base (4) initial depth (5) initial thickness
-integer :: nhfvars                                !                             QSTEP
-double precision, allocatable :: hfvar(:,:)       ! (1) start (2) new heat flow QVTIME
-double precision, allocatable :: bas_grad(:)      !                             BASGRAD
-integer, allocatable :: action(:)                 ! burial, erosion, or thrust  P
-double precision, allocatable :: bcond(:)         ! boundary condition mag      BCOND
+integer :: nburial                                ! number of burial events                         NBP
+double precision, allocatable :: burial_dat(:,:)  ! burial_dat(:,1): start (Ma)                     AN(1)
+                                                  ! burial_dat(:,2): duration (Ma)                  AN(2)
+                                                  ! burial_dat(:,3): thickness (km)                 AN(3)
+                                                  ! burial_dat(:,4): conductivity (W/(m*K))         AN(4)
+integer :: nuplift                                ! number of uplift/erosion events                 NUEP
+double precision, allocatable :: uplift_dat(:,:)  ! uplift_dat(:,1): start (Ma)                     AN(1)
+                                                  ! uplift_dat(:,2): duration (Ma)                  AN(2)
+                                                  ! uplift_dat(:,3): thickness (km)                 AN(3)
+integer :: nthrust                                ! number of thrusting events                      NTP
+double precision, allocatable :: thrust_dat(:,:)  ! thrust_dat(:,1): start (Ma)                     AN(1)
+                                                  ! thrust_dat(:,2): upper (1) or lower (2) plate   AN(2)
+                                                  ! thrust_dat(:,3): initial base (km)              AZ(1)
+                                                  ! thrust_dat(:,4): initial depth (km)             AZ(2)
+                                                  ! thrust_dat(:,5): initial thickness (km)         AZ(3)
+integer :: nhfvars                                ! number of surface heat flow variations          QSTEP
+double precision, allocatable :: hfvar(:,:)       ! (1) start (2) new heat flow                     QVTIME
+double precision, allocatable :: bas_grad(:)      !                                                 BASGRAD
+integer, allocatable :: action(:)                 ! burial (1), erosion (2), or thrust (>=3)        P
+double precision, allocatable :: bcond(:)         ! boundary condition magnitude                    BCOND
 
 ! Results array
-double precision, allocatable :: results(:,:,:)
+double precision, allocatable :: results(:,:,:)   ! temperature and depth for each timstep/depth    r1
 
 end module
 
@@ -92,24 +101,26 @@ double precision :: SURCON
 
 
 ! Initialize default model parameters
-nnodes = 1200
-nhorizons = 10
-dt = 0.005d0
-dz = 0.05d0
-diffusivity = 32.0d0
-t_total = 50.0d0
-t_output = 5.0d0
+! Variable = value       ! Value in previous tqtec
+nnodes = 1200            ! N=1200
+nhorizons = 10           ! Hard-coded to 10
+dt = 0.005d0             ! H1=0.005
+dz = 0.05d0              ! K1=0.05
+diffusivity = 32.0d0     ! D1=32.0
 
 
 ! Parse command line
 ! Matt's note: this is a totally new subroutine for tqtec (which I use in all my other programs)
-! that allows better control over user input/output. In tqtec, most of the model I/O is done via
-! a control file, so gcmdln() is much simpler, only allowing specification of user or file inputs.
+! that allows better control over user input/output. Here, most of the model I/O is done via a
+! control file, so gcmdln() is much simpler, only allowing specification of user or file inputs.
 call gcmdln()
+if (output_file.eq.'') then
+    call usage('tqtec: output file must be defined')
+endif
 
 
 ! Read control file or user input (formerly INPUT)
-call read_inputs()
+call read_model_parameters()
 
 
 ! Calculate model parameters and allocate arrays
@@ -198,15 +209,15 @@ do while (istep.lt.nt_total)
 
     ! Increment the time step
     istep = istep + 1
-    write(*,*) 'tqtec: working on cycle', istep
+    ! write(*,*) 'tqtec: working on cycle', istep
 
     ! Tectonic action!
     if (action(istep).eq.1) then
         call bury() ! (Formerly: BURIAL)
-        print *,'Burying...'
+        ! print *,istep,'Burying...'
     elseif (action(istep).eq.2) then
         call erode() ! (Formerly: EROS)
-        print *,'Uplifting/eroding...'
+        ! print *,istep,'Uplifting/eroding...'
     elseif (action(istep).ge.3) then
         if (int(thrust_dat(action(istep)-2,2)).eq.1) then
             call thrust_upperplate() ! (Formerly: THSTUP)
@@ -282,7 +293,7 @@ end
 !--------------------------------------------------------------------------------------------------!
 
 
-subroutine read_inputs()
+subroutine read_model_parameters()
 
 use tqtec, only: input_mode, &
                  input_file, &
@@ -315,9 +326,26 @@ character(len=512) :: input_line
 logical :: inWhitespace
 
 
-write(0,*) 'read_inputs: starting'
+! write(0,*) 'read_model_parameters: starting'
+
 
 if (input_mode.eq.'user') then
+
+    write(*,*) 'Do you want to create a new data file? (Y/N)'
+    read(*,*) reply
+    if (reply.eq.'y'.or.reply.eq.'Y'.or.reply.eq.'1') then
+        ! Create new data file with interactive input
+        write(*,*) 'Name of input file to create?'
+        read(*,*) input_file
+        open(unit=9,file=input_file,status='unknown')
+        write(9,*) trim(input_file)
+    else
+        write(*,*) 'Name of existing input file?'
+        read(*,*) input_file
+        call read_input_file()
+        return
+    endif
+
     write(*,*) 'Total time for model? (Ma)'
     read(*,*) t_total
     write(*,*) 'Time interval for output to be displayed? (Ma)'
@@ -334,6 +362,8 @@ if (input_mode.eq.'user') then
     read(*,*) hp_surf
     write(*,*) 'Heat production depth? (km)'
     read(*,*) hp_dep
+
+    write(9,*) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf, hp_dep
 
 
     write(*,*) 'Do you want to account for variations in thermal conductivity at the start ',&
@@ -352,6 +382,13 @@ if (input_mode.eq.'user') then
         enddo
     endif
 
+    write(9,*) nlayers
+    if (nlayers.gt.0) then
+        do i = 1,nlayers
+            write(9,*) (layer(i,j),j=1,3)
+        enddo
+    endif
+
 
     write(*,*) 'Number of horizons to track? (Press <return> to use default: 10)'
     read(*,'(A)') reply
@@ -366,6 +403,8 @@ if (input_mode.eq.'user') then
         write(*,*) 'Initial depth of point/horizon',i,'? (km)'
         read(*,*) depth(i)
     enddo
+
+    write(9,*) (depth(i),i=1,nhorizons)
 
 
     write(*,*) 'Number of burial periods?'
@@ -385,6 +424,13 @@ if (input_mode.eq.'user') then
         read(*,*) burial_dat(i,4)
     enddo
 
+    write(9,*) nburial
+    if (nburial.gt.0) then
+        do i = 1,nburial
+            write(9,*) (burial_dat(i,j),j=1,4)
+        enddo
+    endif
+
 
     write(*,*) 'Number of uplift/erosion periods?'
     read(*,*) nuplift
@@ -400,6 +446,13 @@ if (input_mode.eq.'user') then
         write(*,*) 'Total uplift during episode',i,'? (km)'
         read(*,*) uplift_dat(i,3)
     enddo
+
+    write(9,*) nuplift
+    if (nuplift.gt.0) then
+        do i = 1,nuplift
+            write(9,*) (uplift_dat(i,j),j=1,3)
+        enddo
+    endif
 
 
     write(*,*) 'Number of thrust periods?'
@@ -421,6 +474,13 @@ if (input_mode.eq.'user') then
         read(*,*) thrust_dat(i,5)
     enddo
 
+    write(9,*) nthrust
+    if (nthrust.gt.0) then
+        do i = 1,nthrust
+            write(9,*) (thrust_dat(i,j),j=1,5)
+        enddo
+    endif
+
 
     write(*,*) 'Number of heat flow variations?'
     read(*,*) nhfvars
@@ -435,13 +495,72 @@ if (input_mode.eq.'user') then
         read(*,*) hfvar(i,2)
     enddo
 
+    write(9,*) nhfvars
+    if (nhfvars.gt.0) then
+        do i = 1,nhfvars
+            write(9,*) (hfvar(i,j),j=1,2)
+        enddo
+    endif
+
+
+    write(*,*) 'tqtec: input file "',trim(input_file),'" has been created'
+    write(*,*) 'To re-use this file, run tqtec -f ',trim(input_file)
+
 
 elseif (input_mode.eq.'file') then
+
+    call read_input_file()
+
+else
+    write(0,*) 'tqtec: no input mode named "',trim(input_mode),'"'
+    stop
+endif
+
+write(0,*) 'read_model_parameters: finished'
+
+
+return
+end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+subroutine read_input_file()
+
+use tqtec, only: input_mode, &
+                 input_file, &
+                 t_total, &
+                 t_output, &
+                 temp_surf, &
+                 hf_surf, &
+                 hp_surf, &
+                 hp_dep, &
+                 cond_base, &
+                 nlayers, &
+                 layer, &
+                 nhorizons, &
+                 depth, &
+                 nburial, &
+                 burial_dat, &
+                 nuplift, &
+                 uplift_dat, &
+                 nthrust, &
+                 thrust_dat, &
+                 nhfvars, &
+                 hfvar
+
+implicit none
+
+! Local variables
+integer :: i, j, ios
+character(len=32) :: reply
+character(len=512) :: input_line
+logical :: inWhitespace
 
     ! Open the input file
     open(unit=8,file=input_file,iostat=ios)
     if (ios.ne.0) then
-        write(0,*) 'read_inputs: something went wrong trying to open input file "', &
+        write(0,*) 'read_model_parameters: something went wrong trying to open input file "', &
                    trim(input_file),'"'
         stop
     endif
@@ -449,12 +568,19 @@ elseif (input_mode.eq.'file') then
 
 
     read(8,'(A)') input_line ! first line is name of file
+
+
+    ! READ (8,110) Q1,M1,W(1),G1,C1,A1,B1
     read(8,'(A)') input_line ! second line contains first useful parameters
-    read(input_line,*) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf, &
+    read(input_line,*,iostat=ios) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf, &
                        hp_dep
+    if (ios.ne.0) then
+        read(input_line,*,iostat=ios) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf
+    endif
 
 
     ! Read material layers
+    ! READ (8,150) INL
     read(8,*) nlayers
     if (allocated(layer)) then
         deallocate(layer)
@@ -534,24 +660,16 @@ elseif (input_mode.eq.'file') then
     !     read(8,*) (hfvar(i,j),j=1,2)
     ! enddo
 
-
-else
-    write(0,*) 'tqtec: no input mode named "',trim(input_mode),'"'
-    stop
-endif
-
-write(0,*) 'read_inputs: finished'
-
-
 return
 end subroutine
-
 
 !--------------------------------------------------------------------------------------------------!
 
 
 subroutine setup_action_arrays()
-
+!----
+! Define arrays to control burial, erosion, and thrusting events
+!----
 
 use tqtec, only: nt_total, &
                  dz, &
@@ -585,6 +703,7 @@ integer :: intqt(nhfvars)
 
 
 write(0,*) 'setup_action_arrays: starting'
+
 
 ! Allocate memory to tectonic action arrays
 if (allocated(action)) then
@@ -679,10 +798,11 @@ write(0,*) 'setup_action_arrays: finished'
 return
 end subroutine
 
+
 !--------------------------------------------------------------------------------------------------!
 
-subroutine initialize_thermal_parameters()
 
+subroutine initialize_thermal_parameters()
 !----
 ! Calculate the steady state temperature at each node based on the surface heat flow, surface
 ! temperature, conductivity, and heat production
@@ -775,6 +895,10 @@ return
 end subroutine
 
 
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!------------------------------- FINITE DIFFERENCE PROCEDURE --------------------------------------!
+!--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
 
@@ -1066,15 +1190,6 @@ integer :: i, k
 integer :: thick_init, thrust_dep, thick_end, ierosion
 double precision :: upl_conductivity(nnodes), upl_hp(nnodes), upl_temp(nnodes)
 
-!       INTEGER P,E1,V,THTYPE
-!       REAL II
-!       DIMENSION UPLC(300), UPLH(300), UPLB(300)
-!       COMMON /COM1/ R(50000,2,10), A(5000,3), B(5000), C(5000), D(5000),
-!      *   E(5000), H(5000), P(50000), Q(50000), T(5000), II(10), Z(5,3),
-!      *   Y(10), NN(4), W(3),THTYPE(5),QTIME(10),QVALUE(10),QVTIME(50000)
-!       COMMON /COM2/ H1,A1,B1,C1,W1,E1,R1,N
-!       COMMON /COM3/ COND(5000),BCOND(50000),BASGRAD(50000)
-
 
 ! Set the thrust number
 k = action(istep) - 2
@@ -1227,15 +1342,16 @@ end subroutine
 
 
 !--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
 
 
 subroutine output()
-
-! C     **************************************************************
-! C     **************************************************************
-! C     PROGRAM OUTPUT.FOR
-!       SUBROUTINE OUTPUT(Q1,M1,OUTFIL)
-! C     --------------------------------------------------------------
+!----
+! Print model results to a file
+!----
 
 use tqtec
 
@@ -1244,62 +1360,88 @@ implicit none
 ! Local variables
 integer :: i, j, k
 
-write(7,*) output_file
 
-write(7,*) dz
-write(7,*) dt
-write(7,*) hp_surf
-write(7,*) hp_dep
-write(7,*) t_total
-write(7,*) diffusivity
-write(7,*) temp_factor
-write(7,*) 0.0 ! II(8)
-write(7,*) 0.0 ! II(9)
-write(7,*) 0.0 ! II(10)
+! Open the output file
+open(unit=7,file=output_file,status='unknown')
 
+
+! Write the results in the format originally specified by Kevin Furlong
+
+! Output file name
+write(7,*) trim(output_file)
+
+! Model parameters
+write(7,110) dz
+write(7,110) dt
+write(7,110) hp_surf
+write(7,110) hp_dep
+write(7,110) t_total
+write(7,110) diffusivity
+write(7,110) temp_factor
+write(7,110) 0.0 ! II(8)
+write(7,110) 0.0 ! II(9)
+write(7,110) 0.0 ! II(10)
+110 format(F7.3)
+
+! Heat flow
 do j = 2,nt_total,2
-    write(7,*) hf(j)
+    write(7,115) hf(j)
 enddo
+115 format(F6.2)
 
+! Temperature and depth of tracked horizons
 do k = 1,nhorizons
     do j = 1,2
         do i = 2,nt_total,2
-            write(7,*) results(i,j,k)
+            write(7,120) results(i,j,k)
         enddo
     enddo
 enddo
+120 format(F7.1)
 
+! Horizon depths
 do i = 1,nhorizons
-    write(7,*) depth(i)
+    write(7,130) depth(i)
 enddo
+130 format(F11.4)
 
 return
 end subroutine
 
+
 !--------------------------------------------------------------------------------------------------!
 
+
 subroutine gcmdln()
+!----
+! Parse tqtec command line arguments defining input/output modes and files
+!----
 
 use tqtec, only: input_mode, &
                  input_file, &
                  output_file
+
 implicit none
 
 ! Local variables
 character(len=512) arg
 integer :: i, ios, narg
 
+
 ! Initialize control variables
 ios = 0
 
+! Initialize defaults
 input_file = ''
 input_mode = 'user'
 output_file = ''
 
+
 narg = command_argument_count()
-! if (narg.eq.0) then
-!     call usage('')
-! endif
+if (narg.eq.0) then
+    call usage('')
+endif
+
 
 i = 1
 do while (i.le.narg)
@@ -1311,19 +1453,41 @@ do while (i.le.narg)
         i = i + 1
         call get_command_argument(i,input_file,status=ios)
 
-    elseif (arg.eq.'-user') then
+    elseif (arg.eq.'-interactive') then
         input_mode = 'user'
 
-    ! else
-    !     call usage('tqtec: no option '//trim(arg))
+    elseif (arg.eq.'-o') then
+        i = i + 1
+        call get_command_argument(i,output_file,status=ios)
+
+    else
+        call usage('tqtec: no option '//trim(arg))
     endif
 
-    ! 9001 if (ios.ne.0) then
-    !     call usage('tqtec: error parsing "'//trim(arg)//'" flag arguments')
-    ! endif
+    9001 if (ios.ne.0) then
+        call usage('tqtec: error parsing "'//trim(arg)//'" flag arguments')
+    endif
 
     i = i + 1
 enddo
 
 return
+end subroutine
+
+!--------------------------------------------------------------------------------------------------!
+
+subroutine usage(str)
+implicit none
+character(len=*) :: str
+if (str.ne.'') then
+    write(0,*) trim(str)
+    write(0,*)
+endif
+write(0,*) 'Usage: tqtec -interactive|-f INPUT_FILE  -o OUTPUT_FILE'
+write(0,*)
+write(0,*) '-interactive    User defines model parameters interactively'
+write(0,*) '-f INPUT_FILE   Input model parameter file'
+write(0,*) '-o OUTPUT_FILE  Output file'
+write(0,*)
+stop
 end subroutine
