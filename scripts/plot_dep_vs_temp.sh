@@ -1,9 +1,9 @@
 #!/bin/sh
 
-if [ $# -ne 2 ]
+if [ $# -lt 2 ]
 then
     echo "$0: no input file" 1>&2
-    echo "Usage: $0 TQTec_temp_file TQTec_depth_file" 1>&2
+    echo "Usage: $0 TQTec_temp_file TQTec_depth_file [-init temp_init_file]" 1>&2
     echo "  Plot the temperature-depth paths of tracked units over time"
     exit 1
 fi
@@ -20,6 +20,17 @@ then
     echo "$0: could not find file \"$DEPFILE\"" 1>&2
     exit 1
 fi
+
+TEMP_INIT_FILE=
+shift
+shift
+while [ "$1" != "" ]
+do
+    case $1 in
+        -init) shift; TEMP_INIT_FILE=$1;;
+    esac
+    shift
+done
 
 #####
 # Temperature bounds
@@ -42,12 +53,18 @@ ZMAX="0"
 #####
 LIMS="-R$TMIN/$TMAX/$ZMIN/$ZMAX"
 PROJ="-JX6i/6i"
-PSFILE="temp_vs_dep.ps"
+PSFILE="dep_vs_temp.ps"
 
 #####
 # Plot depth-temperature
 #####
 gmt psbasemap $PROJ $LIMS -Bxa20+l"Temperature (C)" -Bya5+l"Depth (km)" -BWeSn -K > $PSFILE
+
+if [ "$TEMP_INIT_FILE" != "" ]
+then
+    awk '{print $1,-$2}' $TEMP_INIT_FILE |\
+        gmt psxy $PROJ $LIMS -W1p -K -O >> $PSFILE
+fi
 
 NCOL=$(sed -ne "2p" $TEMPFILE | awk '{print NF}')
 NCOL2=$(echo $NCOL 1.1 | awk '{print $1*$2}')
