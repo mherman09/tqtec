@@ -1,14 +1,19 @@
-#!/bin/sh
+#!/bin/bash
 
 if [ $# -ne 1 ]
 then
-    echo "Error: No input file!"
-    echo "Usage: plottemp.sh [TQTec_temp_file]"
-    echo "  Plot the temperatures of units tracked in TQTec."
-    exit
+    echo "$0: no input file" 1>&2
+    echo "Usage: $0 TQTec_temp_file" 1>&2
+    echo "  Plot the temperatures of units tracked in TQTec" 1>&2
+    exit 1
 fi
 
 TEMPFILE="$1"
+if [ ! -f $TEMPFILE ]
+then
+    echo "$0: could not find file \"$TEMPFILE\"" 1>&2
+    exit 1
+fi
 
 #####
 # Temperature bounds
@@ -28,26 +33,34 @@ dt=`head -1 $TEMPFILE | awk '{print $2}'`
 #####
 # GMT variables
 #####
+gmt set PS_MEDIA 11ix11i
+
 LIMS="-R$TIMEMIN/$TIMEMAX/$TEMPMIN/$TEMPMAX"
-PROJ="-JX6i"
-PSFILE="Tvst.ps"
+PROJ="-JX6i/6i"
+PSFILE="temp_vs_time.ps"
 
 #####
 # Plot temperature vs. time
 #####
 gmt psbasemap $PROJ $LIMS -Bxa10+l"Time (Ma)" -Bya20+l"Temperature (\260C)" -BWeSn -K > $PSFILE
 
-for COL in 1 2 3 4 5 6 7 8 9 10
+NCOL=$(sed -ne "2p" $TEMPFILE | awk '{print NF}')
+NCOL2=$(echo $NCOL 1.1 | awk '{print $1*$2}')
+gmt makecpt -Cmagma -T0/$NCOL2/1 | awk '{if(NF==5){print $2}}' > color_list.tmp
+for COL in $(seq 1 $NCOL)
 do
+    COLOR=$(sed -ne "${COL}p" color_list.tmp)
     if [ $COL -eq 1 ]
     then
         awk '{if (NR > 1) print '$TIMEMIN'+(NR-1)*'$dt',$'$COL'}' $TEMPFILE |\
-          gmt psxy $PROJ $LIMS -W3p -K -O >> $PSFILE
+          gmt psxy $PROJ $LIMS -W3p,$COLOR -K -O >> $PSFILE
     else
         awk '{if (NR > 1) print '$TIMEMIN'+(NR-1)*'$dt',$'$COL'}' $TEMPFILE |\
-          gmt psxy $PROJ $LIMS -W1p -K -O >> $PSFILE
+          gmt psxy $PROJ $LIMS -W1p,$COLOR -K -O >> $PSFILE
     fi
 done
 
-echo "Created file $PSFILE"
-ps2pdf $PSFILE
+echo 0 0 | gmt psxy $PROJ $LIMS -O >> $PSFILE
+
+gmt psconvert $PSFILE -Tg -A
+echo "Created file $(basename $PSFILE .ps).png"
