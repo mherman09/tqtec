@@ -4,6 +4,7 @@ module tqtec
 character(len=512) :: input_file                  ! name of input file                              INFIL
 character(len=8) :: input_mode                    ! how to read input parameters (user, file)
 character(len=512) :: output_file                 ! name of output file                             OUTFIL
+character(len=512) :: temp_init_file              ! name of initial temperature file
 
 ! Finite difference parameters
 integer :: nnodes                                 ! number of spatial nodes                         N
@@ -1054,7 +1055,8 @@ subroutine initialize_thermal_parameters()
 !----
 
 
-use tqtec, only: nnodes, &
+use tqtec, only: temp_init_file, &
+                 nnodes, &
                  dz, &
                  conductivity, &
                  hp, &
@@ -1131,6 +1133,14 @@ do i = 2,nnodes
     hf_base = hf_base - hfhp
 enddo
 
+
+if (temp_init_file.ne.'') then
+    open(unit=11,file=temp_init_file,status='unknown')
+    do i = 1,nnodes
+        write(11,*) temp(i),dble(i)*dz
+    enddo
+    close(11)
+endif
 
 ! Initialize surface heat flow at time step 1
 hf(1) = (conductivity(1)*(temp(1)-temp_surf))/dz
@@ -1365,7 +1375,8 @@ end subroutine
 
 subroutine erode()
 !----
-! Erode and uplift the horizons by shifting physical parameters up node list and removing surface node
+! Erode and uplift the horizons by shifting physical parameters up node list by one and removing
+! the surface node
 !----
 
 use tqtec, only: nnodes, &
@@ -1397,9 +1408,9 @@ conductivity(nnodes) = cond_base
 ! Move horizons upward by one node
 do i = 1,nhorizons
     depth_node(i) = depth_node(i)-1
-    if (depth_node(i).le.0) then
-        depth_node(i) = 0
-    endif
+    ! if (depth_node(i).le.0) then
+    !     depth_node(i) = 0
+    ! endif
 enddo
 
 return
@@ -1666,7 +1677,8 @@ subroutine gcmdln()
 
 use tqtec, only: input_mode, &
                  input_file, &
-                 output_file
+                 output_file, &
+                 temp_init_file
 
 implicit none
 
@@ -1682,6 +1694,7 @@ ios = 0
 input_file = ''
 input_mode = 'user'
 output_file = ''
+temp_init_file = ''
 
 
 narg = command_argument_count()
@@ -1707,6 +1720,10 @@ do while (i.le.narg)
         i = i + 1
         call get_command_argument(i,output_file,status=ios)
 
+    elseif (arg.eq.'-temp:init') then
+        i = i + 1
+        call get_command_argument(i,temp_init_file,status=ios)
+
     else
         call usage('tqtec: no option '//trim(arg))
     endif
@@ -1730,11 +1747,12 @@ if (str.ne.'') then
     write(0,*) trim(str)
     write(0,*)
 endif
-write(0,*) 'Usage: tqtec [-i|-f INPUT_FILE]  [-o OUTPUT_FILE]'
+write(0,*) 'Usage: tqtec [-i|-f INPUT_FILE]  [-o OUTPUT_FILE] [-temp:init TEMP_FILE]'
 write(0,*)
-write(0,*) '-i[nteractive]  User defines model parameters interactively (default)'
-write(0,*) '-f INPUT_FILE   Input model parameter file'
-write(0,*) '-o OUTPUT_FILE  Output file'
+write(0,*) '-i[nteractive]        User defines model parameters interactively (default)'
+write(0,*) '-f INPUT_FILE         Input model parameter file'
+write(0,*) '-o OUTPUT_FILE        Output file'
+write(0,*) '-temp:init TEMP_FILE  Initial steady-state temperature'
 write(0,*)
 stop
 end subroutine
