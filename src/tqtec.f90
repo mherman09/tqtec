@@ -77,27 +77,23 @@ double precision, allocatable :: results(:,:,:)   ! temperature and depth for ea
 end module
 
 
-!==============================================================================!
+!==================================================================================================!
 
 
 program main
-
+!----
 ! C     CALCULATES THE ONE-DIMENSIONAL TRANSIENT THERMAL FIELD WITHIN
 ! C     AN AREA THAT UNDERGOES EPISODES OF:  BURIAL, EROSION, AND
 ! C     THRUSTING.  THIS PROGRAM CAN BE USED TO MONITOR POINTS THAT
 ! C     MOVE FROM THE UPPER TO LOWER (or v.v) PLATES.
-
-! C     Q(V) = SURFACE HEAT FLOW AT EACH TIME STEP
-! C     TTI(V,K) = TTI CALCULATED AT EACH TIME STEP
-
+!----
 
 use tqtec
 
 implicit none
 
-integer :: ierr
-integer :: i, np
-double precision :: SURCON
+integer :: i, np, ierr
+double precision :: cond_surf
 
 
 ! Initialize default model parameters
@@ -112,11 +108,8 @@ diffusivity = 32.0d0     ! D1=32.0
 ! Parse command line
 ! Matt's note: this is a totally new subroutine for tqtec (which I use in all my other programs)
 ! that allows better control over user input/output. Here, most of the model I/O is done via a
-! control file, so gcmdln() is much simpler, only allowing specification of user or file inputs.
+! control file, so gcmdln() is much simpler, only allowing specification of basic program I/O.
 call gcmdln()
-if (output_file.eq.'') then
-    call usage('tqtec: output file must be defined')
-endif
 
 
 ! Read control file or user input (formerly INPUT)
@@ -137,7 +130,7 @@ allocate(hf(nt_total))
 allocate(results(nt_total,2,nhorizons))
 
 
-! Set up action timing arrays (formerly: HIST)
+! Set up tectonic action timing arrays (formerly: HIST)
 call setup_action_arrays()
 
 
@@ -145,65 +138,64 @@ call setup_action_arrays()
 call initialize_thermal_parameters()
 
 
-write(0,*) 'nnodes:        ',nnodes
-write(0,*) 'nt_total:      ',nt_total
-write(0,*) 'istep:         ',istep
-write(0,*) 'dz:            ',dz
-write(0,*) 'dt:            ',dt
-write(0,*) 'r1:            ',r1
-write(0,*) 't_total:       ',t_total
-write(0,*) 't_output:      ',t_output
-write(0,*) 'nt_output:     ',nt_output
-write(0,*) 'nhorizons:     ',nhorizons
-write(0,*) 'depth:         ',depth
-write(0,*) 'depth_node:    ',depth_node
-write(0,*) 'nlayers:       ',nlayers
-write(0,*) 'layer(:,1):    ',layer(:,1)
-write(0,*) 'layer(:,2):    ',layer(:,2)
-write(0,*) 'layer(:,3):    ',layer(:,3)
-write(0,*) 'diffusivity:   ',diffusivity
-write(0,*) 'cond_base:     ',cond_base
-write(0,*) 'temp_surf:     ',temp_surf
-write(0,*) 'hp_surf:       ',hp_surf
-write(0,*) 'hp_dep:        ',hp_dep
-write(0,*) 'hf_surf:       ',hf_surf
-write(0,*) 'hf_base:       ',hf_base
-write(0,*) 'dtemp_wo_hp:   ',dtemp_wo_hp
-write(0,*) 'dtemp_wo_hp:   ',dtemp_wo_hp
-write(0,*) 'temp_factor:   ',temp_factor
-write(0,*) 'temp_base_adj:  ',temp_base_adj
-write(0,*) 'nburial:        ',nburial
-write(0,*) 'burial_dat(:,1):',burial_dat(:,1)
-write(0,*) 'burial_dat(:,2):',burial_dat(:,2)
-write(0,*) 'burial_dat(:,3):',burial_dat(:,3)
-write(0,*) 'burial_dat(:,4):',burial_dat(:,4)
-write(0,*) 'nuplift:        ',nuplift
-write(0,*) 'uplift_dat(:,1):',uplift_dat(:,1)
-write(0,*) 'uplift_dat(:,2):',uplift_dat(:,2)
-write(0,*) 'uplift_dat(:,3):',uplift_dat(:,3)
-write(0,*) 'nthrust:        ',nthrust
-write(0,*) 'thrust_dat(:,1):',thrust_dat(:,1)
-write(0,*) 'thrust_dat(:,2):',thrust_dat(:,2)
-write(0,*) 'thrust_dat(:,3):',thrust_dat(:,3)
-write(0,*) 'thrust_dat(:,4):',thrust_dat(:,4)
-write(0,*) 'thrust_dat(:,5):',thrust_dat(:,5)
-write(0,*) 'nhfvars:        ',nhfvars
-write(0,*) 'hfvar(:,1):     ',hfvar(:,1)
-write(0,*) 'hfvar(:,2):     ',hfvar(:,2)
+! write(0,*) 'nnodes:        ',nnodes
+! write(0,*) 'nt_total:      ',nt_total
+! write(0,*) 'istep:         ',istep
+! write(0,*) 'dz:            ',dz
+! write(0,*) 'dt:            ',dt
+! write(0,*) 'r1:            ',r1
+! write(0,*) 't_total:       ',t_total
+! write(0,*) 't_output:      ',t_output
+! write(0,*) 'nt_output:     ',nt_output
+! write(0,*) 'nhorizons:     ',nhorizons
+! write(0,*) 'depth:         ',depth
+! write(0,*) 'depth_node:    ',depth_node
+! write(0,*) 'nlayers:       ',nlayers
+! write(0,*) 'layer(:,1):    ',layer(:,1)
+! write(0,*) 'layer(:,2):    ',layer(:,2)
+! write(0,*) 'layer(:,3):    ',layer(:,3)
+! write(0,*) 'diffusivity:   ',diffusivity
+! write(0,*) 'cond_base:     ',cond_base
+! write(0,*) 'temp_surf:     ',temp_surf
+! write(0,*) 'hp_surf:       ',hp_surf
+! write(0,*) 'hp_dep:        ',hp_dep
+! write(0,*) 'hf_surf:       ',hf_surf
+! write(0,*) 'hf_base:       ',hf_base
+! write(0,*) 'dtemp_wo_hp:   ',dtemp_wo_hp
+! write(0,*) 'dtemp_wo_hp:   ',dtemp_wo_hp
+! write(0,*) 'temp_factor:   ',temp_factor
+! write(0,*) 'temp_base_adj:  ',temp_base_adj
+! write(0,*) 'nburial:        ',nburial
+! write(0,*) 'burial_dat(:,1):',burial_dat(:,1)
+! write(0,*) 'burial_dat(:,2):',burial_dat(:,2)
+! write(0,*) 'burial_dat(:,3):',burial_dat(:,3)
+! write(0,*) 'burial_dat(:,4):',burial_dat(:,4)
+! write(0,*) 'nuplift:        ',nuplift
+! write(0,*) 'uplift_dat(:,1):',uplift_dat(:,1)
+! write(0,*) 'uplift_dat(:,2):',uplift_dat(:,2)
+! write(0,*) 'uplift_dat(:,3):',uplift_dat(:,3)
+! write(0,*) 'nthrust:        ',nthrust
+! write(0,*) 'thrust_dat(:,1):',thrust_dat(:,1)
+! write(0,*) 'thrust_dat(:,2):',thrust_dat(:,2)
+! write(0,*) 'thrust_dat(:,3):',thrust_dat(:,3)
+! write(0,*) 'thrust_dat(:,4):',thrust_dat(:,4)
+! write(0,*) 'thrust_dat(:,5):',thrust_dat(:,5)
+! write(0,*) 'nhfvars:        ',nhfvars
+! write(0,*) 'hfvar(:,1):     ',hfvar(:,1)
+! write(0,*) 'hfvar(:,2):     ',hfvar(:,2)
 
 
 istep = 0
 do while (istep.lt.nt_total)
 
     ! Update the adjusted temperature at the base of the model
-! 5     W(3)=B(N)+BASGRAD(V+1)
     temp_base_adj = temp(nnodes) + bas_grad(istep+1)
 
     ! Calculate the updated temperatures at each node (the main finite difference procedure)
     ! (formerly: MAT and TRID)
     call update_temps(nnodes,ierr)
     if (ierr.ne.0) then
-        write(0,*) 'tqtec: error in update_temps TRID algorithm'
+        write(0,*) 'tqtec: error in update_temps() TRID algorithm'
         stop
     endif
 
@@ -224,45 +216,19 @@ do while (istep.lt.nt_total)
         elseif (int(thrust_dat(action(istep)-2,2)).eq.2) then
             call thrust_lowerplate() ! (Formerly: THSTLP)
         endif
+        ! print *,istep,'Thrusting...'
     endif
 
-!       Q(V)=(B(10)-B(5))/(5.0*H1)
-    hf(istep) = (temp(10)-temp(5))/(5.0d0*dz)
-
-!       SURCON=0.0
-!       coninv = 0.0
-!       DO 6, I=1,5
-! C         coninv = coninv + (1.0/COND(I))
-! 		 		 SURCON=SURCON+COND(I+4)
-! 6     CONTINUE
-!       SURCON=SURCON/5.0
-    SURCON = 0.0d0
+    ! Calculate surface heat flow for this time step
+    hf(istep) = (temp(10)-temp(5))/(5.0d0*dz)   ! Temperature gradient near surface
+    cond_surf = 0.0d0                           ! Average surface conductivity
     do i = 1,5
-        SURCON = SURCON + conductivity(i+4)
+        cond_surf = cond_surf + conductivity(i+4)
     enddo
-    SURCON = SURCON/5.0d0
-! C      SURCON = (1.0/coninv)/25.0
+    cond_surf = cond_surf/5.0d0
+    hf(istep) = hf(istep)*cond_surf             ! Heat flow = dT/dz * conductivity
 
-!       Q(V)=Q(V)*SURCON
-    hf(istep) = hf(istep)*SURCON
-
-!       DO 10 I=1,10
-!          IARG=NINT(Y(I))
-!          IF(IARG.EQ.0) THEN
-!            R(V,1,I)=W(1)
-!          ELSEIF(IARG.LT.0) THEN
-!            R(V,1,I)=0.0
-!          ELSEIF(IARG.GT.0) THEN
-!            R(V,1,I)=B(IARG)
-!          ENDIF
-!          R(V,2,I)=Y(I)
-! C         EMP = (R(V,1,I)-105)/10
-! C         IF (V.EQ.1) THEN
-! C           TTI(V,I)= II(2)*2**EMP
-! C         ELSE
-! C           TTI(V,I)= TTI(V-1,I) + II(2)*2**EMP
-! C         ENDIF
-! 10    CONTINUE
+    ! Save depths and temperatures of tracked horizons in results array
     do i = 1,nhorizons
         np = depth_node(i)
         if (np.eq.0) then
@@ -275,238 +241,79 @@ do while (istep.lt.nt_total)
         results(istep,2,i) = dble(depth_node(i))
     enddo
 
-!       IF(V.GE.Q1)THEN
-!         CALL OUTPUT(Q1,M1,OUTFIL)
-!       ELSE
-!         GOTO 5
-!       ENDIF
-    if (istep.ge.nt_total) then
-        call output()
-    endif
+!       DO 10 I=1,10
+! C         EMP = (R(V,1,I)-105)/10
+! C         IF (V.EQ.1) THEN
+! C           TTI(V,I)= II(2)*2**EMP
+! C         ELSE
+! C           TTI(V,I)= TTI(V-1,I) + II(2)*2**EMP
+! C         ENDIF
+! 10    CONTINUE
+
 enddo
 
+
+! Print the results to the defined output file
+call output()
 
 
 end
 
 
+
+
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!---------------------------------- INPUT SUBROUTINES ---------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
 
 subroutine read_model_parameters()
+!----
+! Determine how to read input model parameters and run the corresponding input routine
+! Depends on value of variable "input_mode":
+!     - input_mode="user": interactive input entry
+!     - input_mode="file": read input file
+!
+! Determine how to handle output
+!----
 
 use tqtec, only: input_mode, &
                  input_file, &
-                 t_total, &
-                 t_output, &
-                 temp_surf, &
-                 hf_surf, &
-                 hp_surf, &
-                 hp_dep, &
-                 cond_base, &
-                 nlayers, &
-                 layer, &
-                 nhorizons, &
-                 depth, &
-                 nburial, &
-                 burial_dat, &
-                 nuplift, &
-                 uplift_dat, &
-                 nthrust, &
-                 thrust_dat, &
-                 nhfvars, &
-                 hfvar
+                 output_file
 
 implicit none
 
 ! Local variables
-integer :: i, j, ios
 character(len=32) :: reply
-character(len=512) :: input_line
-logical :: inWhitespace
 
 
-! write(0,*) 'read_model_parameters: starting'
+write(0,*) 'read_model_parameters: starting'
 
 
+! Interactive mode (like original version of tqtec)
 if (input_mode.eq.'user') then
 
-    write(*,*) 'Do you want to create a new data file? (Y/N)'
+    ! Ask if user wants to create a new data file
+    write(*,*) 'Do you want to manually create a new data file? (Y/N)'
     read(*,*) reply
+
     if (reply.eq.'y'.or.reply.eq.'Y'.or.reply.eq.'1') then
-        ! Create new data file with interactive input
         write(*,*) 'Name of input file to create?'
         read(*,*) input_file
-        open(unit=9,file=input_file,status='unknown')
-        write(9,*) trim(input_file)
-    else
+        call read_interactive()                                 ! Create data file with interactive input
+    elseif (reply.eq.'n'.or.reply.eq.'N'.or.reply.eq.'0') then
         write(*,*) 'Name of existing input file?'
         read(*,*) input_file
-        call read_input_file()
-        return
-    endif
-
-    write(*,*) 'Total time for model? (Ma)'
-    read(*,*) t_total
-    write(*,*) 'Time interval for output to be displayed? (Ma)'
-    read(*,*) t_output
-    t_output = 5.0d0 ! HARD-CODED
-
-    write(*,*) 'Temperature at upper surface boundary? (C)'
-    read(*,*) temp_surf
-    write(*,*) 'Surface heat flow? (mW/m^2)'
-    read(*,*) hf_surf
-    write(*,*) 'Initial (basement) thermal conductivity? (W/(m*K))'
-    read(*,*) cond_base
-    write(*,*) 'Surface heat production? (uW/m^3)'
-    read(*,*) hp_surf
-    write(*,*) 'Heat production depth? (km)'
-    read(*,*) hp_dep
-
-    write(9,*) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf, hp_dep
-
-
-    write(*,*) 'Do you want to account for variations in thermal conductivity at the start ',&
-               'of the model? (y/n)'
-    read(*,*) reply
-    if (reply.eq.'y'.or.reply.eq.'Y'.or.reply.eq.'1') then
-        write(*,*) 'Number of layers to input conductivity for?'
-        read(*,*) nlayers
-        do i = 1,nlayers
-            write(*,*) 'Depth of top of layer',i,'? (km)'
-            read(*,*) layer(i,1)
-            write(*,*) 'Thickness of layer',i,'? (km)'
-            read(*,*) layer(i,2)
-            write(*,*) 'Conductivity of layer',i,'? (W/(m*K))'
-            read(*,*) layer(i,3)
-        enddo
-    endif
-
-    write(9,*) nlayers
-    if (nlayers.gt.0) then
-        do i = 1,nlayers
-            write(9,*) (layer(i,j),j=1,3)
-        enddo
+        call read_input_file()                                  ! Read existing data file
+    else
+        write(0,*) 'tqtec: could not understand response "',trim(reply),'"'
+        stop
     endif
 
 
-    write(*,*) 'Number of horizons to track? (Press <return> to use default: 10)'
-    read(*,'(A)') reply
-    if (reply.ne.'') then
-        read(reply,*) nhorizons
-    endif
-    if (allocated(depth)) then
-        deallocate(depth)
-    endif
-    allocate(depth(nhorizons))
-    do i = 1,nhorizons
-        write(*,*) 'Initial depth of point/horizon',i,'? (km)'
-        read(*,*) depth(i)
-    enddo
-
-    write(9,*) (depth(i),i=1,nhorizons)
-
-
-    write(*,*) 'Number of burial periods?'
-    read(*,*) nburial
-    if (allocated(burial_dat)) then
-        deallocate(burial_dat)
-    endif
-    allocate(burial_dat(nburial,4))
-    do i = 1,nburial
-        write(*,*) 'Beginning of burial period',i,'? (Ma after start)'
-        read(*,*) burial_dat(i,1)
-        write(*,*) 'Duration of burial period',i,'? (Ma)'
-        read(*,*) burial_dat(i,2)
-        write(*,*) 'Total burial during episode',i,'? (km)'
-        read(*,*) burial_dat(i,3)
-        write(*,*) 'Thermal conductivity of sediments in burial episode',i,'? (W/(m*K))'
-        read(*,*) burial_dat(i,4)
-    enddo
-
-    write(9,*) nburial
-    if (nburial.gt.0) then
-        do i = 1,nburial
-            write(9,*) (burial_dat(i,j),j=1,4)
-        enddo
-    endif
-
-
-    write(*,*) 'Number of uplift/erosion periods?'
-    read(*,*) nuplift
-    if (allocated(uplift_dat)) then
-        deallocate(uplift_dat)
-    endif
-    allocate(uplift_dat(nuplift,3))
-    do i = 1,nuplift
-        write(*,*) 'Beginning of uplift period',i,'? (Ma after start)'
-        read(*,*) uplift_dat(i,1)
-        write(*,*) 'Duration of uplift period',i,'? (Ma)'
-        read(*,*) uplift_dat(i,2)
-        write(*,*) 'Total uplift during episode',i,'? (km)'
-        read(*,*) uplift_dat(i,3)
-    enddo
-
-    write(9,*) nuplift
-    if (nuplift.gt.0) then
-        do i = 1,nuplift
-            write(9,*) (uplift_dat(i,j),j=1,3)
-        enddo
-    endif
-
-
-    write(*,*) 'Number of thrust periods?'
-    read(*,*) nthrust
-    if (allocated(thrust_dat)) then
-        deallocate(thrust_dat)
-    endif
-    allocate(thrust_dat(nthrust,5))
-    do i = 1,nthrust
-        write(*,*) 'Time of thrust period',i,'? (Ma after start)'
-        read(*,*) thrust_dat(i,1)
-        write(*,*) 'Points in upper(1) or lower(2) plate during thrust period',i,'?'
-        read(*,*) thrust_dat(i,2)
-        write(*,*) 'Initial base of thrust during episode',i,'? (km)'
-        read(*,*) thrust_dat(i,3)
-        write(*,*) 'Initial depth of thrust during episode',i,'? (km)'
-        read(*,*) thrust_dat(i,4)
-        write(*,*) 'Initial thickness of thrust during episode',i,'? (km)'
-        read(*,*) thrust_dat(i,5)
-    enddo
-
-    write(9,*) nthrust
-    if (nthrust.gt.0) then
-        do i = 1,nthrust
-            write(9,*) (thrust_dat(i,j),j=1,5)
-        enddo
-    endif
-
-
-    write(*,*) 'Number of heat flow variations?'
-    read(*,*) nhfvars
-    if (allocated(hfvar)) then
-        deallocate(hfvar)
-    endif
-    allocate(hfvar(nhfvars,2))
-    do i = 1,nhfvars
-        write(*,*) 'Time of heat flow value change',i,'? (Ma after start)'
-        read(*,*) hfvar(i,1)
-        write(*,*) 'Value of heat flow at change',i,'?'
-        read(*,*) hfvar(i,2)
-    enddo
-
-    write(9,*) nhfvars
-    if (nhfvars.gt.0) then
-        do i = 1,nhfvars
-            write(9,*) (hfvar(i,j),j=1,2)
-        enddo
-    endif
-
-
-    write(*,*) 'tqtec: input file "',trim(input_file),'" has been created'
-    write(*,*) 'To re-use this file, run tqtec -f ',trim(input_file)
-
-
+! Read from input file
 elseif (input_mode.eq.'file') then
 
     call read_input_file()
@@ -516,7 +323,240 @@ else
     stop
 endif
 
+
+if (output_file.eq.'') then
+    write(*,*) 'Name of output file?'
+    read(*,*) output_file
+    write(*,*) 'tqtec: creating output file "',trim(output_file),'"'
+    write(*,*) 'To create this file automatically, run tqtec -o ',trim(output_file)
+endif
+
 write(0,*) 'read_model_parameters: finished'
+
+return
+end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+subroutine read_interactive()
+!----
+! Manually enter model parameters and tectonic events
+!----
+
+use tqtec, only: input_file, &
+                 t_total, &
+                 t_output, &
+                 temp_surf, &
+                 hf_surf, &
+                 hp_surf, &
+                 hp_dep, &
+                 cond_base, &
+                 nlayers, &
+                 layer, &
+                 nhorizons, &
+                 depth, &
+                 nburial, &
+                 burial_dat, &
+                 nuplift, &
+                 uplift_dat, &
+                 nthrust, &
+                 thrust_dat, &
+                 nhfvars, &
+                 hfvar
+
+implicit none
+
+! Local variables
+integer :: i, j
+character(len=32) :: reply, fmt_string
+
+
+! Open the input file so model parameters can be saved to it
+open(unit=9,file=input_file,status='unknown')
+
+! Write to fixed format input file
+write(9,*) trim(input_file)
+
+
+! Model timing
+write(*,*) 'Total time for model? (Ma)'
+read(*,*) t_total
+write(*,*) 'Time interval for output to be displayed? (Ma)'
+read(*,*) t_output
+t_output = 5.0d0 ! HARD-CODED (also not used)
+
+! Model boundary conditions
+write(*,*) 'Temperature at upper surface boundary? (C)'
+read(*,*) temp_surf
+write(*,*) 'Surface heat flow? (mW/m^2)'
+read(*,*) hf_surf
+write(*,*) 'Initial (basement) thermal conductivity? (W/(m*K))'
+read(*,*) cond_base
+write(*,*) 'Surface heat production? (uW/m^3)'
+read(*,*) hp_surf
+write(*,*) 'Heat production depth? (km)'
+read(*,*) hp_dep
+
+! Write to fixed format input file
+write(9,1001) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf, hp_dep
+1001 format(2F10.0,5F10.4)
+
+
+! Variations in thermal conductivity
+write(*,*) 'Do you want to account for variations in thermal conductivity at the start ',&
+           'of the model? (y/n)'
+read(*,*) reply
+if (reply.eq.'y'.or.reply.eq.'Y'.or.reply.eq.'1') then
+    write(*,*) 'Number of layers to input conductivity for?'
+    read(*,*) nlayers
+    do i = 1,nlayers
+        write(*,*) 'Depth of top of layer',i,'? (km)'
+        read(*,*) layer(i,1)
+        write(*,*) 'Thickness of layer',i,'? (km)'
+        read(*,*) layer(i,2)
+        write(*,*) 'Conductivity of layer',i,'? (W/(m*K))'
+        read(*,*) layer(i,3)
+    enddo
+endif
+
+! Write to fixed format input file
+write(9,'(I10)') nlayers
+if (nlayers.gt.0) then
+    do i = 1,nlayers
+        write(9,1003) (layer(i,j),j=1,3)
+    enddo
+endif
+1003 format(3F10.4)
+
+
+! Tracked horizon depths
+write(*,*) 'Number of horizons to track? (Press <return> to use default: 10)'
+read(*,'(A)') reply
+if (reply.ne.'') then
+    read(reply,*) nhorizons
+endif
+if (allocated(depth)) then
+    deallocate(depth)
+endif
+allocate(depth(nhorizons))
+do i = 1,nhorizons
+    write(*,*) 'Initial depth of point/horizon',i,' (of ',nhorizons,')? (km)'
+    read(*,*) depth(i)
+enddo
+
+! Write to fixed format input file
+write(fmt_string,'("(",I5,"F8.4",")")') nhorizons
+write(9,fmt_string) (depth(i),i=1,nhorizons)
+
+
+! Burial events
+write(*,*) 'Number of burial periods?'
+read(*,*) nburial
+if (allocated(burial_dat)) then
+    deallocate(burial_dat)
+endif
+allocate(burial_dat(nburial,4))
+do i = 1,nburial
+    write(*,*) 'Beginning of burial period',i,'? (Ma after start)'
+    read(*,*) burial_dat(i,1)
+    write(*,*) 'Duration of burial period',i,'? (Ma)'
+    read(*,*) burial_dat(i,2)
+    write(*,*) 'Total burial during episode',i,'? (km)'
+    read(*,*) burial_dat(i,3)
+    write(*,*) 'Thermal conductivity of sediments in burial episode',i,'? (W/(m*K))'
+    read(*,*) burial_dat(i,4)
+enddo
+
+! Write to fixed format input file
+write(9,'(I10)') nburial
+if (nburial.gt.0) then
+    do i = 1,nburial
+        write(9,'(4F10.4)') (burial_dat(i,j),j=1,4)
+    enddo
+endif
+
+
+! Uplift events
+write(*,*) 'Number of uplift/erosion periods?'
+read(*,*) nuplift
+if (allocated(uplift_dat)) then
+    deallocate(uplift_dat)
+endif
+allocate(uplift_dat(nuplift,3))
+do i = 1,nuplift
+    write(*,*) 'Beginning of uplift period',i,'? (Ma after start)'
+    read(*,*) uplift_dat(i,1)
+    write(*,*) 'Duration of uplift period',i,'? (Ma)'
+    read(*,*) uplift_dat(i,2)
+    write(*,*) 'Total uplift during episode',i,'? (km)'
+    read(*,*) uplift_dat(i,3)
+enddo
+
+! Write to fixed format input file
+write(9,'(I10)') nuplift
+if (nuplift.gt.0) then
+    do i = 1,nuplift
+        write(9,'(3F10.4)') (uplift_dat(i,j),j=1,3)
+    enddo
+endif
+
+
+! Thrust events
+write(*,*) 'Number of thrust periods?'
+read(*,*) nthrust
+if (allocated(thrust_dat)) then
+    deallocate(thrust_dat)
+endif
+allocate(thrust_dat(nthrust,5))
+do i = 1,nthrust
+    write(*,*) 'Time of thrust period',i,'? (Ma after start)'
+    read(*,*) thrust_dat(i,1)
+    write(*,*) 'Points in upper(1) or lower(2) plate during thrust period',i,'?'
+    read(*,*) thrust_dat(i,2)
+    write(*,*) 'Initial base of thrust during episode',i,'? (km)'
+    read(*,*) thrust_dat(i,3)
+    write(*,*) 'Initial depth of thrust during episode',i,'? (km)'
+    read(*,*) thrust_dat(i,4)
+    write(*,*) 'Initial thickness of thrust during episode',i,'? (km)'
+    read(*,*) thrust_dat(i,5)
+enddo
+
+! Write to fixed format input file
+write(9,'(I10)') nthrust
+if (nthrust.gt.0) then
+    do i = 1,nthrust
+        write(9,'(5F10.4)') (thrust_dat(i,j),j=1,5)
+    enddo
+endif
+
+
+! Variations in heat flow
+write(*,*) 'Number of heat flow variations?'
+read(*,*) nhfvars
+if (allocated(hfvar)) then
+    deallocate(hfvar)
+endif
+allocate(hfvar(nhfvars,2))
+do i = 1,nhfvars
+    write(*,*) 'Time of heat flow value change',i,'? (Ma after start)'
+    read(*,*) hfvar(i,1)
+    write(*,*) 'Value of heat flow at change',i,'?'
+    read(*,*) hfvar(i,2)
+enddo
+
+! Write to fixed format input file
+write(9,'(I10)') nhfvars
+if (nhfvars.gt.0) then
+    do i = 1,nhfvars
+        write(9,'(2F10.4)') (hfvar(i,j),j=1,2)
+    enddo
+endif
+
+
+write(*,*) 'tqtec: input file "',trim(input_file),'" has been created'
+write(*,*) 'To re-use this file, run tqtec -f ',trim(input_file)
 
 
 return
@@ -526,9 +566,73 @@ end subroutine
 !--------------------------------------------------------------------------------------------------!
 
 subroutine read_input_file()
+!----
+! Determine whether to read fixed format (original) or free format (new) input file
+!----
 
-use tqtec, only: input_mode, &
-                 input_file, &
+use tqtec, only: input_file
+
+implicit none
+
+! Local variables
+integer :: ios
+character(len=512) :: input_line
+logical :: ex
+
+
+write(0,*) 'read_input_file: starting'
+
+
+! Check to make sure input file exists
+inquire(file=input_file,exist=ex)
+if (.not.ex) then
+    write(0,*) 'tqtec: could not find input file "',trim(input_file),'"'
+    stop
+endif
+
+! Check the input file format
+! Old version is fixed format
+! New version has VAR=VALUE
+open(unit=8,file=input_file,iostat=ios)
+if (ios.ne.0) then
+    write(0,*) 'tqtec: something went wrong trying to open input file "',trim(input_file),'"'
+    stop
+endif
+read(8,'(A)') input_line
+close(8)
+if (index(input_line,'=').eq.0) then
+    call read_input_file_old()
+else
+    call read_input_file_new()
+endif
+
+
+write(0,*) 'read_input_file: finished'
+
+
+return
+end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+subroutine read_input_file_old()
+!----
+! Read tqtec input file in original fixed format, e.g.:
+!
+! tqtec.in
+!         50         5    0.0000   30.0000    3.0000    0.0000
+!          0
+!   2.0000  4.0000  6.0000  8.0000 10.0000 12.0000 14.0000 16.0000 18.0000 20.0000
+!          1
+!    10.0000   10.0000    5.0000    2.0000
+!          1
+!    20.0000   20.0000   10.0000
+!          1
+!    40.0000         1   25.0000    0.0000  25.0000
+!----
+
+use tqtec, only: input_file, &
                  t_total, &
                  t_output, &
                  temp_surf, &
@@ -553,116 +657,257 @@ implicit none
 
 ! Local variables
 integer :: i, j, ios
-character(len=32) :: reply
 character(len=512) :: input_line
 logical :: inWhitespace
 
-    ! Open the input file
-    open(unit=8,file=input_file,iostat=ios)
-    if (ios.ne.0) then
-        write(0,*) 'read_model_parameters: something went wrong trying to open input file "', &
-                   trim(input_file),'"'
-        stop
-    endif
-    rewind(8)
+
+write(0,*) 'read_input_file_old: starting'
 
 
-    read(8,'(A)') input_line ! first line is name of file
+! Open the input file for reading in old fixed format
+open(unit=8,file=input_file,iostat=ios)
+if (ios.ne.0) then
+    write(0,*) 'tqtec: something went wrong trying to open input file "',trim(input_file),'"'
+    stop
+endif
 
 
-    ! READ (8,110) Q1,M1,W(1),G1,C1,A1,B1
-    read(8,'(A)') input_line ! second line contains first useful parameters
-    read(input_line,*,iostat=ios) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf, &
-                       hp_dep
-    if (ios.ne.0) then
-        read(input_line,*,iostat=ios) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf
-    endif
+ios = 0
+
+! First line contains file name
+read(8,'(A)') input_line
 
 
-    ! Read material layers
-    ! READ (8,150) INL
-    read(8,*) nlayers
-    if (allocated(layer)) then
-        deallocate(layer)
-    endif
-    allocate(layer(nlayers,3))
-    do i = 1,nlayers
-        read(8,*) (layer(i,j),j=1,3)
-    enddo
+! Second line contains model parameters
+! READ (8,110) Q1,M1,W(1),G1,C1,A1,B1
+read(8,'(A)') input_line
+read(input_line,*,iostat=ios) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf, &
+                   hp_dep
+if (ios.ne.0) then
+    read(input_line,*,iostat=ios) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf
+endif
 
 
-    ! Read horizon depths
-    ! Any number of horizons can be listed here, so reset nhorizons and deallocate depth array
-    nhorizons = 0
-    if (allocated(depth)) then
-        deallocate(depth)
-    endif
-    read(8,'(A)') input_line
-    ! Parse the input line for the number of depth horizons
-    i = 1
-    inWhitespace = .true.
-    do while (i.le.len_trim(input_line))
-        if (input_line(i:i).eq.' ') then
-            inWhitespace = .true.
-        else
-            if (inWhitespace) then
-                nhorizons = nhorizons + 1
-            endif
-            inWhitespace = .false.
+! Read material layers
+! READ (8,150) INL
+read(8,*) nlayers
+if (allocated(layer)) then
+    deallocate(layer)
+endif
+allocate(layer(nlayers,3))
+do i = 1,nlayers
+    read(8,*) (layer(i,j),j=1,3)
+enddo
+
+
+! Read horizon depths
+! Any number of horizons can be listed here, so reset nhorizons and deallocate depth array
+nhorizons = 0
+if (allocated(depth)) then
+    deallocate(depth)
+endif
+read(8,'(A)') input_line
+! Parse the input line for the number of depth horizons
+i = 1
+inWhitespace = .true.
+do while (i.le.len_trim(input_line))
+    if (input_line(i:i).eq.' ') then
+        inWhitespace = .true.
+    else
+        if (inWhitespace) then
+            nhorizons = nhorizons + 1
         endif
-        i = i + 1
-    enddo
-    ! Reallocate depth array and read depths
-    allocate(depth(nhorizons))
-    read(input_line,*) (depth(i),i=1,nhorizons)
-
-
-    ! Read burial episodes
-    read(8,*) nburial
-    if (allocated(burial_dat)) then
-        deallocate(burial_dat)
+        inWhitespace = .false.
     endif
-    allocate(burial_dat(nburial,4))
-    do i = 1,nburial
-        read(8,*) (burial_dat(i,j),j=1,4)
-    enddo
+    i = i + 1
+enddo
+! Reallocate depth array and read depths
+allocate(depth(nhorizons))
+read(input_line,*) (depth(i),i=1,nhorizons)
 
 
-    ! Read uplift/erosion episodes
-    read(8,*) nuplift
-    if (allocated(uplift_dat)) then
-        deallocate(uplift_dat)
-    endif
-    allocate(uplift_dat(nuplift,4))
-    do i = 1,nuplift
-        read(8,*) (uplift_dat(i,j),j=1,3)
-    enddo
+! Read burial episodes
+read(8,*,end=1001,iostat=ios) nburial
+if (allocated(burial_dat)) then
+    deallocate(burial_dat)
+endif
+allocate(burial_dat(nburial,4))
+do i = 1,nburial
+    read(8,'(A)',end=1101,iostat=ios) input_line
+    read(input_line,*,end=1201,iostat=ios) (burial_dat(i,j),j=1,4)
+enddo
 
 
-    ! Read thrust episodes
-    read(8,*) nthrust
-    if (allocated(thrust_dat)) then
-        deallocate(thrust_dat)
-    endif
-    allocate(thrust_dat(nthrust,4))
-    do i = 1,nthrust
-        read(8,*) (thrust_dat(i,j),j=1,5)
-    enddo
+! Read uplift/erosion episodes
+read(8,*,end=1002,iostat=ios) nuplift
+if (allocated(uplift_dat)) then
+    deallocate(uplift_dat)
+endif
+allocate(uplift_dat(nuplift,4))
+do i = 1,nuplift
+    read(8,'(A)',end=1102,iostat=ios) input_line
+    read(input_line,*,end=1202,iostat=ios) (uplift_dat(i,j),j=1,3)
+enddo
+print *,'uplift read'
 
 
-    ! ! Read basal heat flow variations
-    ! read(8,*) nhfvars
-    ! if (allocated(hfvar)) then
-    !     deallocate(hfvar)
-    ! endif
-    ! allocate(hfvar(nhfvars,2))
-    ! do i = 1,nhfvars
-    !     read(8,*) (hfvar(i,j),j=1,2)
-    ! enddo
+! Read thrust episodes
+read(8,*,end=1003,iostat=ios) nthrust
+if (allocated(thrust_dat)) then
+    deallocate(thrust_dat)
+endif
+allocate(thrust_dat(nthrust,5))
+do i = 1,nthrust
+    read(8,'(A)',end=1103,iostat=ios) input_line
+    read(input_line,*,end=1203,iostat=ios) (thrust_dat(i,j),j=1,5)
+enddo
+print *,'thrust read'
+
+! Read basal heat flow variations
+read(8,*,end=1004,iostat=ios) nhfvars
+if (allocated(hfvar)) then
+    deallocate(hfvar)
+endif
+allocate(hfvar(nhfvars,2))
+do i = 1,nhfvars
+    read(8,'(A)',end=1104,iostat=ios) input_line
+    read(input_line,*,end=1204,iostat=ios) (hfvar(i,j),j=1,2)
+enddo
+
+
+! Warning messages if unable to find tectonic events
+1001 if (ios.ne.0) then
+    write(0,*) 'tqtec: could not find any burial events'
+endif
+1002 if (ios.ne.0) then
+    write(0,*) 'tqtec: could not find any uplift events'
+endif
+1003 if (ios.ne.0) then
+    write(0,*) 'tqtec: could not find any thrust events'
+endif
+1004 if (ios.ne.0) then
+    write(0,*) 'tqtec: could not find any heat flow variations'
+endif
+ios = 0
+
+! Errors if unable to read number of specified tectonic events
+1101 if (ios.ne.0) then
+    write(0,*) 'tqtec: input file only specified',i-1,' of',nburial,' burial events'
+    stop
+endif
+1102 if (ios.ne.0) then
+    write(0,*) 'tqtec: input file only specified',i-1,' of',nuplift,' uplift events'
+    stop
+endif
+1103 if (ios.ne.0) then
+    write(0,*) 'tqtec: input file only specified',i-1,' of',nthrust,' thrust events'
+    stop
+endif
+1104 if (ios.ne.0) then
+    write(0,*) 'tqtec: input file only specified',i-1,' of',nhfvars,' heat flow variations'
+    stop
+endif
+
+! Errors if tectonic events lines are too short
+1201 if (ios.ne.0) then
+    write(0,*) 'tqtec: could not parse:'
+    write(0,*) '"',trim(input_line),'"'
+    write(0,*) 'As: TSTART  TDURATION  BURIAL  CONDUCTIVITY'
+    stop
+endif
+1202 if (ios.ne.0) then
+    write(0,*) 'tqtec: could not parse:'
+    write(0,*) '"',trim(input_line),'"'
+    write(0,*) 'As: TSTART  TDURATION  UPLIFT'
+    stop
+endif
+1203 if (ios.ne.0) then
+    write(0,*) 'tqtec: could not parse:'
+    write(0,*) '"',trim(input_line),'"'
+    write(0,*) 'As: TSTART  1/0  BASE  DEPTH  THICKNESS'
+    stop
+endif
+1204 if (ios.ne.0) then
+    write(0,*) 'tqtec: could not parse:'
+    write(0,*) '"',trim(input_line),'"'
+    write(0,*) 'As: TSTART  HEAT_FLOW'
+    stop
+endif
+
+
+close(8)
+
+write(0,*) 'read_input_file_old: finished'
 
 return
 end subroutine
 
+!--------------------------------------------------------------------------------------------------!
+
+subroutine read_input_file_new()
+!----
+! Read tqtec input file in new format:
+!
+! T_TOTAL=50
+! T_OUTPUT=5
+! TEMP_SURF=0
+! HF_SURF=30
+! COND_BASE=3
+! HP_SURF=0
+! HP_DEP=0
+! NLAYERS=0
+! NHORIZONS=10
+! DEPTH=2 4 6 8 10 12 14 16 18 20
+! NBURIAL=1
+! BURIAL_START=10
+! BURIAL_DURATION=10
+! BURIAL_THICK=5
+! BURIAL_COND=2
+! NUPLIFT=2
+! UPLIFT_START=20 45
+! UPLIFT_DURATION=20 2
+! UPLIFT_MAG=10 1
+! NTHRUST=1
+! THRUST_START=40
+! THRUST_PLATE=1
+! THRUST_BASE=25
+! THRUST_DEPTH=0
+! THRUST_THICK=25
+!----
+
+use tqtec
+
+implicit none
+
+! Local variables
+! integer :: i, j, ios
+! character(len=32) :: reply
+! character(len=512) :: input_line
+! logical :: inWhitespace
+
+
+write(0,*) 'read_input_file_new: not operational yet'
+stop
+
+! ! Open the input file for reading in free format
+! open(unit=8,file=input_file,iostat=ios)
+! if (ios.ne.0) then
+!     write(0,*) 'tqtec: something went wrong trying to open input file "',trim(input_file),'"'
+!     stop
+! endif
+!
+! close(8)
+
+return
+end subroutine
+
+
+
+
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!---------------------------------- MODEL PREPARATION ---------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
 
@@ -895,6 +1140,7 @@ return
 end subroutine
 
 
+
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !------------------------------- FINITE DIFFERENCE PROCEDURE --------------------------------------!
@@ -1113,7 +1359,9 @@ enddo
 return
 end subroutine
 
+
 !--------------------------------------------------------------------------------------------------!
+
 
 subroutine erode()
 !----
@@ -1157,19 +1405,14 @@ enddo
 return
 end subroutine
 
+
 !--------------------------------------------------------------------------------------------------!
+
 
 subroutine thrust_upperplate()
 !----
 ! Generate a thrust fault, keeping the horizons in the upper plate
 !----
-
-
-! C     **************************************************************
-! C     **************************************************************
-! C     PROGRAM THSTUP.FOR:  THRUST FOR UPPER PLATE BOUNDARY
-!       SUBROUTINE THSTUP(V)
-! C     --------------------------------------------------------------
 
 use tqtec, only: nnodes, &
                  istep, &
@@ -1254,7 +1497,9 @@ enddo
 return
 end subroutine
 
+
 !--------------------------------------------------------------------------------------------------!
+
 
 subroutine thrust_lowerplate()
 !----
@@ -1341,9 +1586,10 @@ return
 end subroutine
 
 
+
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!--------------------------------------------------------------------------------------------------!
+!-------------------------------------- OUTPUTS ---------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
@@ -1378,7 +1624,7 @@ write(7,110) hp_dep
 write(7,110) t_total
 write(7,110) diffusivity
 write(7,110) temp_factor
-write(7,110) 0.0 ! II(8)
+write(7,'(I10)') nhorizons
 write(7,110) 0.0 ! II(9)
 write(7,110) 0.0 ! II(10)
 110 format(F7.3)
@@ -1401,9 +1647,10 @@ enddo
 
 ! Horizon depths
 do i = 1,nhorizons
-    write(7,130) depth(i)
+    write(7,130) depth_node(i)
 enddo
-130 format(F11.4)
+! 130 format(F11.4)
+130 format(I11)
 
 return
 end subroutine
@@ -1453,7 +1700,7 @@ do while (i.le.narg)
         i = i + 1
         call get_command_argument(i,input_file,status=ios)
 
-    elseif (arg.eq.'-interactive') then
+    elseif (arg.eq.'-i'.or.arg.eq.'-interactive') then
         input_mode = 'user'
 
     elseif (arg.eq.'-o') then
@@ -1464,7 +1711,7 @@ do while (i.le.narg)
         call usage('tqtec: no option '//trim(arg))
     endif
 
-    9001 if (ios.ne.0) then
+    if (ios.ne.0) then
         call usage('tqtec: error parsing "'//trim(arg)//'" flag arguments')
     endif
 
@@ -1483,9 +1730,9 @@ if (str.ne.'') then
     write(0,*) trim(str)
     write(0,*)
 endif
-write(0,*) 'Usage: tqtec -interactive|-f INPUT_FILE  -o OUTPUT_FILE'
+write(0,*) 'Usage: tqtec [-i|-f INPUT_FILE]  [-o OUTPUT_FILE]'
 write(0,*)
-write(0,*) '-interactive    User defines model parameters interactively'
+write(0,*) '-i[nteractive]  User defines model parameters interactively (default)'
 write(0,*) '-f INPUT_FILE   Input model parameter file'
 write(0,*) '-o OUTPUT_FILE  Output file'
 write(0,*)
