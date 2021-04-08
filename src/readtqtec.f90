@@ -5,6 +5,7 @@ character(len=512) :: tqtec_output_file                  ! name of input file   
 character(len=512) :: temp_file                 ! name of output file                             OUTFIL
 character(len=512) :: dep_file                 ! name of output file                             OUTFIL
 character(len=512) :: time_file                 ! name of output file                             OUTFIL
+character(len=512) :: hf_file                 ! name of output file                             OUTFIL
 
 ! Finite difference parameters
 integer :: nnodes                                 ! number of spatial nodes                         N
@@ -394,6 +395,7 @@ endif
 ! 380   CONTINUE
 !       CLOSE(9)
 !       GOTO 500
+
 ! C
 ! C     WRITE SURFACE HEAT FLOW DATA
 ! C
@@ -410,6 +412,15 @@ endif
 ! C      DO 571 I=3,Q1-2
 ! C         Q(I)=(Q(I-2)+Q(I-1)+Q(I)+Q(I+1)+Q(I+2))/5
 ! C 571   CONTINUE
+if (hf_file.ne.'') then
+    open(unit=9,file=hf_file,status='unknown')
+    write(9,'(2F10.3,I6)') -xmin,2.0d0*dt,nt_total
+    do i = 1,nt_total
+        write(9,*) hf(i)
+    enddo
+    close(9)
+endif
+
 ! C
 ! C     WRITE TIME DATA
 ! C
@@ -450,7 +461,8 @@ subroutine gcmdln()
 use readtqtec, only: tqtec_output_file, &
                      temp_file, &
                      dep_file, &
-                     time_file
+                     time_file, &
+                     hf_file
 implicit none
 
 ! Local variables
@@ -466,6 +478,7 @@ tqtec_output_file = ''
 temp_file = ''
 dep_file = ''
 time_file = ''
+hf_file = ''
 
 narg = command_argument_count()
 if (narg.eq.0) then
@@ -489,6 +502,9 @@ do while (i.le.narg)
     elseif (arg.eq.'-time') then
         i = i + 1
         call get_command_argument(i,time_file)
+    elseif (arg.eq.'-hf') then
+        i = i + 1
+        call get_command_argument(i,hf_file)
     endif
     i = i + 1
 enddo
@@ -507,11 +523,13 @@ if (str.ne.'') then
     write(0,*)
 endif
 write(0,*) 'Usage: readtqtec TQTEC_OUTPUT_FILE [-temp TEMP_FILE] [-dep DEP_FILE] [-time TIME_FILE]'
+write(0,*) '                                   [-hf HF_FILE]'
 write(0,*)
 write(0,*) 'TQTEC_OUTPUT_FILE  TQTec output file'
 write(0,*) '-temp TEMP_FILE    Temperature file'
 write(0,*) '-dep DEP_FILE      Depth file'
 write(0,*) '-time TIME_FILE    Time file'
+write(0,*) '-hf HF_FILE        Heat flow file'
 write(0,*)
 stop
 end subroutine
