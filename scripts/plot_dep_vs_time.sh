@@ -40,17 +40,17 @@ dt=`head -1 $DEPFILE | awk '{print $2}'`
 # GMT variables
 #####
 gmt set PS_MEDIA 11ix11i
-gmt set MAP_GRID_PEN 0.5p,155/155/155,4_4:0
+gmt set MAP_GRID_PEN 0.5p,225,4_4:0
 
 LIMS="-R$tMIN/$tMAX/$ZMIN/$ZMAX"
-PROJ="-JX8.3i/6.5i"
+PROJ="-JX8i/6i"
 PSFILE="dep_vs_time.ps"
 
 
 #####
 # Plot depth vs. time
 #####
-gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya10g10+l"Depth (km)" -BWESn -X1.35i -Y1.25i -K > $PSFILE
+gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya10g5+l"Depth (km)" -BWESn -X1.35i -Y1.25i -K > $PSFILE
 
 NCOL=$(sed -ne "2p" $DEPFILE | awk '{print NF}')
 NCOL2=$(echo $NCOL 1.1 | awk '{print $1*$2}')
@@ -94,7 +94,7 @@ do
     fi
 done
 
-gmt psxy $PROJ $LIMS -W1p,0/0/0,4_4:0 -K -O >> $PSFILE << EOF
+gmt psxy $PROJ $LIMS -W1p,105,12_4:0 -K -O >> $PSFILE << EOF
  $tMIN 0
  $tMAX 0
 EOF
