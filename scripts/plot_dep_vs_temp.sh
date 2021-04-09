@@ -3,7 +3,7 @@
 if [ $# -lt 2 ]
 then
     echo "$0: no input file" 1>&2
-    echo "Usage: $0 TQTec_temp_file TQTec_depth_file [-init temp_init_file]" 1>&2
+    echo "Usage: $0 TQTec_temp_file TQTec_depth_file [-geotherm temp_file]" 1>&2
     echo "  Plot the temperature-depth paths of tracked units over time"
     exit 1
 fi
@@ -21,13 +21,13 @@ then
     exit 1
 fi
 
-TEMP_INIT_FILE=
+GEOTHERM_FILE=
 shift
 shift
 while [ "$1" != "" ]
 do
     case $1 in
-        -init) shift; TEMP_INIT_FILE=$1;;
+        -geotherm) shift; GEOTHERM_FILE=$1;;
     esac
     shift
 done
@@ -63,10 +63,20 @@ PSFILE="dep_vs_temp.ps"
 #####
 gmt psbasemap $PROJ $LIMS -Bxa20g20+l"Temperature (C)" -Bya10g5+l"Depth (km)" -BWeSn -K > $PSFILE
 
-if [ "$TEMP_INIT_FILE" != "" ]
+if [ "$GEOTHERM_FILE" != "" ]
 then
-    awk '{print $1,-$2}' $TEMP_INIT_FILE |\
-        gmt psxy $PROJ $LIMS -W1p -K -O >> $PSFILE
+    awk '{
+        if (/>/) {
+            if ($3==0) {
+                print "> -W1p"
+            } else {
+                print "> -W0.5p,105"
+            }
+        } else {
+            print $1,-$2
+        }
+    }' $GEOTHERM_FILE |\
+        gmt psxy $PROJ $LIMS -K -O >> $PSFILE
 fi
 
 NCOL=$(sed -ne "2p" $TEMPFILE | awk '{print NF}')
