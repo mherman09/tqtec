@@ -50,7 +50,7 @@ PSFILE="dep0_vs_time.ps"
 #####
 # Plot depth vs. time
 #####
-gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya10g5+l"Depth (km)" -BWESn -X1.35i -Y1.25i -K > $PSFILE
+gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya10g5+l"Depth (km)" -BWeSn -X1.35i -Y1.25i -K > $PSFILE
 
 NCOL=$(sed -ne "2p" $DEPFILE | awk '{print NF}')
 NCOL2=$(echo $NCOL 1.1 | awk '{print $1*$2}')
@@ -79,3 +79,7 @@ echo 0 0 | gmt psxy $PROJ $LIMS -O >> $PSFILE
 
 gmt psconvert $PSFILE -Tg -A
 echo "Created file $(basename $PSFILE .ps).png"
+
+rm $PSFILE
+rm gmt.*
+rm color_list.tmp

@@ -51,14 +51,17 @@ ZMAX="0"
 #####
 # GMT variables
 #####
+gmt set PS_MEDIA 11ix11i
+gmt set MAP_GRID_PEN 0.5p,225,4_4:0
+
 LIMS="-R$TMIN/$TMAX/$ZMIN/$ZMAX"
-PROJ="-JX6i/6i"
+PROJ="-JX6i/6i -P"
 PSFILE="dep_vs_temp.ps"
 
 #####
 # Plot depth-temperature
 #####
-gmt psbasemap $PROJ $LIMS -Bxa20+l"Temperature (C)" -Bya5+l"Depth (km)" -BWeSn -K > $PSFILE
+gmt psbasemap $PROJ $LIMS -Bxa20g20+l"Temperature (C)" -Bya10g5+l"Depth (km)" -BWeSn -K > $PSFILE
 
 if [ "$TEMP_INIT_FILE" != "" ]
 then
@@ -90,3 +93,7 @@ echo 0 0 | gmt psxy $PROJ $LIMS -O >> $PSFILE
 
 gmt psconvert $PSFILE -Tg -A
 echo "Created file $(basename $PSFILE .ps).png"
+
+rm $PSFILE
+rm gmt.*
+rm color_list.tmp

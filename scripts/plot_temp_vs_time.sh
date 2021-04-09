@@ -34,15 +34,16 @@ dt=`head -1 $TEMPFILE | awk '{print $2}'`
 # GMT variables
 #####
 gmt set PS_MEDIA 11ix11i
+gmt set MAP_GRID_PEN 0.5p,225,4_4:0
 
 LIMS="-R$TIMEMIN/$TIMEMAX/$TEMPMIN/$TEMPMAX"
-PROJ="-JX6i/6i"
+PROJ="-JX8i/6i"
 PSFILE="temp_vs_time.ps"
 
 #####
 # Plot temperature vs. time
 #####
-gmt psbasemap $PROJ $LIMS -Bxa10+l"Time (Ma)" -Bya20+l"Temperature (\260C)" -BWeSn -K > $PSFILE
+gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya20g20+l"Temperature (\260C)" -BWeSn -K > $PSFILE
 
 NCOL=$(sed -ne "2p" $TEMPFILE | awk '{print NF}')
 NCOL2=$(echo $NCOL 1.1 | awk '{print $1*$2}')
@@ -64,3 +65,7 @@ echo 0 0 | gmt psxy $PROJ $LIMS -O >> $PSFILE
 
 gmt psconvert $PSFILE -Tg -A
 echo "Created file $(basename $PSFILE .ps).png"
+
+rm $PSFILE
+rm gmt.*
+rm color_list.tmp
