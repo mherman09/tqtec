@@ -1164,8 +1164,23 @@ end subroutine
 
 subroutine update_temps(nnodes,ierr)
 !----
-! A combination of old subroutines MAT (setting up the matrix equations for temperature) and TRID
-! (solving the tridiagonal matrix equation for the new temperatures).
+! A combination of old subroutines MAT and TRID
+!
+! This procedure solves the finite difference approximation to the 1-D heat equation:
+!
+!                dT              d             dT
+!    rho * Cp * ----  =  q  -  ---- [  k(z) * ---- ]
+!                dt             dz             dz
+!
+!    where:
+!        T: temperature
+!        t: time
+!        z: depth
+!        q: heat production
+!        rho: density
+!        Cp: heat capacity
+!        k(z): conductivity
+!
 !----
 
 
@@ -1190,7 +1205,10 @@ double precision :: tmp
 ! write(0,*) 'update_temps: starting'
 
 
-! Pre-calculate some terms for the thermal matrix
+!----
+! Implicit FD approximation of the RHS of the heat equation
+!----
+! Calculate nodal coefficients for variations in conductivity
 gam(1) = 1.0d0/conductivity(1)
 bet(1) = 1.0d0/(gam(1)+gam(1))
 do i = 2,nnodes
@@ -1199,7 +1217,8 @@ do i = 2,nnodes
 enddo
 
 
-! Load the thermal matrix (calculate local c, d, and e arrays that will be used later)
+! Calculate finite difference terms used to determine the temperatures at the current time step
+! and loaded into the tridiagonal matrix of the finite difference scheme
 c(1) = -r1*bet(1)*gam(1)
 e(1) = -r1*bet(2)*gam(1)
 d(1) = 1.0d0 - c(1) - e(1)
@@ -1222,7 +1241,7 @@ a(nnodes,2) = 2.0d0 - d(nnodes)
 a(nnodes,3) = -e(nnodes)
 
 
-! Calculate temperature at each node
+! Calculate temperatures at each node for the current time step in the finite difference scheme
 temp_new(1) = a(1,2)*temp(1) + a(1,3)*temp(2) + 2.0d0*a(1,1)*temp_surf + &
               diffusivity*dt*hp(1)/conductivity(1)
 do i = 2,nnodes-1
@@ -1232,8 +1251,7 @@ enddo
 temp_new(nnodes) = a(nnodes,1)*temp(nnodes-1) + a(nnodes,2)*temp(nnodes) + &
                2.0d0*a(nnodes,3)*temp_base_adj + temp_factor*hp(nnodes)
 
-
-! Update temperatures in global temperature array
+! Update temperatures of current time step in global temperature array
 temp = temp_new
 
 
@@ -1247,6 +1265,21 @@ temp = temp_new
 ierr = 0
 
 
+!----
+! The c, d, and e arrays are the components of the tridiagonal matrix for calculating the
+! temperatures at the next time step. The matrix (A) is:
+!
+! [ d(1) e(1)  0    0    ...    0      0     0     ]
+! [ c(2) d(2) e(2)  0           0      0     0     ]
+! [  0   c(3) d(3) e(3)         0      0     0     ]
+! [  :                    .                  :     ]
+! [  0    0    0    0         c(n-1) d(n-1) e(n-1) ]
+! [  0    0    0    0    ...    0    c(n)   d(n)   ]
+!
+! Then, A * temp(next_step) = temp(current_step)
+!----
+
+! Solve matrix equation for temperature at next time step
 ! Update c array for node 1
 c(1) = d(1)
 if (nnodes-1.ge.1) then
@@ -1309,7 +1342,7 @@ if (nnodes-2.lt.1) then
 endif
 
 
-! Backsubstitution
+! Backsubstitution to calculate temperatures at next step
 do l = 1,nnodes-2
     k = nnodes-2-l+1
     temp(k) = (temp(k)-d(k)*temp(k+1)-e(k)*temp(k+2))/c(k)
