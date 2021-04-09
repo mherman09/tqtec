@@ -5,6 +5,7 @@ character(len=512) :: input_file                  ! name of input file          
 character(len=8) :: input_mode                    ! how to read input parameters (user, file)
 character(len=512) :: output_file                 ! name of output file                             OUTFIL
 character(len=512) :: temp_init_file              ! name of initial temperature file
+character(len=512) :: temp_file                   ! name of temperature file
 
 ! Finite difference parameters
 integer :: nnodes                                 ! number of spatial nodes                         N
@@ -16,8 +17,8 @@ double precision :: r1                            ! finite difference time facto
 
 ! Timing
 double precision :: t_total                       ! total model time (Ma)                           Q1 (initial), II(5)
-double precision :: t_output                      ! time per output (Ma)                            M1 (initial)
-integer :: nt_output                              ! time steps between outputs                      M1 (updated)
+double precision :: t_geotherm_output             ! time per geotherm output (Ma)                   M1 (initial)
+integer :: nt_geotherm_output                     ! time steps between geotherm outputs             M1 (updated)
 
 ! Nodal parameters
 double precision, allocatable :: conductivity(:)  ! conductivity                                    COND
@@ -119,7 +120,7 @@ call read_model_parameters()
 
 ! Calculate model parameters and allocate arrays
 nt_total = int(t_total/dt)
-nt_output = int(t_output/dt)
+nt_geotherm_output = int(t_geotherm_output/dt)
 temp_factor = diffusivity*dt/cond_base
 r1 = diffusivity*dt/(dz*dz)
 dtemp_wo_hp = (hf_surf-hp_surf*hp_dep)*dz/cond_base
@@ -146,8 +147,8 @@ call initialize_thermal_parameters()
 ! write(0,*) 'dt:            ',dt
 ! write(0,*) 'r1:            ',r1
 ! write(0,*) 't_total:       ',t_total
-! write(0,*) 't_output:      ',t_output
-! write(0,*) 'nt_output:     ',nt_output
+! write(0,*) 't_geotherm_output:      ',t_geotherm_output
+! write(0,*) 'nt_geotherm_output:     ',nt_geotherm_output
 ! write(0,*) 'nhorizons:     ',nhorizons
 ! write(0,*) 'depth:         ',depth
 ! write(0,*) 'depth_node:    ',depth_node
@@ -241,6 +242,22 @@ do while (istep.lt.nt_total)
         endif
         results(istep,2,i) = dble(depth_node(i))
     enddo
+
+    ! Print geotherm every nt_geotherm_output steps
+    if (temp_file.ne.'') then
+        if (istep.eq.1) then
+            open(unit=12,file=temp_file,status='unknown')
+        endif
+        if (mod(istep,nt_geotherm_output).eq.0) then
+            write(12,'(A,I10)') '> #',istep
+            do i = 1,nnodes
+                write(12,*) temp(i),dble(i)*dz
+            enddo
+        endif
+        if (istep.eq.nt_total) then
+            close(12)
+        endif
+    endif
 
 !       DO 10 I=1,10
 ! C         EMP = (R(V,1,I)-105)/10
@@ -348,7 +365,7 @@ subroutine read_interactive()
 
 use tqtec, only: input_file, &
                  t_total, &
-                 t_output, &
+                 t_geotherm_output, &
                  temp_surf, &
                  hf_surf, &
                  hp_surf, &
@@ -385,8 +402,7 @@ write(9,*) trim(input_file)
 write(*,*) 'Total time for model? (Ma)'
 read(*,*) t_total
 write(*,*) 'Time interval for output to be displayed? (Ma)'
-read(*,*) t_output
-t_output = 5.0d0 ! HARD-CODED (also not used)
+read(*,*) t_geotherm_output
 
 ! Model boundary conditions
 write(*,*) 'Temperature at upper surface boundary? (C)'
@@ -401,7 +417,7 @@ write(*,*) 'Heat production depth? (km)'
 read(*,*) hp_dep
 
 ! Write to fixed format input file
-write(9,1001) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf, hp_dep
+write(9,1001) t_total, t_geotherm_output, temp_surf, hf_surf, cond_base, hp_surf, hp_dep
 1001 format(2F10.0,5F10.4)
 
 
@@ -635,7 +651,7 @@ subroutine read_input_file_old()
 
 use tqtec, only: input_file, &
                  t_total, &
-                 t_output, &
+                 t_geotherm_output, &
                  temp_surf, &
                  hf_surf, &
                  hp_surf, &
@@ -682,10 +698,10 @@ read(8,'(A)') input_line
 ! Second line contains model parameters
 ! READ (8,110) Q1,M1,W(1),G1,C1,A1,B1
 read(8,'(A)') input_line
-read(input_line,*,iostat=ios) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf, &
+read(input_line,*,iostat=ios) t_total, t_geotherm_output, temp_surf, hf_surf, cond_base, hp_surf, &
                    hp_dep
 if (ios.ne.0) then
-    read(input_line,*,iostat=ios) t_total, t_output, temp_surf, hf_surf, cond_base, hp_surf
+    read(input_line,*,iostat=ios) t_total, t_geotherm_output, temp_surf, hf_surf, cond_base, hp_surf
 endif
 
 
@@ -1715,7 +1731,8 @@ subroutine gcmdln()
 use tqtec, only: input_mode, &
                  input_file, &
                  output_file, &
-                 temp_init_file
+                 temp_init_file, &
+                 temp_file
 
 implicit none
 
@@ -1732,6 +1749,7 @@ input_file = ''
 input_mode = 'user'
 output_file = ''
 temp_init_file = ''
+temp_file = ''
 
 
 narg = command_argument_count()
@@ -1761,6 +1779,10 @@ do while (i.le.narg)
         i = i + 1
         call get_command_argument(i,temp_init_file,status=ios)
 
+    elseif (arg.eq.'-temp:model') then
+        i = i + 1
+        call get_command_argument(i,temp_file,status=ios)
+
     else
         call usage('tqtec: no option '//trim(arg))
     endif
@@ -1784,12 +1806,14 @@ if (str.ne.'') then
     write(0,*) trim(str)
     write(0,*)
 endif
-write(0,*) 'Usage: tqtec [-i|-f INPUT_FILE]  [-o OUTPUT_FILE] [-temp:init TEMP_FILE]'
+write(0,*) 'Usage: tqtec [-i|-f INPUT_FILE]  [-o OUTPUT_FILE] [-temp:init TEMP_FILE] ', &
+           '[-temp:model TEMP_FILE]'
 write(0,*)
 write(0,*) '-i[nteractive]        User defines model parameters interactively (default)'
 write(0,*) '-f INPUT_FILE         Input model parameter file'
 write(0,*) '-o OUTPUT_FILE        Output file'
 write(0,*) '-temp:init TEMP_FILE  Initial steady-state temperature'
+write(0,*) '-temp:model TEMP_FILE Temperature throughout model (output frequency defined in INPUT_FILE)'
 write(0,*)
 stop
 end subroutine
