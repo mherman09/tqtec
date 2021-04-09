@@ -4,7 +4,6 @@ module tqtec
 character(len=512) :: input_file                  ! name of input file                              INFIL
 character(len=8) :: input_mode                    ! how to read input parameters (user, file)
 character(len=512) :: output_file                 ! name of output file                             OUTFIL
-character(len=512) :: temp_init_file              ! name of initial temperature file
 character(len=512) :: temp_file                   ! name of temperature file
 
 ! Finite difference parameters
@@ -187,6 +186,18 @@ call initialize_thermal_parameters()
 ! write(0,*) 'hfvar(:,2):     ',hfvar(:,2)
 
 
+! Print the geotherm if requested
+if (temp_file.ne.'') then
+    open(unit=12,file=temp_file,status='unknown')
+    write(12,'(A,I10)') '> #',0
+    do i = 1,nnodes
+        write(12,*) temp(i),dble(i)*dz
+    enddo
+endif
+
+
+! Step through time and run the finite difference procedure to calculate the temperature at each
+! node and at each time step
 istep = 0
 do while (istep.lt.nt_total)
 
@@ -245,17 +256,11 @@ do while (istep.lt.nt_total)
 
     ! Print geotherm every nt_geotherm_output steps
     if (temp_file.ne.'') then
-        if (istep.eq.1) then
-            open(unit=12,file=temp_file,status='unknown')
-        endif
         if (mod(istep,nt_geotherm_output).eq.0) then
             write(12,'(A,I10)') '> #',istep
             do i = 1,nnodes
                 write(12,*) temp(i),dble(i)*dz
             enddo
-        endif
-        if (istep.eq.nt_total) then
-            close(12)
         endif
     endif
 
@@ -269,6 +274,12 @@ do while (istep.lt.nt_total)
 ! 10    CONTINUE
 
 enddo
+
+
+! Close the geotherm file if needed
+if (temp_file.ne.'') then
+    close(12)
+endif
 
 
 ! Print the results to the defined output file
@@ -1071,8 +1082,7 @@ subroutine initialize_thermal_parameters()
 !----
 
 
-use tqtec, only: temp_init_file, &
-                 nnodes, &
+use tqtec, only: nnodes, &
                  dz, &
                  conductivity, &
                  hp, &
@@ -1153,14 +1163,6 @@ do i = 2,nnodes
     hf_base = hf_base - hfhp
 enddo
 
-
-if (temp_init_file.ne.'') then
-    open(unit=11,file=temp_init_file,status='unknown')
-    do i = 1,nnodes
-        write(11,*) temp(i),dble(i)*dz
-    enddo
-    close(11)
-endif
 
 ! Initialize surface heat flow at time step 1
 hf(1) = (conductivity(1)*(temp(1)-temp_surf))/dz
@@ -1731,7 +1733,6 @@ subroutine gcmdln()
 use tqtec, only: input_mode, &
                  input_file, &
                  output_file, &
-                 temp_init_file, &
                  temp_file
 
 implicit none
@@ -1748,7 +1749,6 @@ ios = 0
 input_file = ''
 input_mode = 'user'
 output_file = ''
-temp_init_file = ''
 temp_file = ''
 
 
@@ -1775,11 +1775,7 @@ do while (i.le.narg)
         i = i + 1
         call get_command_argument(i,output_file,status=ios)
 
-    elseif (arg.eq.'-temp:init') then
-        i = i + 1
-        call get_command_argument(i,temp_init_file,status=ios)
-
-    elseif (arg.eq.'-temp:model') then
+    elseif (arg.eq.'-geotherm') then
         i = i + 1
         call get_command_argument(i,temp_file,status=ios)
 
@@ -1806,14 +1802,12 @@ if (str.ne.'') then
     write(0,*) trim(str)
     write(0,*)
 endif
-write(0,*) 'Usage: tqtec [-i|-f INPUT_FILE]  [-o OUTPUT_FILE] [-temp:init TEMP_FILE] ', &
-           '[-temp:model TEMP_FILE]'
+write(0,*) 'Usage: tqtec [-i|-f INPUT_FILE]  [-o OUTPUT_FILE] [-geotherm TEMP_FILE]'
 write(0,*)
 write(0,*) '-i[nteractive]        User defines model parameters interactively (default)'
 write(0,*) '-f INPUT_FILE         Input model parameter file'
 write(0,*) '-o OUTPUT_FILE        Output file'
-write(0,*) '-temp:init TEMP_FILE  Initial steady-state temperature'
-write(0,*) '-temp:model TEMP_FILE Temperature throughout model (output frequency defined in INPUT_FILE)'
+write(0,*) '-geotherm TEMP_FILE   Geotherms (output frequency defined in INPUT_FILE)'
 write(0,*)
 stop
 end subroutine
