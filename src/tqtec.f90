@@ -1115,9 +1115,13 @@ enddo
 
 
 ! Calculate volumetric heat production at each node based on exponentially decaying heat production
-do i = 1,nnodes
-    hp(i) = hp_surf*exp(-dble(i)*dz/hp_dep)
-enddo
+if (hp_dep.gt.0.0d0) then
+    do i = 1,nnodes
+        hp(i) = hp_surf*exp(-dble(i)*dz/hp_dep)
+    enddo
+else
+    hp = 0.0d0
+endif
 
 
 ! Calculate steady state temperature at each node
