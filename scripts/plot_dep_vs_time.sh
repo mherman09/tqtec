@@ -63,7 +63,7 @@ do
         awk 'BEGIN{g=1}{
             if (NR == 1) {print "> -W3p,'$COLOR'"}
             if (NR > 1) {
-                if (g==1 && $'$COL'>=0) {
+                if (g==1 && $'$COL'>0) {
                     g = 0
                     print "> -W3p,'$COLOR'@80"
                 }
@@ -79,7 +79,7 @@ do
         awk 'BEGIN{g=1}{
             if (NR == 1) {print "> -W1p,'$COLOR'"}
             if (NR > 1) {
-                if (g==1 && $'$COL'>=0) {
+                if (g==1 && $'$COL'>0) {
                     g = 0
                     print "> -W1p,'$COLOR'@80"
                 }
@@ -98,6 +98,8 @@ gmt psxy $PROJ $LIMS -W1p,105,12_4:0 -K -O >> $PSFILE << EOF
  $tMIN 0
  $tMAX 0
 EOF
+
+echo 0.05 0.05 10,2 LB $(date) | gmt pstext -JX1i -R0/1/0/1 -F+f+j -N -K -O >> $PSFILE
 
 echo 0 0 | gmt psxy $PROJ $LIMS -O >> $PSFILE
 

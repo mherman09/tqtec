@@ -61,6 +61,8 @@ do
     fi
 done
 
+echo 0.05 0.05 10,2 LB $(date) | gmt pstext -JX1i -R0/1/0/1 -F+f+j -N -K -O >> $PSFILE
+
 echo 0 0 | gmt psxy $PROJ $LIMS -O >> $PSFILE
 
 gmt psconvert $PSFILE -Tg -A

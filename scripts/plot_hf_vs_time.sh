@@ -50,6 +50,8 @@ gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya5g5+l"Surface Heat Flow (W/
 awk '{if (NR > 1) print '$TIMEMIN'+(NR-1)*'$dt',$1}' $HFFILE |\
     gmt psxy $PROJ $LIMS -W1p -K -O >> $PSFILE
 
+echo 0.05 0.05 10,2 LB $(date) | gmt pstext -JX1i -R0/1/0/1 -F+f+j -N -K -O >> $PSFILE
+
 echo 0 0 | gmt psxy $PROJ $LIMS -O >> $PSFILE
 
 gmt psconvert $PSFILE -Tg -A
