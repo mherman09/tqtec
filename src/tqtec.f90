@@ -5,6 +5,7 @@ character(len=512) :: input_file                  ! name of input file          
 character(len=8) :: input_mode                    ! how to read input parameters (user, file)
 character(len=512) :: output_file                 ! name of output file                             OUTFIL
 character(len=512) :: temp_file                   ! name of temperature file
+integer :: verbosity                              ! name of temperature file
 
 ! Finite difference parameters
 integer :: nnodes                                 ! number of spatial nodes                         N
@@ -104,6 +105,7 @@ nhorizons = 10           ! Hard-coded to 10
 dt = 0.005d0             ! H1=0.005
 dz = 0.05d0              ! K1=0.05
 diffusivity = 32.0d0     ! D1=32.0
+verbosity = 0
 
 
 ! Parse command line
@@ -111,6 +113,11 @@ diffusivity = 32.0d0     ! D1=32.0
 ! that allows better control over user input/output. Here, most of the model I/O is done via a
 ! control file, so gcmdln() is much simpler, only allowing specification of basic program I/O.
 call gcmdln()
+
+
+if (verbosity.ge.1) then
+    write(*,*) 'tqtec: starting'
+endif
 
 
 ! Read control file or user input (formerly INPUT)
@@ -208,28 +215,37 @@ do while (istep.lt.nt_total)
     ! (formerly: MAT and TRID)
     call update_temps(nnodes,ierr)
     if (ierr.ne.0) then
-        write(0,*) 'tqtec: error in update_temps() TRID algorithm'
+        write(0,*) 'tqtec: error in update_temps() TRID algorithm at step',istep
         stop
     endif
 
     ! Increment the time step
     istep = istep + 1
-    ! write(*,*) 'tqtec: working on cycle', istep
+    if (verbosity.le.2) then
+        if (istep.lt.nt_total) then
+            write(*,'(A,I6,A,I6,A)',advance='no') ' tqtec: working on step',istep,' of',nt_total,char(13)
+        else
+            write(*,'(A,I6,A,I6)') ' tqtec: working on step',istep,' of',nt_total
+        endif
+    elseif (verbosity.ge.3) then
+        if (istep.lt.nt_total.and.action(istep).eq.0) then
+            write(*,'(A,I6,A,I6,A)',advance='no') ' tqtec: working on step',istep,' of',nt_total,char(13)
+        else
+            write(*,'(A,I6,A,I6)') ' tqtec: working on step',istep,' of',nt_total
+        endif
+    endif
 
     ! Tectonic action!
     if (action(istep).eq.1) then
         call bury() ! (Formerly: BURIAL)
-        ! print *,istep,'Burying...'
     elseif (action(istep).eq.2) then
         call erode() ! (Formerly: EROS)
-        ! print *,istep,'Uplifting/eroding...'
     elseif (action(istep).ge.3) then
         if (int(thrust_dat(action(istep)-2,2)).eq.1) then
             call thrust_upperplate() ! (Formerly: THSTUP)
         elseif (int(thrust_dat(action(istep)-2,2)).eq.2) then
             call thrust_lowerplate() ! (Formerly: THSTLP)
         endif
-        ! print *,istep,'Thrusting...'
     endif
 
     ! Calculate surface heat flow for this time step
@@ -286,6 +302,11 @@ endif
 call output()
 
 
+if (verbosity.ge.1) then
+    write(*,*) 'tqtec: finished'
+    write(*,*) 'Results can be found in ',trim(output_file)
+endif
+
 end
 
 
@@ -310,7 +331,8 @@ subroutine read_model_parameters()
 
 use tqtec, only: input_mode, &
                  input_file, &
-                 output_file
+                 output_file, &
+                 verbosity
 
 implicit none
 
@@ -318,7 +340,9 @@ implicit none
 character(len=32) :: reply
 
 
-write(0,*) 'read_model_parameters: starting'
+if (verbosity.ge.2) then
+    write(*,*) '  read_model_parameters: starting'
+endif
 
 
 ! Interactive mode (like original version of tqtec)
@@ -360,7 +384,10 @@ if (output_file.eq.'') then
     write(*,*) 'To create this file automatically, run tqtec -o ',trim(output_file)
 endif
 
-write(0,*) 'read_model_parameters: finished'
+
+if (verbosity.ge.2) then
+    write(*,*) '  read_model_parameters: finished'
+endif
 
 return
 end subroutine
@@ -608,8 +635,6 @@ character(len=512) :: input_line
 logical :: ex
 
 
-write(0,*) 'read_input_file: starting'
-
 
 ! Check to make sure input file exists
 inquire(file=input_file,exist=ex)
@@ -635,9 +660,6 @@ else
 endif
 
 
-write(0,*) 'read_input_file: finished'
-
-
 return
 end subroutine
 
@@ -661,6 +683,7 @@ subroutine read_input_file_old()
 !----
 
 use tqtec, only: input_file, &
+                 verbosity, &
                  t_total, &
                  t_geotherm_output, &
                  temp_surf, &
@@ -689,7 +712,9 @@ character(len=512) :: input_line
 logical :: inWhitespace
 
 
-write(0,*) 'read_input_file_old: starting'
+if (verbosity.ge.3) then
+    write(*,*) '    read_input_file_old: starting'
+endif
 
 
 ! Open the input file for reading in old fixed format
@@ -714,7 +739,16 @@ read(input_line,*,iostat=ios) t_total, t_geotherm_output, temp_surf, hf_surf, co
 if (ios.ne.0) then
     read(input_line,*,iostat=ios) t_total, t_geotherm_output, temp_surf, hf_surf, cond_base, hp_surf
 endif
-
+if (verbosity.ge.1) then
+    write(*,2001) 't_total:          ',t_total,'Ma'
+    write(*,2001) 't_geotherm_output:',t_geotherm_output,'Ma'
+    write(*,2001) 'temp_surf:        ',temp_surf,'C'
+    write(*,2001) 'hf_surf:          ',hf_surf,'mW/m^2'
+    write(*,2001) 'cond_base:        ',cond_base,'W/(m*K)'
+    write(*,2001) 'hp_surf:          ',hp_surf,'uW/m^3'
+    write(*,2001) 'hp_dep:           ',hp_dep,'km'
+endif
+2001 format(5X,A18,F10.3,X,A)
 
 ! Read material layers
 ! READ (8,150) INL
@@ -726,6 +760,14 @@ allocate(layer(nlayers,3))
 do i = 1,nlayers
     read(8,*) (layer(i,j),j=1,3)
 enddo
+! if (verbosity.ge.1) then
+!     write(*,*) 'nlayers:          ',nlayers
+!     write(*,*) '# top(km) thick(km) conductivity(W/(m*K))'
+!     do i = 1,nlayers
+!         write(*,*) layer(i,1),layer(i,2),layer(i,3)
+!     enddo
+! endif
+! 2002 format(5X,A18,F10.3,X,A)
 
 
 ! Read horizon depths
@@ -776,7 +818,6 @@ do i = 1,nuplift
     read(8,'(A)',end=1102,iostat=ios) input_line
     read(input_line,*,end=1202,iostat=ios) (uplift_dat(i,j),j=1,3)
 enddo
-print *,'uplift read'
 
 
 ! Read thrust episodes
@@ -789,7 +830,7 @@ do i = 1,nthrust
     read(8,'(A)',end=1103,iostat=ios) input_line
     read(input_line,*,end=1203,iostat=ios) (thrust_dat(i,j),j=1,5)
 enddo
-print *,'thrust read'
+
 
 ! Read basal heat flow variations
 read(8,*,end=1004,iostat=ios) nhfvars
@@ -805,16 +846,16 @@ enddo
 
 ! Warning messages if unable to find tectonic events
 1001 if (ios.ne.0) then
-    write(0,*) 'tqtec: could not find any burial events'
+    write(0,*) 'tqtec: could not find any burial event settings in input file'
 endif
 1002 if (ios.ne.0) then
-    write(0,*) 'tqtec: could not find any uplift events'
+    write(0,*) 'tqtec: could not find any uplift event settings in input file'
 endif
 1003 if (ios.ne.0) then
-    write(0,*) 'tqtec: could not find any thrust events'
+    write(0,*) 'tqtec: could not find any thrust event settings in input file'
 endif
 1004 if (ios.ne.0) then
-    write(0,*) 'tqtec: could not find any heat flow variations'
+    write(0,*) 'tqtec: could not find any heat flow variation settings in input file'
 endif
 ios = 0
 
@@ -865,7 +906,9 @@ endif
 
 close(8)
 
-write(0,*) 'read_input_file_old: finished'
+if (verbosity.ge.3) then
+    write(*,*) '    read_input_file_old: finished'
+endif
 
 return
 end subroutine
@@ -944,7 +987,8 @@ subroutine setup_action_arrays()
 ! Define arrays to control burial, erosion, and thrusting events
 !----
 
-use tqtec, only: nt_total, &
+use tqtec, only: verbosity, &
+                 nt_total, &
                  dz, &
                  dt, &
                  cond_base, &
@@ -975,7 +1019,9 @@ double precision :: hf_surf_var(nt_total)
 integer :: intqt(nhfvars)
 
 
-write(0,*) 'setup_action_arrays: starting'
+if (verbosity.ge.2) then
+    write(*,*) '  setup_action_arrays: starting'
+endif
 
 
 ! Allocate memory to tectonic action arrays
@@ -1066,7 +1112,9 @@ do j = 1,nt_total
 enddo
 
 
-write(0,*) 'setup_action_arrays: finished'
+if (verbosity.ge.2) then
+    write(*,*) '  setup_action_arrays: finished'
+endif
 
 return
 end subroutine
@@ -1082,7 +1130,8 @@ subroutine initialize_thermal_parameters()
 !----
 
 
-use tqtec, only: nnodes, &
+use tqtec, only: verbosity, &
+                 nnodes, &
                  dz, &
                  conductivity, &
                  hp, &
@@ -1107,6 +1156,11 @@ integer :: i, j
 integer :: ntop, nbot
 double precision :: hfhp
 
+
+
+if (verbosity.ge.2) then
+    write(*,*) '  initialize_thermal_parameters: starting'
+endif
 
 
 ! Initialize the conductivity at each node to be the basal conductivity
@@ -1168,6 +1222,10 @@ enddo
 hf(1) = (conductivity(1)*(temp(1)-temp_surf))/dz
 
 
+if (verbosity.ge.2) then
+    write(*,*) '  initialize_thermal_parameters: finished'
+endif
+
 return
 end subroutine
 
@@ -1202,7 +1260,16 @@ subroutine update_temps(nnodes,ierr)
 !----
 
 
-use tqtec, only: r1, conductivity, temp, hp, temp_surf, temp_factor, temp_base_adj, dt, diffusivity
+use tqtec, only: verbosity, &
+                 r1, &
+                 conductivity, &
+                 temp, &
+                 hp, &
+                 temp_surf, &
+                 temp_factor, &
+                 temp_base_adj, &
+                 dt, &
+                 diffusivity
 
 implicit none
 
@@ -1220,7 +1287,10 @@ double precision :: tmp
 
 
 
-! write(0,*) 'update_temps: starting'
+if (verbosity.ge.3) then
+    write(*,*) '    update_temps: starting'
+endif
+
 
 
 !----
@@ -1367,7 +1437,9 @@ do l = 1,nnodes-2
 enddo
 
 
-! write(0,*) 'update_temps: finished'
+if (verbosity.ge.3) then
+    write(*,*) '    update_temps: finished'
+endif
 
 
 return
@@ -1387,7 +1459,8 @@ subroutine bury()
 ! Bury the horizons by shifting physical parameters down node list and updating the surface node
 !----
 
-use tqtec, only: nnodes, &
+use tqtec, only: verbosity, &
+                 nnodes, &
                  istep, &
                  conductivity, &
                  temp, &
@@ -1401,6 +1474,11 @@ implicit none
 
 ! Local variables
 integer :: i, j
+
+
+if (verbosity.ge.3) then
+    write(*,*) '    burying...'
+endif
 
 
 ! Shift physical parameters (temperature, heat production, conductivity) down by one node
@@ -1434,7 +1512,8 @@ subroutine erode()
 ! the surface node
 !----
 
-use tqtec, only: nnodes, &
+use tqtec, only: verbosity, &
+                 nnodes, &
                  temp, &
                  hp, &
                  conductivity, &
@@ -1447,6 +1526,12 @@ implicit none
 
 ! Local variables
 integer :: i
+
+
+if (verbosity.ge.3) then
+    write(*,*) '    eroding...'
+endif
+
 
 ! Shift physical parameters (temperature, heat production, conductivity) up by one node
 do i = 2,nnodes
@@ -1480,7 +1565,8 @@ subroutine thrust_upperplate()
 ! Generate a thrust fault, keeping the horizons in the upper plate
 !----
 
-use tqtec, only: nnodes, &
+use tqtec, only: verbosity, &
+                 nnodes, &
                  istep, &
                  dz, &
                  conductivity, &
@@ -1498,6 +1584,11 @@ implicit none
 integer :: i, k
 integer :: thick_init, thrust_dep, thick_end, ierosion
 double precision :: upl_conductivity(nnodes), upl_hp(nnodes), upl_temp(nnodes)
+
+
+if (verbosity.ge.3) then
+    write(*,*) '    thrusting horizons into upper plate...'
+endif
 
 
 ! Set the thrust number
@@ -1572,7 +1663,8 @@ subroutine thrust_lowerplate()
 ! Generate a thrust fault, keeping the horizons in the upper plate
 !----
 
-use tqtec, only: nnodes, &
+use tqtec, only: verbosity, &
+                 nnodes, &
                  istep, &
                  dz, &
                  conductivity, &
@@ -1590,6 +1682,12 @@ implicit none
 integer :: i, k
 integer :: thick_init, thrust_dep, thick_end, ierosion, dnode
 double precision :: upl_conductivity(nnodes), upl_hp(nnodes), upl_temp(nnodes)
+
+
+if (verbosity.ge.3) then
+    write(*,*) '    thrusting horizons into lower plate...'
+endif
+
 
 ! Set the thrust number
 k = action(istep) - 2
@@ -1733,7 +1831,8 @@ subroutine gcmdln()
 use tqtec, only: input_mode, &
                  input_file, &
                  output_file, &
-                 temp_file
+                 temp_file, &
+                 verbosity
 
 implicit none
 
@@ -1779,6 +1878,11 @@ do while (i.le.narg)
         i = i + 1
         call get_command_argument(i,temp_file,status=ios)
 
+    elseif (arg.eq.'-v'.or.arg.eq.'-verbosity') then
+        i = i + 1
+        call get_command_argument(i,arg,status=ios)
+        read(arg,*) verbosity
+
     else
         call usage('tqtec: no option '//trim(arg))
     endif
@@ -1808,6 +1912,7 @@ write(0,*) '-i[nteractive]        User defines model parameters interactively (d
 write(0,*) '-f INPUT_FILE         Input model parameter file'
 write(0,*) '-o OUTPUT_FILE        Output file'
 write(0,*) '-geotherm TEMP_FILE   Geotherms (output frequency defined in INPUT_FILE)'
+write(0,*) '-v VERBOSITY          Set verbosity level'
 write(0,*)
 stop
 end subroutine
