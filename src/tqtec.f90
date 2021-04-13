@@ -1,3 +1,18 @@
+!----
+! TQTec (Temperature, Heat Flow, Tectonics)
+! Authors:
+!     - Kevin Furlong (original Fortran 77 program)
+!     - Matt Herman (Modern Fortran version, i.e., what you are looking at right now!)
+!
+! C     CALCULATES THE ONE-DIMENSIONAL TRANSIENT THERMAL FIELD WITHIN
+! C     AN AREA THAT UNDERGOES EPISODES OF:  BURIAL, EROSION, AND
+! C     THRUSTING.  THIS PROGRAM CAN BE USED TO MONITOR POINTS THAT
+! C     MOVE FROM THE UPPER TO LOWER (or v.v) PLATES.
+!
+! Incorporates (or will eventually incorporate) bulk thickening and thinning capabilities
+! done by Chris Guzofski as part of his Master's thesis
+!----
+
 module tqtec
 
 ! Inputs/outputs
@@ -69,7 +84,7 @@ double precision, allocatable :: thrust_dat(:,:)  ! thrust_dat(:,1): start (Ma) 
                                                   ! thrust_dat(:,5): initial thickness (km)         AZ(3)
 integer :: nhfvars                                ! number of surface heat flow variations          QSTEP
 double precision, allocatable :: hfvar(:,:)       ! (1) start (2) new heat flow                     QVTIME
-double precision, allocatable :: bas_grad(:)      !                                                 BASGRAD
+double precision, allocatable :: bas_grad(:)      ! temperature gradient at the base of the model   BASGRAD
 integer, allocatable :: action(:)                 ! burial (1), erosion (2), or thrust (>=3)        P
 double precision, allocatable :: bcond(:)         ! boundary condition magnitude                    BCOND
 
@@ -80,14 +95,15 @@ end module
 
 
 !==================================================================================================!
+!==================================================================================================!
+!==================================================================================================!
+!==================================================================================================!
+!==================================================================================================!
 
 
 program main
 !----
-! C     CALCULATES THE ONE-DIMENSIONAL TRANSIENT THERMAL FIELD WITHIN
-! C     AN AREA THAT UNDERGOES EPISODES OF:  BURIAL, EROSION, AND
-! C     THRUSTING.  THIS PROGRAM CAN BE USED TO MONITOR POINTS THAT
-! C     MOVE FROM THE UPPER TO LOWER (or v.v) PLATES.
+! Solve for the 1-D transient thermal field defined by boundary conditions and tectonic actions
 !----
 
 use tqtec
@@ -99,13 +115,7 @@ double precision :: cond_surf
 
 
 ! Initialize default model parameters
-! Variable = value       ! Value in previous tqtec
-nnodes = 1200            ! N=1200
-nhorizons = 10           ! Hard-coded to 10
-dt = 0.005d0             ! H1=0.005
-dz = 0.05d0              ! K1=0.05
-diffusivity = 32.0d0     ! D1=32.0
-verbosity = 0
+call initialize_defaults()
 
 
 ! Parse command line
@@ -120,7 +130,7 @@ if (verbosity.ge.1) then
 endif
 
 
-! Read control file or user input (formerly INPUT)
+! Read control file or user input from standard input (formerly INPUT)
 call read_model_parameters()
 
 
@@ -146,54 +156,13 @@ call setup_action_arrays()
 call initialize_thermal_parameters()
 
 
-! write(0,*) 'nnodes:        ',nnodes
-! write(0,*) 'nt_total:      ',nt_total
-! write(0,*) 'istep:         ',istep
-! write(0,*) 'dz:            ',dz
-! write(0,*) 'dt:            ',dt
-! write(0,*) 'r1:            ',r1
-! write(0,*) 't_total:       ',t_total
-! write(0,*) 't_geotherm_output:      ',t_geotherm_output
-! write(0,*) 'nt_geotherm_output:     ',nt_geotherm_output
-! write(0,*) 'nhorizons:     ',nhorizons
-! write(0,*) 'depth:         ',depth
-! write(0,*) 'depth_node:    ',depth_node
-! write(0,*) 'nlayers:       ',nlayers
-! write(0,*) 'layer(:,1):    ',layer(:,1)
-! write(0,*) 'layer(:,2):    ',layer(:,2)
-! write(0,*) 'layer(:,3):    ',layer(:,3)
-! write(0,*) 'diffusivity:   ',diffusivity
-! write(0,*) 'cond_base:     ',cond_base
-! write(0,*) 'temp_surf:     ',temp_surf
-! write(0,*) 'hp_surf:       ',hp_surf
-! write(0,*) 'hp_dep:        ',hp_dep
-! write(0,*) 'hf_surf:       ',hf_surf
-! write(0,*) 'hf_base:       ',hf_base
-! write(0,*) 'dtemp_wo_hp:   ',dtemp_wo_hp
-! write(0,*) 'dtemp_wo_hp:   ',dtemp_wo_hp
-! write(0,*) 'temp_factor:   ',temp_factor
-! write(0,*) 'temp_base_adj:  ',temp_base_adj
-! write(0,*) 'nburial:        ',nburial
-! write(0,*) 'burial_dat(:,1):',burial_dat(:,1)
-! write(0,*) 'burial_dat(:,2):',burial_dat(:,2)
-! write(0,*) 'burial_dat(:,3):',burial_dat(:,3)
-! write(0,*) 'burial_dat(:,4):',burial_dat(:,4)
-! write(0,*) 'nuplift:        ',nuplift
-! write(0,*) 'uplift_dat(:,1):',uplift_dat(:,1)
-! write(0,*) 'uplift_dat(:,2):',uplift_dat(:,2)
-! write(0,*) 'uplift_dat(:,3):',uplift_dat(:,3)
-! write(0,*) 'nthrust:        ',nthrust
-! write(0,*) 'thrust_dat(:,1):',thrust_dat(:,1)
-! write(0,*) 'thrust_dat(:,2):',thrust_dat(:,2)
-! write(0,*) 'thrust_dat(:,3):',thrust_dat(:,3)
-! write(0,*) 'thrust_dat(:,4):',thrust_dat(:,4)
-! write(0,*) 'thrust_dat(:,5):',thrust_dat(:,5)
-! write(0,*) 'nhfvars:        ',nhfvars
-! write(0,*) 'hfvar(:,1):     ',hfvar(:,1)
-! write(0,*) 'hfvar(:,2):     ',hfvar(:,2)
+! Print model parameters to standard output
+if (verbosity.ge.1) then
+    call print_model_parameters()
+endif
 
 
-! Print the geotherm if requested
+! Print the geotherm to a file (-geotherm flag)
 if (temp_file.ne.'') then
     open(unit=12,file=temp_file,status='unknown')
     write(12,'(A,I10)') '> #',0
@@ -216,7 +185,7 @@ do while (istep.lt.nt_total)
     call update_temps(nnodes,ierr)
     if (ierr.ne.0) then
         write(0,*) 'tqtec: error in update_temps() TRID algorithm at step',istep
-        stop
+        stop 1
     endif
 
     ! Increment the time step
@@ -280,15 +249,6 @@ do while (istep.lt.nt_total)
         endif
     endif
 
-!       DO 10 I=1,10
-! C         EMP = (R(V,1,I)-105)/10
-! C         IF (V.EQ.1) THEN
-! C           TTI(V,I)= II(2)*2**EMP
-! C         ELSE
-! C           TTI(V,I)= TTI(V-1,I) + II(2)*2**EMP
-! C         ENDIF
-! 10    CONTINUE
-
 enddo
 
 
@@ -312,10 +272,49 @@ end
 
 
 
+
+
+
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !---------------------------------- INPUT SUBROUTINES ---------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+
+
+subroutine initialize_defaults()
+!----
+! Initialize default model parameters
+!----
+
+use tqtec, only: nnodes, &
+                 dz, &
+                 dt, &
+                 nhorizons, &
+                 nlayers, &
+                 diffusivity, &
+                 nburial, &
+                 nuplift, &
+                 nthrust, &
+                 verbosity
+implicit none
+
+! Variable = value       ! Value in old tqtec
+nnodes = 1200            ! N=1200                 ! number of finite difference spatial nodes
+dz = 0.05d0              ! K1=0.05                ! node spacing
+dt = 0.005d0             ! H1=0.005               ! time step size
+nhorizons = 10           ! Hard-coded to 10       ! number of depth horizons to track
+nlayers = 0              ! INL                    ! number of layers with different conductivity
+diffusivity = 32.0d0     ! D1=32.0                ! thermal diffusivity
+nburial = 0              ! NBP                    ! number of burial events
+nuplift = 0              ! NUEP                   ! number of uplift/erosion events
+nthrust = 0              ! NTP                    ! number of thrust events
+verbosity = 0                                     ! program verbosity
+
+return
+end subroutine
+
+
 !--------------------------------------------------------------------------------------------------!
 
 
@@ -341,7 +340,7 @@ character(len=32) :: reply
 
 
 if (verbosity.ge.2) then
-    write(*,*) '  read_model_parameters: starting'
+    write(*,*) 'read_model_parameters: starting'
 endif
 
 
@@ -366,7 +365,7 @@ if (input_mode.eq.'user') then
     endif
 
 
-! Read from input file
+! Read directly from input file
 elseif (input_mode.eq.'file') then
 
     call read_input_file()
@@ -377,6 +376,7 @@ else
 endif
 
 
+! Define an output file if necessary
 if (output_file.eq.'') then
     write(*,*) 'Name of output file?'
     read(*,*) output_file
@@ -386,7 +386,7 @@ endif
 
 
 if (verbosity.ge.2) then
-    write(*,*) '  read_model_parameters: finished'
+    write(*,*) 'read_model_parameters: finished'
 endif
 
 return
@@ -432,6 +432,7 @@ character(len=32) :: reply, fmt_string
 ! Open the input file so model parameters can be saved to it
 open(unit=9,file=input_file,status='unknown')
 
+
 ! Write to fixed format input file
 write(9,*) trim(input_file)
 
@@ -439,7 +440,7 @@ write(9,*) trim(input_file)
 ! Model timing
 write(*,*) 'Total time for model? (Ma)'
 read(*,*) t_total
-write(*,*) 'Time interval for output to be displayed? (Ma)'
+write(*,*) 'Time interval between geotherm outputs (if -geotherm flag is used)? (Ma)'
 read(*,*) t_geotherm_output
 
 ! Model boundary conditions
@@ -620,6 +621,7 @@ end subroutine
 
 !--------------------------------------------------------------------------------------------------!
 
+
 subroutine read_input_file()
 !----
 ! Determine whether to read fixed format (original) or free format (new) input file
@@ -653,10 +655,10 @@ if (ios.ne.0) then
 endif
 read(8,'(A)') input_line
 close(8)
-if (index(input_line,'=').eq.0) then
-    call read_input_file_old()
-else
+if (index(input_line,'=').ne.0.or.input_line(1:1).eq.'#') then
     call read_input_file_new()
+else
+    call read_input_file_old()
 endif
 
 
@@ -665,6 +667,7 @@ end subroutine
 
 
 !--------------------------------------------------------------------------------------------------!
+
 
 subroutine read_input_file_old()
 !----
@@ -739,16 +742,13 @@ read(input_line,*,iostat=ios) t_total, t_geotherm_output, temp_surf, hf_surf, co
 if (ios.ne.0) then
     read(input_line,*,iostat=ios) t_total, t_geotherm_output, temp_surf, hf_surf, cond_base, hp_surf
 endif
-if (verbosity.ge.1) then
-    write(*,2001) 't_total:          ',t_total,'Ma'
-    write(*,2001) 't_geotherm_output:',t_geotherm_output,'Ma'
-    write(*,2001) 'temp_surf:        ',temp_surf,'C'
-    write(*,2001) 'hf_surf:          ',hf_surf,'mW/m^2'
-    write(*,2001) 'cond_base:        ',cond_base,'W/(m*K)'
-    write(*,2001) 'hp_surf:          ',hp_surf,'uW/m^3'
-    write(*,2001) 'hp_dep:           ',hp_dep,'km'
+if (ios.ne.0) then
+    write(0,*) 'tqtec: something went wrong trying to read model parameters'
+    write(0,*) 'Offending line:'
+    write(0,*) trim(input_line)
+    stop 1
 endif
-2001 format(5X,A18,F10.3,X,A)
+
 
 ! Read material layers
 ! READ (8,150) INL
@@ -760,14 +760,6 @@ allocate(layer(nlayers,3))
 do i = 1,nlayers
     read(8,*) (layer(i,j),j=1,3)
 enddo
-! if (verbosity.ge.1) then
-!     write(*,*) 'nlayers:          ',nlayers
-!     write(*,*) '# top(km) thick(km) conductivity(W/(m*K))'
-!     do i = 1,nlayers
-!         write(*,*) layer(i,1),layer(i,2),layer(i,3)
-!     enddo
-! endif
-! 2002 format(5X,A18,F10.3,X,A)
 
 
 ! Read horizon depths
@@ -862,19 +854,19 @@ ios = 0
 ! Errors if unable to read number of specified tectonic events
 1101 if (ios.ne.0) then
     write(0,*) 'tqtec: input file only specified',i-1,' of',nburial,' burial events'
-    stop
+    stop 1
 endif
 1102 if (ios.ne.0) then
     write(0,*) 'tqtec: input file only specified',i-1,' of',nuplift,' uplift events'
-    stop
+    stop 1
 endif
 1103 if (ios.ne.0) then
     write(0,*) 'tqtec: input file only specified',i-1,' of',nthrust,' thrust events'
-    stop
+    stop 1
 endif
 1104 if (ios.ne.0) then
     write(0,*) 'tqtec: input file only specified',i-1,' of',nhfvars,' heat flow variations'
-    stop
+    stop 1
 endif
 
 ! Errors if tectonic events lines are too short
@@ -882,25 +874,25 @@ endif
     write(0,*) 'tqtec: could not parse:'
     write(0,*) '"',trim(input_line),'"'
     write(0,*) 'As: TSTART  TDURATION  BURIAL  CONDUCTIVITY'
-    stop
+    stop 1
 endif
 1202 if (ios.ne.0) then
     write(0,*) 'tqtec: could not parse:'
     write(0,*) '"',trim(input_line),'"'
     write(0,*) 'As: TSTART  TDURATION  UPLIFT'
-    stop
+    stop 1
 endif
 1203 if (ios.ne.0) then
     write(0,*) 'tqtec: could not parse:'
     write(0,*) '"',trim(input_line),'"'
     write(0,*) 'As: TSTART  1/0  BASE  DEPTH  THICKNESS'
-    stop
+    stop 1
 endif
 1204 if (ios.ne.0) then
     write(0,*) 'tqtec: could not parse:'
     write(0,*) '"',trim(input_line),'"'
     write(0,*) 'As: TSTART  HEAT_FLOW'
-    stop
+    stop 1
 endif
 
 
@@ -913,14 +905,16 @@ endif
 return
 end subroutine
 
+
 !--------------------------------------------------------------------------------------------------!
+
 
 subroutine read_input_file_new()
 !----
-! Read tqtec input file in new format:
+! Read tqtec input file in more flexible format, e.g.:
 !
 ! T_TOTAL=50
-! T_OUTPUT=5
+! T_GEOTHERM_OUTPUT=5
 ! TEMP_SURF=0
 ! HF_SURF=30
 ! COND_BASE=3
@@ -928,22 +922,19 @@ subroutine read_input_file_new()
 ! HP_DEP=0
 ! NLAYERS=0
 ! NHORIZONS=10
-! DEPTH=2 4 6 8 10 12 14 16 18 20
+! 2 4 6 8 10 12 14 16 18 20
 ! NBURIAL=1
-! BURIAL_START=10
-! BURIAL_DURATION=10
-! BURIAL_THICK=5
-! BURIAL_COND=2
+! 10 10 5 2
 ! NUPLIFT=2
-! UPLIFT_START=20 45
-! UPLIFT_DURATION=20 2
-! UPLIFT_MAG=10 1
+! 20 20 10
+! 45 2 1
 ! NTHRUST=1
-! THRUST_START=40
-! THRUST_PLATE=1
-! THRUST_BASE=25
-! THRUST_DEPTH=0
-! THRUST_THICK=25
+! 40 1 25 0 25
+! NHFVARS=1
+! 15 10
+! NNODES=
+! DZ=
+! MAX_DEPTH=
 !----
 
 use tqtec
@@ -951,26 +942,188 @@ use tqtec
 implicit none
 
 ! Local variables
-! integer :: i, j, ios
-! character(len=32) :: reply
-! character(len=512) :: input_line
+integer :: i, j, ios, iend
+character(len=32) :: var, value
+character(len=512) :: input_line
+double precision :: tmp
 ! logical :: inWhitespace
 
 
-write(0,*) 'read_input_file_new: not operational yet'
-stop
 
-! ! Open the input file for reading in free format
-! open(unit=8,file=input_file,iostat=ios)
-! if (ios.ne.0) then
-!     write(0,*) 'tqtec: something went wrong trying to open input file "',trim(input_file),'"'
-!     stop
-! endif
-!
-! close(8)
+ios = 0
+iend = 0
+
+! Open the input file for reading in free format
+open(unit=8,file=input_file,iostat=ios)
+if (ios.ne.0) then
+    write(0,*) 'tqtec: something went wrong trying to open input file "',trim(input_file),'"'
+    stop
+endif
+
+
+! Initialize required variables so they can later be checked
+t_total = -1.0d99
+t_geotherm_output = -1.0d99
+temp_surf = -1.0d99
+hf_surf = -1.0d99
+cond_base = -1.0d99
+hp_surf = 0.0d0
+hp_dep = 0.0d0
+nhorizons = 0
+
+
+! Read the file in flexible format
+do while (iend.eq.0)
+    read(8,'(A)',end=3451,iostat=iend) input_line
+
+    ! Lines that start with # are comments
+    if (input_line(1:1).eq.'#') then
+        cycle
+    endif
+
+    ! All variables are in the format VAR=VALUE
+    i = index(input_line,'=')
+    input_line(i:i) = ' '
+    read(input_line,*,iostat=ios) var, value
+    if (ios.ne.0) then
+        write(0,*) 'tqtec: something went wrong trying to read "',trim(input_line),'"'
+        stop
+    endif
+
+    ! Big if statement to handle all cases of VAR definitions
+    if (var.eq.'T_TOTAL'.or.var.eq.'t_total') then
+        read(value,*) t_total
+    elseif (var.eq.'T_GEOTHERM_OUTPUT'.or.var.eq.'t_geotherm_output') then
+        read(value,*) t_geotherm_output
+    elseif (var.eq.'TEMP_SURF'.or.var.eq.'temp_surf') then
+        read(value,*) temp_surf
+    elseif (var.eq.'HF_SURF'.or.var.eq.'hf_surf') then
+        read(value,*) hf_surf
+    elseif (var.eq.'COND_BASE'.or.var.eq.'cond_base') then
+        read(value,*) cond_base
+    elseif (var.eq.'HP_SURF'.or.var.eq.'hp_surf') then
+        read(value,*) hp_surf
+    elseif (var.eq.'HP_DEP'.or.var.eq.'hp_dep') then
+        read(value,*) hp_dep
+    elseif (var.eq.'NLAYERS'.or.var.eq.'nlayers') then
+        read(value,*) nlayers
+        if (nlayers.gt.0) then
+            if (allocated(layer)) then
+                deallocate(layer)
+            endif
+            allocate(layer(nlayers,3))
+            do i = 1,nlayers
+                read(8,*) (layer(i,j),j=1,3)                ! top thickness conductivity
+            enddo
+        endif
+    elseif (var.eq.'NHORIZONS'.or.var.eq.'nhorizons') then
+        read(value,*) nhorizons
+        if (nhorizons.gt.0) then
+            if (allocated(depth)) then
+                deallocate(depth)
+            endif
+            allocate(depth(nhorizons))
+            read(8,*) (depth(i),i=1,nhorizons)              ! depth
+        endif
+    elseif (var.eq.'NBURIAL'.or.var.eq.'nburial') then
+        read(value,*) nburial
+        if (nburial.gt.0) then
+            if (allocated(burial_dat)) then
+                deallocate(burial_dat)
+            endif
+            allocate(burial_dat(nburial,4))
+            do i = 1,nburial
+                read(8,*) (burial_dat(i,j),j=1,4)           ! start duration thickness conductivity
+            enddo
+        endif
+    elseif (var.eq.'NUPLIFT'.or.var.eq.'nuplift') then
+        read(value,*) nuplift
+        if (nuplift.gt.0) then
+            if (allocated(uplift_dat)) then
+                deallocate(uplift_dat)
+            endif
+            allocate(uplift_dat(nuplift,3))
+            do i = 1,nuplift
+                read(8,*) (uplift_dat(i,j),j=1,3)           ! start duration thickness
+            enddo
+        endif
+    elseif (var.eq.'NTHRUST'.or.var.eq.'nthrust') then
+        read(value,*) nthrust
+        if (nthrust.gt.0) then
+            if (allocated(thrust_dat)) then
+                deallocate(thrust_dat)
+            endif
+            allocate(thrust_dat(nthrust,5))
+            do i = 1,nthrust
+                read(8,*) (thrust_dat(i,j),j=1,5)           ! start upper/lower thick_init depth thick_final
+            enddo
+        endif
+    elseif (var.eq.'NHFVARS'.or.var.eq.'nhfvars') then
+        read(value,*) nhfvars
+        if (nhfvars.gt.0) then
+            if (allocated(hfvar)) then
+                deallocate(hfvar)
+            endif
+            allocate(hfvar(nhfvars,2))
+            do i = 1,nhfvars
+                read(8,*) (hfvar(i,j),j=1,2)                ! start heat_flow
+            enddo
+        endif
+    elseif (var.eq.'NNODES'.or.var.eq.'nnodes') then
+        read(value,*) nnodes
+    elseif (var.eq.'DZ'.or.var.eq.'dz') then
+        read(value,*) dz
+    elseif (var.eq.'MAX_DEPTH'.or.var.eq.'max_depth'.or.var.eq.'DEPTH_MAX'.or.var.eq.'depth_max') then
+        read(value,*) tmp
+        nnodes = int(tmp/dz)
+    else
+        write(0,*) 'tqtec: no variable option named "',trim(var),'"'
+        stop
+    endif
+
+    ! Reached the end of the file, exit
+    3451 if (iend.ne.0) then
+        exit
+    endif
+enddo
+
+
+! Check that necessary variables have been defined
+if (t_total.lt.0.0) then
+    write(0,*) 'tqtec: t_total has not been defined'
+    stop
+endif
+if (temp_surf.lt.0.0) then
+    write(0,*) 'tqtec: temp_surf has not been defined'
+    stop
+endif
+if (hf_surf.lt.0.0) then
+    write(0,*) 'tqtec: hf_surf has not been defined'
+    stop
+endif
+if (cond_base.lt.0.0) then
+    write(0,*) 'tqtec: cond_base has not been defined'
+    stop
+endif
+if (nhorizons.le.0) then
+    write(0,*) 'tqtec: no horizons have been defined'
+    stop
+endif
+if (temp_surf.lt.0.0) then
+    write(0,*) 'tqtec: temp_surf has not been defined'
+    stop
+endif
+if (nburial.eq.0.and.nuplift.eq.0.and.nthrust.eq.0.and.nhfvars.eq.0) then
+    write(0,*) 'tqtec: no tectonic actions have been defined'
+    stop
+endif
+
+close(8)
 
 return
 end subroutine
+
+
 
 
 
@@ -1020,7 +1173,7 @@ integer :: intqt(nhfvars)
 
 
 if (verbosity.ge.2) then
-    write(*,*) '  setup_action_arrays: starting'
+    write(*,*) 'setup_action_arrays: starting'
 endif
 
 
@@ -1038,15 +1191,15 @@ allocate(bas_grad(nt_total))
 
 ! Burial periods
 do i = 1,nburial
-    nstart = int(burial_dat(i,1)/dt)
-    nduration = int(burial_dat(i,2)/dt)
-    nthick = int(burial_dat(i,3)/dz)
-    rate = dble(nthick)/dble(nduration)
-    jbeg = nstart + 1
-    jend = nstart + nduration
-    ct = 0
+    nstart = int(burial_dat(i,1)/dt)              ! Starting timestep
+    nduration = int(burial_dat(i,2)/dt)           ! Duration in timesteps
+    nthick = int(burial_dat(i,3)/dz)              ! Thickness in nodes
+    rate = dble(nthick)/dble(nduration)           ! Rate in nodes/timestep
+    jbeg = nstart + 1                             ! First timestep
+    jend = nstart + nduration                     ! Last timestep
+    ct = 0                                        ! Initialize counter for number of burial increments
     do j = jbeg,jend
-        arg = dble(j-nstart)*rate - dble(ct)
+        arg = dble(j-nstart)*rate - dble(ct)      ! Test for burying at this timestep
         if (arg.ge.1.0d0) then
             action(j) = 1
             bcond(j) = burial_dat(i,4)
@@ -1056,17 +1209,17 @@ do i = 1,nburial
 enddo
 
 
-! Uplift periods
+! Uplift/erosion periods
 do i = 1,nuplift
-    nstart = int(uplift_dat(i,1)/dt)
-    nduration = int(uplift_dat(i,2)/dt)
-    nthick = int(uplift_dat(i,3)/dz)
-    rate = dble(nthick)/dble(nduration)
-    jbeg = nstart + 1
-    jend = nstart + nduration
-    ct = 0
+    nstart = int(uplift_dat(i,1)/dt)              ! Starting timestep
+    nduration = int(uplift_dat(i,2)/dt)           ! Duration in timesteps
+    nthick = int(uplift_dat(i,3)/dz)              ! Thickness in nodes
+    rate = dble(nthick)/dble(nduration)           ! Rate in nodes/timestep
+    jbeg = nstart + 1                             ! First timestep
+    jend = nstart + nduration                     ! Last timestep
+    ct = 0                                        ! Initialize counter for number of uplift increments
     do j = jbeg,jend
-        arg = dble(j-nstart)*rate - dble(ct)
+        arg = dble(j-nstart)*rate - dble(ct)      ! Test for eroding at this timestep
         if (arg.ge.1.0d0) then
             action(j) = 2
             ct = ct + 1
@@ -1077,7 +1230,7 @@ enddo
 
 ! Thrust events
 do i = 1,nthrust
-    nstart = int(thrust_dat(i,1)/dt)
+    nstart = int(thrust_dat(i,1)/dt)              ! Starting timestep
     action(nstart) = i+2
     ! THTYPE(I): thrust_dat(i,2)
 enddo
@@ -1089,7 +1242,7 @@ hf_surf_var = hf_surf
 
 ! Timing of heat flow changes
 do i = 1,nhfvars
-    intqt(i) = int(hfvar(i,1)/dt)
+    intqt(i) = int(hfvar(i,1)/dt)                 ! Timestep of heat flow change
 enddo
 do i = 1,nhfvars-1
     jbeg = intqt(i)
@@ -1106,14 +1259,20 @@ if (nhfvars.ge.1) then
     enddo
 endif
 
-! Propagate down to base
+! Check that heat production is never greater than surface heat flow
+if (hp_surf*hp_dep.ge.maxval(hf_surf_var)) then
+    write(0,*) 'tqtec: total heat production ',hp_surf*hp_dep,' is greater than surface heat flow'
+    stop 1
+endif
+
+! Propagate surface heat flow down to base and calculate temperature gradient
 do j = 1,nt_total
     bas_grad(j) = (hf_surf_var(j)-hp_surf*hp_dep)*dz/cond_base
 enddo
 
 
 if (verbosity.ge.2) then
-    write(*,*) '  setup_action_arrays: finished'
+    write(*,*) 'setup_action_arrays: finished'
 endif
 
 return
@@ -1128,7 +1287,6 @@ subroutine initialize_thermal_parameters()
 ! Calculate the steady state temperature at each node based on the surface heat flow, surface
 ! temperature, conductivity, and heat production
 !----
-
 
 use tqtec, only: verbosity, &
                  nnodes, &
@@ -1159,7 +1317,7 @@ double precision :: hfhp
 
 
 if (verbosity.ge.2) then
-    write(*,*) '  initialize_thermal_parameters: starting'
+    write(*,*) 'initialize_thermal_parameters: starting'
 endif
 
 
@@ -1223,11 +1381,100 @@ hf(1) = (conductivity(1)*(temp(1)-temp_surf))/dz
 
 
 if (verbosity.ge.2) then
-    write(*,*) '  initialize_thermal_parameters: finished'
+    write(*,*) 'initialize_thermal_parameters: finished'
 endif
 
 return
 end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+subroutine print_model_parameters()
+!----
+! Print salient model parameters to standard output (useful for debugging)
+!----
+
+use tqtec
+
+implicit none
+
+! Local variables
+integer :: i, j
+
+write(*,*) 'Nodes'
+write(*,2002) 'nnodes:           ',nnodes
+write(*,2001) 'dz:               ',dz,'km'
+write(*,2001) 'max_depth:        ',dble(nnodes)*dz,'km'
+write(*,*) 'Timing'
+write(*,2001) 't_total:          ',t_total,'Ma'
+write(*,2002) 'nt_total:         ',nt_total
+write(*,2001) 't_geotherm_output:',t_geotherm_output,'Ma'
+write(*,2001) 'dt:               ',dt,'Ma'
+write(*,*) 'Boundary conditions'
+write(*,2001) 'temp_surf:        ',temp_surf,'C'
+write(*,2001) 'hf_surf:          ',hf_surf,'mW/m^2'
+write(*,2001) 'hp_surf:          ',hp_surf,'uW/m^3'
+write(*,2001) 'hp_dep:           ',hp_dep,'km'
+write(*,*) 'Material properties'
+write(*,2001) 'cond_base:        ',cond_base,'W/(m*K)'
+write(*,2001) 'diffusivity:      ',diffusivity,'km^2/Ma'
+write(*,2002) 'nlayers:          ',nlayers
+if (nlayers.gt.0) then
+    write(*,'(5X,3A14)') 'top(km)', 'thick(km)', 'cond(W/(m*K))'
+    do i = 1,nlayers
+        write(*,'(5X,3F14.3)') layer(i,1),layer(i,2),layer(i,3)
+    enddo
+endif
+write(*,*) 'Tracked horizons'
+write(*,2002) 'nhorizons:        ',nhorizons
+write(*,'(5X,4A14)') 'depth(km)','depth_node'
+do i = 1,nhorizons
+    write(*,'(5X,F14.3,I14)') depth(i),depth_node(i)
+enddo
+write(*,*) 'Tectonic actions'
+write(*,2002) 'nburial:          ',nburial
+if (nburial.gt.0) then
+    write(*,'(5X,4A14)') 'start(Ma)', 'duration(Ma)', 'thickness(km)', 'cond(W/(m*K))'
+    do i = 1,nburial
+        write(*,'(5X,4F14.3)') (burial_dat(i,j),j=1,4)
+    enddo
+endif
+write(*,2002) 'nuplift:          ',nuplift
+if (nuplift.gt.0) then
+    write(*,'(5X,3A14)') 'start(Ma)', 'duration(Ma)', 'thickness(km)'
+    do i = 1,nuplift
+        write(*,'(5X,3F14.3)') (uplift_dat(i,j),j=1,3)
+    enddo
+endif
+write(*,2002) 'nthrust:          ',nthrust
+if (nthrust.gt.0) then
+    write(*,'(5X,2A14,2X,3A14)') 'start(Ma)', 'upper/lower', 'thick_init(km)', 'dep_base(km)', &
+                                 'thick_end(km)'
+    do i = 1,nthrust
+        write(*,'(5X,2F14.3,2X,3F14.3)') (thrust_dat(i,j),j=1,5)
+    enddo
+endif
+
+2001 format(5X,A18,F10.3,X,A)
+2002 format(5X,A18,I10,X,A)
+
+! write(0,*) 'istep:         ',istep
+! write(0,*) 'r1:            ',r1
+! write(0,*) 'nt_geotherm_output:     ',nt_geotherm_output
+! write(0,*) 'hf_base:       ',hf_base
+! write(0,*) 'dtemp_wo_hp:   ',dtemp_wo_hp
+! write(0,*) 'dtemp_wo_hp:   ',dtemp_wo_hp
+! write(0,*) 'temp_factor:   ',temp_factor
+! write(0,*) 'temp_base_adj:  ',temp_base_adj
+! write(0,*) 'nhfvars:        ',nhfvars
+! write(0,*) 'hfvar(:,1):     ',hfvar(:,1)
+! write(0,*) 'hfvar(:,2):     ',hfvar(:,2)
+
+return
+end subroutine
+
 
 
 
@@ -1258,7 +1505,6 @@ subroutine update_temps(nnodes,ierr)
 !        k(z): conductivity
 !
 !----
-
 
 use tqtec, only: verbosity, &
                  r1, &
@@ -1293,10 +1539,7 @@ endif
 
 
 
-!----
-! Implicit FD approximation of the RHS of the heat equation
-!----
-! Calculate nodal coefficients for variations in conductivity
+! Calculate nodal coefficients corresponding to variations in conductivity
 gam(1) = 1.0d0/conductivity(1)
 bet(1) = 1.0d0/(gam(1)+gam(1))
 do i = 2,nnodes
@@ -1306,7 +1549,7 @@ enddo
 
 
 ! Calculate finite difference terms used to determine the temperatures at the current time step
-! and loaded into the tridiagonal matrix of the finite difference scheme
+! and in the tridiagonal matrix of the finite difference scheme
 c(1) = -r1*bet(1)*gam(1)
 e(1) = -r1*bet(2)*gam(1)
 d(1) = 1.0d0 - c(1) - e(1)
@@ -1600,6 +1843,7 @@ thrust_dep = int(thrust_dat(k,4)/dz)  ! Depth of emplacement, in nodes
 thick_end = int(thrust_dat(k,5)/dz)   ! Final thickness of thrust sheet, in nodes
 if (thick_init.lt.thick_end) then
     write(0,*) 'thrust_upperplate: final thickness must be less than or equal to initial thickness'
+    stop 1
 endif
 
 ! C     COPY THE PART OF THE ARRAY THAT WILL BE THRUSTED AND ERODE OFF
@@ -1644,7 +1888,7 @@ enddo
 ! WHAT HAPPENS IF THE THRUST SHEET IS THINNER THAN THE DEEPEST HORIZON? THIS HORIZON CANNOT GO INTO
 ! THE UPPER PLATE THEN...
 
-! Update temperatures at tracked horizons
+! Smooth temperatures where there is a sharp thermal gradient due to instantaneous thrusting
 temp(1) = (temp_surf+temp(2))/2.0d0
 temp(2) = (temp(1)+temp(2)+temp(3))/3.0d0
 do i = 3,2*thick_init
@@ -1739,7 +1983,7 @@ do i = 1,nhorizons
     depth_node(i) = depth_node(i) + dnode
 enddo
 
-! Update temperatures
+! Smooth temperatures where there is a sharp thermal gradient due to instantaneous thrusting
 temp(1) = (temp_surf+temp(2))/2.0d0
 temp(2) = (temp(1)+temp(2)+temp(3))/3.0d0
 do i = 3,2*thick_init
