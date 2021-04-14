@@ -186,14 +186,14 @@ awk '{if (NR > 1) print '$tMIN'+(NR-1)*'$dt',$1}' $HFFILE |\
 
 # Depth vs. temperature
 echo "$0: plotting depth vs. temperature"
-LIMS="-R$TMIN/$TMAX/$ZMIN/$ZMAX"
+LIMS="-R$TMIN/$TMAX/$ZMIN/$ZMAX0"
 PROJ="-JX5i/5i"
 
 echo 0 0 | gmt psxy $PROJ $LIMS -X5.5i -Y-4i -K -O >> $PSFILE
 
 gmt psbasemap $PROJ $LIMS -Bxa20g20+l"Temperature (C)" -Bya10g5+l"Depth (km)" -BWeSn -K -O >> $PSFILE
 
-if [ "$GEOTHERM_FILE" != "" ]
+if [ "$GEOTHERM_FILE" != "" -a "$PLOT_GEOTHERM_DEP_VS_TEMP" == "Y" ]
 then
     awk '{
         if (/>/) {
@@ -228,28 +228,33 @@ done
 
 
 # Temperature-depth contours over time
-echo "$0: plotting temperature contours over time"
-LIMS="-R$tMIN/$tMAX/$ZMIN/$ZMAX"
-PROJ="-JX4i/3i -P"
+if [ "$GEOTHERM_FILE" != "" ]
+then
+    echo "$0: plotting temperature contours over time"
+    LIMS="-R$tMIN/$tMAX/$ZMIN/$ZMAX"
+    PROJ="-JX4i/3i -P"
 
-echo 0 0 | gmt psxy $PROJ $LIMS -K -O -Y-4i >> $PSFILE
+    echo 0 0 | gmt psxy $PROJ $LIMS -K -O -Y-4i >> $PSFILE
 
-gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya10g5+l"Depth (km)" -BWeSn -K -O >> $PSFILE
+    gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya10g5+l"Depth (km)" -BWeSn -K -O >> $PSFILE
 
-# echo $GEOTHERM_FILE
-awk '{
-    if (/>/) {
-        time = '$tMIN' + $3*'$dt'/2
-    } else {
-        print time,-$2,$1
-    }
-}' $GEOTHERM_FILE |\
-    gmt pscontour $PROJ $LIMS -W1p -C20 -K -O >> $PSFILE
+    t1=$(echo $tMIN $tMAX | awk '{print $1+($2-$1)/20}')
+    t2=$(echo $tMIN $tMAX | awk '{print $1+($2-$1)/20}')
+    t3=$(echo $tMIN $tMAX | awk '{print $2-($2-$1)/20}')
+    t4=$(echo $tMIN $tMAX | awk '{print $2-($2-$1)/20}')
+    Z1=$ZMIN
+    Z2=$ZMAX
+    awk '{
+        if (/>/) {
+            time = '$tMIN' + $3*'$dt'/2
+        } else {
+            print time,-$2,$1
+        }
+    }' $GEOTHERM_FILE |\
+        gmt pscontour $PROJ $LIMS -Wa1p -Wc0.5p -C10 -A50+f7p+u"\260C" -Gl$t1/$Z1/$t2/$Z2,$t3/$Z1/$t4/$Z2 -K -O >> $PSFILE
 
-gmt psxy $PROJ $LIMS -W1p,105,12_4:0 -K -O >> $PSFILE << EOF
- $tMIN 0
- $tMAX 0
-EOF
+    echo $tMIN $tMAX | awk '{print $1,0;print $2,0}' | gmt psxy $PROJ $LIMS -W1p,105,12_4:0 -K -O >> $PSFILE
+fi
 
 
 echo 0 0 | gmt psxy $PROJ $LIMS -O >> $PSFILE
