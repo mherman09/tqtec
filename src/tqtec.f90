@@ -165,7 +165,8 @@ endif
 ! Print the geotherm to a file (-geotherm flag)
 if (temp_file.ne.'') then
     open(unit=12,file=temp_file,status='unknown')
-    write(12,'(A,I10)') '> #',0
+    ! Header contains time step, time since start in Ma, and time until end in Ma
+    write(12,'(A,I10,2F10.3)') '> #',0,0.0d0,0.0d0-t_total
     do i = 1,nnodes
         write(12,*) temp(i),dble(i)*dz
     enddo
@@ -242,7 +243,8 @@ do while (istep.lt.nt_total)
     ! Print geotherm every nt_geotherm_output steps
     if (temp_file.ne.'') then
         if (mod(istep,nt_geotherm_output).eq.0) then
-            write(12,'(A,I10)') '> #',istep
+            ! Header contains time step, time since start in Ma, and time until end in Ma
+            write(12,'(A,I10,2F10.3)') '> #',istep,dble(istep)*dt,dble(istep)*dt-t_total
             do i = 1,nnodes
                 write(12,*) temp(i),dble(i)*dz
             enddo
