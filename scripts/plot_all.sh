@@ -254,7 +254,7 @@ then
         else
             gmt psxy geotherm_$T.tmp $PROJ $LIMS -K -O >> $PSFILE
             awk '{if(NR>1&&($2<='$ZMIN'||$1>='$TMAX')){print $1,$2,"8,2 LM '$T2' Ma";exit}}' geotherm_$T.tmp |\
-                gmt pstext $PROJ $LIMS -F+f+j -D0.025i/0 -N -K -O >> $PSFILE
+                gmt pstext $PROJ $LIMS -F+f+j -D0.025i/0 -Gwhite -N -K -O >> $PSFILE
         fi
     done
 fi
