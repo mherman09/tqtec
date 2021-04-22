@@ -6,7 +6,7 @@
 if [ $# -lt 3 ]
 then
     echo "$0: no input files" 1>&2
-    echo "Usage: $0 TEMP_FILE DEP_FILE HF_FILE" 1>&2
+    echo "Usage: $0 TEMP_FILE DEP_FILE HF_FILE [-geotherm GEOTHERM_FILE [-geotherm:time TIME]]" 1>&2
     echo "  Plot TQTec outputs"
     exit 1
 fi
@@ -31,6 +31,7 @@ then
 fi
 
 GEOTHERM_FILE=
+GEOTHERM_PLOT_TIME=0
 TIMING_FILE=
 shift
 shift
@@ -38,6 +39,7 @@ while [ "$1" != "" ]
 do
     case $1 in
         -geotherm) shift; GEOTHERM_FILE=$1;;
+        -geotherm:time) shift; GEOTHERM_PLOT_TIME="$GEOTHERM_PLOT_TIME $1";;
         -timing) shift; TIMING_FILE=$1;;
     esac
     shift
@@ -217,20 +219,36 @@ echo 0 0 | gmt psxy $PROJ $LIMS -X5.5i -Y-4i -K -O >> $PSFILE
 
 gmt psbasemap $PROJ $LIMS -Bxa20g20+l"Temperature (C)" -Bya10g5+l"Depth (km)" -BWeSn -K -O >> $PSFILE
 
-if [ "$GEOTHERM_FILE" != "" -a "$PLOT_GEOTHERM_DEP_VS_TEMP" == "Y" ]
+if [ "$GEOTHERM_FILE" != "" ]
 then
-    awk '{
-        if (/>/) {
-            if ($3==0) {
-                print "> -W1p"
-            } else {
-                print "> -W0.5p,105"
+    for T in $GEOTHERM_PLOT_TIME
+    do
+        T2=$(echo $T $tMIN | awk '{print $1+$2}')
+        echo "Plotting geotherm at $T Ma since start of model, $T2 Ma until end of model"
+        awk '{
+            if (/>/) {
+                p = 0
+                if ($3==0 && $4=='$T') {
+                    p = 1
+                    print "> -W1p"
+                } else if ($4=='$T') {
+                    p = 1
+                    print "> -W0.5p,105"
+                }
+            } else if (p==1) {
+                print $1,-$2
             }
-        } else {
-            print $1,-$2
-        }
-    }' $GEOTHERM_FILE |\
-        gmt psxy $PROJ $LIMS -K -O >> $PSFILE
+        }' $GEOTHERM_FILE > geotherm_$T.tmp
+        WC_GEOTHERM=$(wc geotherm_$T.tmp | awk '{print $1}')
+        if [ $WC_GEOTHERM -le 0 ]
+        then
+            echo "Could not find a geotherm output at the specified time"
+        else
+            gmt psxy geotherm_$T.tmp $PROJ $LIMS -K -O >> $PSFILE
+            awk '{if(NR>1&&($2<='$ZMIN'||$1>='$TMAX')){print $1,$2,"8,2 LM '$T2' Ma";exit}}' geotherm_$T.tmp |\
+                gmt pstext $PROJ $LIMS -F+f+j -D0.025i/0 -N -K -O >> $PSFILE
+        fi
+    done
 fi
 
 for i in $(seq 1 $NCOL)
