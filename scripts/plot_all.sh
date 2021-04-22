@@ -31,12 +31,14 @@ then
 fi
 
 GEOTHERM_FILE=
+TIMING_FILE=
 shift
 shift
 while [ "$1" != "" ]
 do
     case $1 in
         -geotherm) shift; GEOTHERM_FILE=$1;;
+        -timing) shift; TIMING_FILE=$1;;
     esac
     shift
 done
@@ -73,6 +75,22 @@ HFMAX=`awk '{if (NR>1) print $0}' $HFFILE | gmt gmtinfo -C |\
       awk '{for (i=1;i<=NF;i++) {printf("%f\n"),$i}}' | gmt gmtinfo -C |\
       awk '{print $2-$2%5+5}'`
 
+# Tectonic action function
+function plot_tectonic_timing () {
+    YMIN=$(echo $LIMS | sed -e "s/-R//" | awk -F/ '{print $3}')
+    YMAX=$(echo $LIMS | sed -e "s/-R//" | awk -F/ '{print $4}')
+    awk '{
+        if ($1=="burial" || $1=="uplift") {
+            print ">"
+            print '$tMIN'+$3,'$YMIN'
+            print '$tMIN'+$4,'$YMIN'
+            print '$tMIN'+$4,'$YMAX'
+            print '$tMIN'+$3,'$YMAX'
+            print '$tMIN'+$3,'$YMIN'
+        }
+    }' $TIMING_FILE |\
+        gmt psxy $PROJ $LIMS -G245 -K -O >> $PSFILE
+}
 
 #####
 #	PLOT RESULTS
@@ -95,6 +113,8 @@ LIMS="-R$tMIN/$tMAX/$ZMIN/$ZMAX"
 PROJ="-JX4i/3i -P"
 
 echo 0 0 | gmt psxy $PROJ $LIMS -K -X1.5i -Y1.5i > $PSFILE
+
+if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
 gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya10g5+l"Depth (km)" -BWeSn -K -O >> $PSFILE
 
@@ -153,6 +173,8 @@ LIMS="-R$tMIN/$tMAX/$TMIN/$TMAX"
 
 echo 0 0 | gmt psxy $PROJ $LIMS -Y4i -K -O >> $PSFILE
 
+if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
+
 gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya20g20+l"Temperature (\260C)" -BWeSn -K -O >> $PSFILE
 
 for COL in $(seq 1 $NCOL)
@@ -176,6 +198,8 @@ echo "$0: plotting surface heat flow vs. time"
 LIMS="-R$tMIN/$tMAX/$HFMIN/$HFMAX"
 
 echo 0 0 | gmt psxy $PROJ $LIMS -Y4i -K -O >> $PSFILE
+
+if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
 gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya5g5+l"Surface Heat Flow (W/m*K)" -BWeSn -K -O >> $PSFILE
 
@@ -235,6 +259,8 @@ then
     PROJ="-JX4i/3i -P"
 
     echo 0 0 | gmt psxy $PROJ $LIMS -K -O -Y-4i >> $PSFILE
+
+    if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
     gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya10g5+l"Depth (km)" -BWeSn -K -O >> $PSFILE
 
