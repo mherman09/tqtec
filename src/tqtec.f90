@@ -20,6 +20,7 @@ character(len=512) :: input_file                  ! name of input file          
 character(len=8) :: input_mode                    ! how to read input parameters (user, file)
 character(len=512) :: output_file                 ! name of output file                             OUTFIL
 character(len=512) :: temp_file                   ! name of temperature file
+character(len=512) :: timing_file                 ! name of tectonic action timing file
 integer :: verbosity                              ! name of temperature file
 
 ! Finite difference parameters
@@ -1142,7 +1143,8 @@ subroutine setup_action_arrays()
 ! Define arrays to control burial, erosion, and thrusting events
 !----
 
-use tqtec, only: verbosity, &
+use tqtec, only: timing_file, &
+                 verbosity, &
                  nt_total, &
                  dz, &
                  dt, &
@@ -1271,6 +1273,23 @@ endif
 do j = 1,nt_total
     bas_grad(j) = (hf_surf_var(j)-hp_surf*hp_dep)*dz/cond_base
 enddo
+
+
+
+! Print timing of tectonic actions to file
+if (timing_file.ne.'') then
+    open(unit=13,file=timing_file,status='unknown')
+    do i = 1,nburial
+        write(13,*) 'burial',i,burial_dat(i,1),burial_dat(i,1)+burial_dat(i,2)
+    enddo
+    do i = 1,nuplift
+        write(13,*) 'uplift',i,uplift_dat(i,1),uplift_dat(i,1)+uplift_dat(i,2)
+    enddo
+    do i = 1,nthrust
+        write(13,*) 'thrust',i,thrust_dat(i,1)
+    enddo
+    close(13)
+endif
 
 
 if (verbosity.ge.2) then
@@ -2078,6 +2097,7 @@ use tqtec, only: input_mode, &
                  input_file, &
                  output_file, &
                  temp_file, &
+                 timing_file, &
                  verbosity
 
 implicit none
@@ -2095,6 +2115,7 @@ input_file = ''
 input_mode = 'user'
 output_file = ''
 temp_file = ''
+timing_file = ''
 
 
 narg = command_argument_count()
@@ -2124,6 +2145,10 @@ do while (i.le.narg)
         i = i + 1
         call get_command_argument(i,temp_file,status=ios)
 
+    elseif (arg.eq.'-timing') then
+        i = i + 1
+        call get_command_argument(i,timing_file,status=ios)
+
     elseif (arg.eq.'-v'.or.arg.eq.'-verbosity') then
         i = i + 1
         call get_command_argument(i,arg,status=ios)
@@ -2152,12 +2177,13 @@ if (str.ne.'') then
     write(0,*) trim(str)
     write(0,*)
 endif
-write(0,*) 'Usage: tqtec [-i|-f INPUT_FILE]  [-o OUTPUT_FILE] [-geotherm TEMP_FILE]'
+write(0,*) 'Usage: tqtec [-i|-f INPUT_FILE]  [-o OUTPUT_FILE] [-geotherm TEMP_FILE] [-timing TIMING_FILE]'
 write(0,*)
 write(0,*) '-i[nteractive]        User defines model parameters interactively (default)'
 write(0,*) '-f INPUT_FILE         Input model parameter file'
 write(0,*) '-o OUTPUT_FILE        Output file'
 write(0,*) '-geotherm TEMP_FILE   Geotherms (output frequency defined in INPUT_FILE)'
+write(0,*) '-timing Timing_FILE   Timing of tectonic actions'
 write(0,*) '-v VERBOSITY          Set verbosity level'
 write(0,*)
 stop
