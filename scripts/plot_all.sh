@@ -203,7 +203,7 @@ echo 0 0 | gmt psxy $PROJ $LIMS -Y4i -K -O >> $PSFILE
 
 if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
-gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya5g5+l"Surface Heat Flow (W/m*K)" -BWeSn -K -O >> $PSFILE
+gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya5g5+l"Surface Heat Flow (W/m/K)" -BWeSn -K -O >> $PSFILE
 
 awk '{if (NR > 1) print '$tMIN'+(NR-1)*'$dt',$1}' $HFFILE |\
     gmt psxy $PROJ $LIMS -W1p -K -O >> $PSFILE
@@ -217,7 +217,7 @@ PROJ="-JX5i/5i"
 
 echo 0 0 | gmt psxy $PROJ $LIMS -X5.5i -Y-4i -K -O >> $PSFILE
 
-gmt psbasemap $PROJ $LIMS -Bxa20g20+l"Temperature (C)" -Bya10g5+l"Depth (km)" -BWeSn -K -O >> $PSFILE
+gmt psbasemap $PROJ $LIMS -Bxa20g20+l"Temperature (\260C)" -Bya10g5+l"Depth (km)" -BWeSn -K -O >> $PSFILE
 
 if [ "$GEOTHERM_FILE" != "" ]
 then
