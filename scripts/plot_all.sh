@@ -81,7 +81,7 @@ HFMAX=`awk '{if (NR>1) print $0}' $HFFILE | gmt gmtinfo -C |\
 function plot_tectonic_timing () {
     YMIN=$(echo $LIMS | sed -e "s/-R//" | awk -F/ '{print $3}')
     YMAX=$(echo $LIMS | sed -e "s/-R//" | awk -F/ '{print $4}')
-    awk '{
+    awk 'BEGIN{print ">"}{
         if ($1=="burial" || $1=="uplift") {
             print ">"
             print '$tMIN'+$3,'$YMIN'
@@ -92,6 +92,14 @@ function plot_tectonic_timing () {
         }
     }' $TIMING_FILE |\
         gmt psxy $PROJ $LIMS -G245 -K -O >> $PSFILE
+    awk 'BEGIN{print ">"}{
+        if ($1=="thrust") {
+            print ">"
+            print '$tMIN'+$3,'$YMIN'
+            print '$tMIN'+$3,'$YMAX'
+        }
+    }' $TIMING_FILE |\
+        gmt psxy $PROJ $LIMS -W3p,225 -K -O >> $PSFILE
 }
 
 #####
