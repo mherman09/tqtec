@@ -2154,6 +2154,9 @@ do while (i.le.narg)
         call get_command_argument(i,arg,status=ios)
         read(arg,*) verbosity
 
+    elseif (arg.eq.'-h') then
+        call usage('')
+
     else
         call usage('tqtec: no option '//trim(arg))
     endif
@@ -2177,14 +2180,14 @@ if (str.ne.'') then
     write(0,*) trim(str)
     write(0,*)
 endif
-write(0,*) 'Usage: tqtec [-i|-f INPUT_FILE]  [-o OUTPUT_FILE] [-geotherm TEMP_FILE] [-timing TIMING_FILE]'
+write(0,*) 'Usage: tqtec -i|-f INPUT_FILE  [-o OUTPUT_FILE] [-geotherm TEMP_FILE] [-timing TIMING_FILE]'
 write(0,*)
-write(0,*) '-i[nteractive]        User defines model parameters interactively (default)'
+write(0,*) '-i[nteractive]        Interactively defined model parameters'
 write(0,*) '-f INPUT_FILE         Input model parameter file'
-write(0,*) '-o OUTPUT_FILE        Output file'
+write(0,*) '-o OUTPUT_FILE        Output temperature-depth-time file for specified horizons'
 write(0,*) '-geotherm TEMP_FILE   Geotherms (output frequency defined in INPUT_FILE)'
 write(0,*) '-timing Timing_FILE   Timing of tectonic actions'
-write(0,*) '-v VERBOSITY          Set verbosity level'
+write(0,*) '-v VERBOSITY          Verbosity level'
 write(0,*)
 stop
 end subroutine
