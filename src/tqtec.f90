@@ -948,13 +948,15 @@ implicit none
 integer :: i, j, ios, iend
 character(len=32) :: var, value
 character(len=512) :: input_line
-double precision :: tmp
-! logical :: inWhitespace
+double precision :: max_depth
+logical :: isMaxDepthDefined
 
 
 
 ios = 0
 iend = 0
+isMaxDepthDefined = .false.
+
 
 ! Open the input file for reading in free format
 open(unit=8,file=input_file,iostat=ios)
@@ -1076,9 +1078,13 @@ do while (iend.eq.0)
         read(value,*) nnodes
     elseif (var.eq.'DZ'.or.var.eq.'dz') then
         read(value,*) dz
+        if (isMaxDepthDefined) then
+            nnodes = int(max_depth/dz)
+        endif
     elseif (var.eq.'MAX_DEPTH'.or.var.eq.'max_depth'.or.var.eq.'DEPTH_MAX'.or.var.eq.'depth_max') then
-        read(value,*) tmp
-        nnodes = int(tmp/dz)
+        read(value,*) max_depth
+        nnodes = int(max_depth/dz)
+        isMaxDepthDefined = .true.
     else
         write(0,*) 'tqtec: no variable option named "',trim(var),'"'
         stop
