@@ -6,6 +6,9 @@ character(len=512) :: temp_file                 ! name of output file           
 character(len=512) :: dep_file                 ! name of output file                             OUTFIL
 character(len=512) :: time_file                 ! name of output file                             OUTFIL
 character(len=512) :: hf_file                 ! name of output file                             OUTFIL
+character(len=512) :: closure_file                 ! name of output file                             OUTFIL
+integer :: nclosure
+double precision, allocatable :: closure_temps(:)
 
 ! Finite difference parameters
 integer :: nnodes                                 ! number of spatial nodes                         N
@@ -94,8 +97,8 @@ implicit none
 integer :: i, j, k, l
 character(len=1) :: dummy
 character(len=32) :: fmt_string
-logical :: ex
-double precision :: xmin
+logical :: ex, isClosed
+double precision :: xmin, time, final_depth
 
 ! C     reads the output from program TQTec
 !       CHARACTER INFILE*20, DUMMY*20, OUTFILE*20
@@ -443,6 +446,36 @@ if (time_file.ne.'') then
     close(9)
 endif
 
+
+!----
+! Write closure temperature timing
+!----
+if (closure_file.ne.'') then
+    open(unit=13,file=closure_file,status='unknown')
+    do i = 1,nclosure
+        write(13,'(A,F10.3)') '>',closure_temps(i)
+        do j = 1,nhorizons
+            ! Find time that horizon passed through closure temperature
+            isClosed = .false.
+            time = nt_total*dt*2.0d0
+            do k = 1,nt_total
+                if (results(k,1,j).lt.closure_temps(i)) then
+                    if (.not.isClosed) then
+                        time = k*dt*2.0d0
+                        isClosed = .true.
+                    endif
+                else
+                    isClosed = .false.
+                endif
+            enddo
+            ! Final depth
+            final_depth = -1.0d0*results(nt_total,2,j)*dz
+            write(13,*) time,-1.0d0*results(nt_total,2,j)*dz
+        enddo
+    enddo
+    close(13)
+endif
+
 ! C
 ! 150   FORMAT(I2,2F7.1,I7)
 ! 160   FORMAT(10F8.3)
@@ -462,12 +495,18 @@ use readtqtec, only: tqtec_output_file, &
                      temp_file, &
                      dep_file, &
                      time_file, &
-                     hf_file
+                     hf_file, &
+                     closure_file, &
+                     nclosure, &
+                     closure_temps
+
 implicit none
 
 ! Local variables
 character(len=512) arg
-integer :: i, ios, narg
+integer :: i, j, ios, narg
+logical :: isNumber
+double precision :: dp
 
 
 ! Initialize control variables
@@ -479,6 +518,10 @@ temp_file = ''
 dep_file = ''
 time_file = ''
 hf_file = ''
+closure_file = ''
+nclosure = 0
+isNumber = .false.
+
 
 narg = command_argument_count()
 if (narg.eq.0) then
@@ -505,6 +548,26 @@ do while (i.le.narg)
     elseif (arg.eq.'-hf') then
         i = i + 1
         call get_command_argument(i,hf_file)
+    elseif (arg.eq.'-closure') then
+        i = i + 1
+        call get_command_argument(i,closure_file)
+        do
+            i = i + 1
+            call get_command_argument(i,arg)
+            read(arg,*,iostat=ios) dp
+            if (ios.ne.0) then
+                exit
+            else
+                nclosure = nclosure + 1
+            endif
+        enddo
+        i = i - nclosure - 1
+        allocate(closure_temps(nclosure))
+        do j = 1,nclosure
+            i = i + 1
+            call get_command_argument(i,arg)
+            read(arg,*) closure_temps(j)
+        enddo
     endif
     i = i + 1
 enddo
@@ -523,13 +586,14 @@ if (str.ne.'') then
     write(0,*)
 endif
 write(0,*) 'Usage: readtqtec TQTEC_OUTPUT_FILE [-temp TEMP_FILE] [-dep DEP_FILE] [-time TIME_FILE]'
-write(0,*) '                                   [-hf HF_FILE]'
+write(0,*) '                                   [-hf HF_FILE] [-closure T1 T2...]'
 write(0,*)
-write(0,*) 'TQTEC_OUTPUT_FILE  TQTec output file'
-write(0,*) '-temp TEMP_FILE    Temperature file'
-write(0,*) '-dep DEP_FILE      Depth file'
-write(0,*) '-time TIME_FILE    Time file'
-write(0,*) '-hf HF_FILE        Heat flow file'
+write(0,*) 'TQTEC_OUTPUT_FILE       TQTec output file'
+write(0,*) '-temp TEMP_FILE         Temperature file'
+write(0,*) '-dep DEP_FILE           Depth file'
+write(0,*) '-time TIME_FILE         Time file'
+write(0,*) '-hf HF_FILE             Heat flow file'
+write(0,*) '-closure FILE T1 T2...  Closure temperatures file'
 write(0,*)
 stop
 end subroutine
