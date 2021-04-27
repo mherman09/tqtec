@@ -136,6 +136,10 @@ call read_model_parameters()
 
 
 ! Calculate model parameters and allocate arrays
+if (dz*dble(nnodes).lt.maxval(depth)) then
+    write(0,*) 'tqtec: model extent is shallower than deepest horizon'
+    stop 1
+endif
 nt_total = int(t_total/dt)
 nt_geotherm_output = int(t_geotherm_output/dt)
 temp_factor = diffusivity*dt/cond_base
@@ -304,7 +308,7 @@ implicit none
 
 ! Variable = value       ! Value in old tqtec
 nnodes = 5000            ! N=1200                 ! number of finite difference spatial nodes
-dz = 0.01d0              ! H1-0.05                ! node spacing (km)
+dz = 0.01d0              ! H1=0.05                ! node spacing (km)
 dt = 0.001d0             ! K1=0.005               ! time step size (Ma)
 nhorizons = 10           ! Hard-coded to 10       ! number of depth horizons to track
 nlayers = 0              ! INL                    ! number of layers with different conductivity
