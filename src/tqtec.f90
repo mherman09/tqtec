@@ -2104,13 +2104,16 @@ use tqtec, only: input_mode, &
                  output_file, &
                  temp_file, &
                  timing_file, &
-                 verbosity
+                 verbosity, &
+                 nnodes, &
+                 dz, &
+                 dt
 
 implicit none
 
 ! Local variables
 character(len=512) arg
-integer :: i, ios, narg
+integer :: i, j, ios, narg
 
 
 ! Initialize control variables
@@ -2162,6 +2165,19 @@ do while (i.le.narg)
 
     elseif (arg.eq.'-h') then
         call usage('')
+
+    elseif (arg(1:7).eq.'NNODES=') then
+        j = index(arg,'=')
+        arg(1:j) = ' '
+        read(arg,*,iostat=ios) nnodes
+    elseif (arg(1:3).eq.'DZ=') then
+        j = index(arg,'=')
+        arg(1:j) = ' '
+        read(arg,*,iostat=ios) dz
+    elseif (arg(1:3).eq.'DT=') then
+        j = index(arg,'=')
+        arg(1:j) = ' '
+        read(arg,*,iostat=ios) dt
 
     else
         call usage('tqtec: no option '//trim(arg))
