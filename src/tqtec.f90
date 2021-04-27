@@ -303,9 +303,9 @@ use tqtec, only: nnodes, &
 implicit none
 
 ! Variable = value       ! Value in old tqtec
-nnodes = 1200            ! N=1200                 ! number of finite difference spatial nodes
-dz = 0.05d0              ! K1=0.05                ! node spacing
-dt = 0.005d0             ! H1=0.005               ! time step size
+nnodes = 5000            ! N=1200                 ! number of finite difference spatial nodes
+dz = 0.01d0              ! H1-0.05                ! node spacing (km)
+dt = 0.001d0             ! K1=0.005               ! time step size (Ma)
 nhorizons = 10           ! Hard-coded to 10       ! number of depth horizons to track
 nlayers = 0              ! INL                    ! number of layers with different conductivity
 diffusivity = 32.0d0     ! D1=32.0                ! thermal diffusivity
