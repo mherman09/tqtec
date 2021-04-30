@@ -1855,7 +1855,7 @@ use tqtec, only: verbosity, &
 implicit none
 
 ! Local variables
-integer :: i, k
+integer :: i, k, ismooth, nsmooth
 integer :: thick_init, thrust_dep, thick_end, ierosion
 double precision :: upl_conductivity(nnodes), upl_hp(nnodes), upl_temp(nnodes)
 
@@ -1864,6 +1864,9 @@ if (verbosity.ge.3) then
     write(*,*) '    thrusting horizons into upper plate...'
 endif
 
+
+! Set the number of smoothing passes
+nsmooth = 10
 
 ! Set the thrust number
 k = action(istep) - 2
@@ -1920,10 +1923,12 @@ enddo
 ! THE UPPER PLATE THEN...
 
 ! Smooth temperatures where there is a sharp thermal gradient due to instantaneous thrusting
-temp(1) = (temp_surf+temp(2))/2.0d0
-temp(2) = (temp(1)+temp(2)+temp(3))/3.0d0
-do i = 3,2*thick_init
-    temp(i) = (temp(i-2)+temp(i-1)+temp(i)+temp(i+1)+temp(i+2))/5.0d0
+do ismooth = 1,nsmooth
+    temp(1) = (temp_surf+temp(2))/2.0d0
+    temp(2) = (temp(1)+temp(2)+temp(3))/3.0d0
+    do i = 3,2*thick_init
+        temp(i) = (temp(i-2)+temp(i-1)+temp(i)+temp(i+1)+temp(i+2))/5.0d0
+    enddo
 enddo
 
 return
@@ -1954,7 +1959,7 @@ use tqtec, only: verbosity, &
 implicit none
 
 ! Local variables
-integer :: i, k
+integer :: i, k, ismooth, nsmooth
 integer :: thick_init, thrust_dep, thick_end, ierosion, dnode
 double precision :: upl_conductivity(nnodes), upl_hp(nnodes), upl_temp(nnodes)
 
@@ -1963,6 +1968,9 @@ if (verbosity.ge.3) then
     write(*,*) '    thrusting horizons into lower plate...'
 endif
 
+
+! Set the number of smoothing passes
+nsmooth = 10
 
 ! Set the thrust number
 k = action(istep) - 2
@@ -2015,10 +2023,12 @@ do i = 1,nhorizons
 enddo
 
 ! Smooth temperatures where there is a sharp thermal gradient due to instantaneous thrusting
-temp(1) = (temp_surf+temp(2))/2.0d0
-temp(2) = (temp(1)+temp(2)+temp(3))/3.0d0
-do i = 3,2*thick_init
-    temp(i) = (temp(i-2)+temp(i-1)+temp(i)+temp(i+1)+temp(i+2))/5.0d0
+do ismooth = 1,nsmooth
+    temp(1) = (temp_surf+temp(2))/2.0d0
+    temp(2) = (temp(1)+temp(2)+temp(3))/3.0d0
+    do i = 3,2*thick_init
+        temp(i) = (temp(i-2)+temp(i-1)+temp(i)+temp(i+1)+temp(i+2))/5.0d0
+    enddo
 enddo
 
 return
