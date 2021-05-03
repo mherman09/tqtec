@@ -57,6 +57,30 @@ do
     esac
     shift
 done
+if [ "$GEOTHERM_FILE" != "" ]
+then
+    if [ ! -f $GEOTHERM_FILE ]
+    then
+        echo "$0: could not find geotherm file \"$GEOTHERM_FILE\"...not plotting" 1>&2
+        GEOTHERM_FILE=
+    fi
+fi
+if [ "$TIMING_FILE" != "" ]
+then
+    if [ ! -f $TIMING_FILE ]
+    then
+        echo "$0: could not find tectonic action timing file \"$TIMING_FILE\"...not plotting" 1>&2
+        TIMING_FILE=
+    fi
+fi
+if [ "$CLOSURE_FILE" != "" ]
+then
+    if [ ! -f $CLOSURE_FILE ]
+    then
+        echo "$0: could not find closure temperature file \"$CLOSURE_FILE\"...not plotting" 1>&2
+        CLOSURE_FILE=
+    fi
+fi
 
 
 #####
@@ -369,7 +393,9 @@ fi
 echo 0 0 | gmt psxy $PROJ $LIMS -O >> $PSFILE
 
 gmt psconvert $PSFILE -Tg -A
+gmt psconvert $PSFILE -Tf -A
 echo "Created file $(basename $PSFILE .ps).png"
+echo "Created file $(basename $PSFILE .ps).pdf"
 
 rm $PSFILE
 rm gmt.*
