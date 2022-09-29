@@ -138,7 +138,7 @@ call read_model_parameters()
 ! Calculate model parameters and allocate arrays
 if (dz*dble(nnodes).lt.maxval(depth)) then
     write(0,*) 'tqtec: model extent is shallower than deepest horizon'
-    stop 1
+    call error_exit(1)
 endif
 nt_total = int(t_total/dt)
 nt_geotherm_output = int(t_geotherm_output/dt)
@@ -212,15 +212,23 @@ do while (istep.lt.nt_total)
 
     ! Tectonic action!
     if (action(istep).eq.1) then
+        ! Add material to the top of the model (burial)
         call bury() ! (Formerly: BURIAL)
+
     elseif (action(istep).eq.2) then
+        ! Remove material from the top of the model (erosion)
         call erode() ! (Formerly: EROS)
+
     elseif (action(istep).ge.3) then
+        ! Duplicate material and insert it (thrusting)
         if (int(thrust_dat(action(istep)-2,2)).eq.1) then
+            ! Track horizons in the hanging wall (upper plate) of the thrust sheet
             call thrust_upperplate() ! (Formerly: THSTUP)
         elseif (int(thrust_dat(action(istep)-2,2)).eq.2) then
+            ! Track horizons in the footwall (lower plate) of the thrust sheet
             call thrust_lowerplate() ! (Formerly: THSTLP)
         endif
+
     endif
 
     ! Calculate surface heat flow for this time step
@@ -2101,6 +2109,8 @@ enddo
 ! 130 format(F11.4)
 130 format(I11)
 
+close(7)
+
 return
 end subroutine
 
@@ -2225,5 +2235,6 @@ write(0,*) '-geotherm TEMP_FILE   Geotherms (output frequency defined in INPUT_F
 write(0,*) '-timing Timing_FILE   Timing of tectonic actions'
 write(0,*) '-v VERBOSITY          Verbosity level'
 write(0,*)
+call error_exit(1)
 stop
 end subroutine
