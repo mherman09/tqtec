@@ -1,14 +1,20 @@
 module readtqtec
 
+! VARIABLE NAME -----------------------------------! DESCRIPTION ---------------------------------! PREVIOUS VARIABLE NAME
+
 ! Inputs/outputs
-character(len=512) :: tqtec_output_file                  ! name of input file                              INFIL
-character(len=512) :: temp_file                 ! name of output file                             OUTFIL
-character(len=512) :: dep_file                 ! name of output file                             OUTFIL
-character(len=512) :: time_file                 ! name of output file                             OUTFIL
-character(len=512) :: hf_file                 ! name of output file                             OUTFIL
-character(len=512) :: closure_file                 ! name of output file                             OUTFIL
-integer :: nclosure
-double precision, allocatable :: closure_temps(:)
+character(len=512) :: tqtec_output_file            ! tqtec output/readtqtec input file              INFILE
+character(len=512) :: temp_file                    ! output temperature-timestep file               OUTFILE
+character(len=512) :: dep_file                     ! output depth-timestep file                     OUTFILE
+character(len=512) :: time_file                    ! output time-timestep file                      OUTFILE
+character(len=512) :: hf_file                      ! output heat flow-timestep file                 OUTFILE
+character(len=512) :: closure_file                 ! output closure temperature-depth file          OUTFILE
+integer :: nclosure                                ! number of closure temperatures to track
+double precision, allocatable :: closure_temps(:)  ! list of closure temperatures to track
+logical, allocatable :: isPartialAnnealTemp(:)     ! flags for partial annealing
+character(len=512) :: temp_range_file
+integer :: ntemprange
+double precision, allocatable :: temp_ranges(:,:)
 
 ! Finite difference parameters
 integer :: nnodes                                 ! number of spatial nodes                         N
@@ -77,7 +83,7 @@ integer, allocatable :: action(:)                 ! burial (1), erosion (2), or 
 double precision, allocatable :: bcond(:)         ! boundary condition magnitude                    BCOND
 
 ! Results array
-double precision, allocatable :: results(:,:,:)   ! temperature and depth for each timstep/depth    r1
+double precision, allocatable :: results(:,:,:)   ! temperature and depth for each timestep/depth   r1
 
 end module
 
@@ -97,8 +103,8 @@ implicit none
 integer :: i, j, k, l
 character(len=1) :: dummy
 character(len=32) :: fmt_string
-logical :: ex, isClosed
-double precision :: xmin, time, final_depth
+logical :: ex, isClosed, isInRange
+double precision :: xmin, closure_time, final_depth, temp1
 
 ! C     reads the output from program TQTec
 !       CHARACTER INFILE*20, DUMMY*20, OUTFILE*20
@@ -108,13 +114,17 @@ double precision :: xmin, time, final_depth
 !      *   S2(9),E2(9),C2(9),A2(9),S3(13),E3(13),C3(13),A3(13)
 !       COMMON /COM1/ II(10),Q(50000),R(50000,2,10),Y(10)
 
+
+! Parse command line options
 call gcmdln()
+
 
 ! Check whether tqtec output file exists
 inquire(file=tqtec_output_file,exist=ex)
 if (.not.ex) then
     call usage('readtqtec: no file found named "'//trim(tqtec_output_file)//'"')
 endif
+
 
 ! Open the file and start reading
 open(unit=8,file=tqtec_output_file,status='old')
@@ -124,9 +134,11 @@ open(unit=8,file=tqtec_output_file,status='old')
 !       R1=1.99
 ! C     XMIN=0.0
 
+
 ! First line is just the file name
 !       READ (8,'(A)') DUMMY
 read(8,'(A)') dummy
+
 
 ! Read model parameters
 !       DO 5 J=1,10
@@ -144,13 +156,17 @@ read(8,*) nhorizons
 read(8,'(A)') dummy
 read(8,'(A)') dummy
 
+
 !       XMIN=II(5)
 xmin = t_total
 
+! Total number of timesteps
 !       Q1=NINT(II(5)/(2*II(2)))
 nt_total = int(t_total/(2.0d0*dt))
 ! 	  write (*,*) Q1
 
+
+! Read heat flow at each timestep
 !       DO 10 J=1,Q1
 !          READ(8,*) Q(J)
 ! 10    CONTINUE
@@ -159,6 +175,7 @@ do j = 1,nt_total
     read(8,*) hf(j)
 enddo
 
+! For each tracked horizon, read temperature and depth at each timestep
 !       DO 25 K=1,10
 !          DO 26 J=1,2
 !             DO 27 I=1,Q1
@@ -179,6 +196,8 @@ enddo
 ! C         DO 30 I=1,Q1
 ! C            READ(8,120) TTI(I,K)
 ! C 30    CONTINUE
+
+! Read final depth of each horizon
 !       DO 40 I=1,10
 !          READ(8,*) Y(I)
 ! 40    CONTINUE
@@ -187,13 +206,17 @@ do i = 1,nhorizons
     read(8,*) depth_node(i)
 enddo
 
+
 ! 100   FORMAT(A20)
 ! 110   FORMAT(F7.3)
 ! 115   FORMAT(F6.2)
 ! 120   FORMAT(F7.1)
 ! 130   FORMAT(F11.4)
 ! 170   FORMAT(I1)
+
+! Close the TQTec output file
 CLOSE(8)
+
 
 ! C
 ! C     CHOOSE PLOT DATA DESIRED
@@ -453,28 +476,134 @@ endif
 if (closure_file.ne.'') then
     open(unit=13,file=closure_file,status='unknown')
     do i = 1,nclosure
-        write(13,'(A,F10.3)') '>',closure_temps(i)
+
+        ! Write closure temperature to header
+        if (.not.isPartialAnnealTemp(i)) then
+            write(13,'(A,F10.3)') '>',closure_temps(i)
+        else
+            write(13,'(A,F10.3,A)') '>',closure_temps(i),' # Partial annealing zone'
+        endif
+
+        ! Find time that each horizon passed through closure temperature
         do j = 1,nhorizons
-            ! Find time that horizon passed through closure temperature
+
+            ! Initialize horizon as not closed at time zero
             isClosed = .false.
-            time = nt_total*dt*2.0d0
+
             do k = 1,nt_total
                 if (results(k,1,j).lt.closure_temps(i)) then
+                    ! Horizon temperature < closure temperature => CLOSED!
                     if (.not.isClosed) then
-                        time = k*dt*2.0d0
+                        ! Save open-to-closed time
+                        closure_time = k*dt*2.0d0
                         isClosed = .true.
                     endif
                 else
+                    ! Horizon temperature >= closure temperature => OPEN!
                     isClosed = .false.
                 endif
             enddo
-            ! Final depth
-            final_depth = -1.0d0*results(nt_total,2,j)*dz
-            write(13,*) time,-1.0d0*results(nt_total,2,j)*dz
+
+            if (isClosed) then
+                final_depth = -1.0d0*results(nt_total,2,j)*dz
+                write(13,*) closure_time,final_depth
+            else
+                write(13,'(A,I5,A)') '# horizon',j,' not closed at end of model run'
+            endif
         enddo
+
+        if (isPartialAnnealTemp(i)) then
+            ! Find time that each horizon passed through previous closure temperature
+            do j = nhorizons,1,-1
+
+                ! Initialize horizon as not closed at time zero
+                isClosed = .false.
+
+                do k = 1,nt_total
+                    if (results(k,1,j).lt.closure_temps(i-1)) then
+                        ! Horizon temperature < closure temperature => CLOSED!
+                        if (.not.isClosed) then
+                            ! Save open-to-closed time
+                            closure_time = k*dt*2.0d0
+                            isClosed = .true.
+                        endif
+                    else
+                        ! Horizon temperature >= closure temperature => OPEN!
+                        isClosed = .false.
+                    endif
+                enddo
+
+                if (isClosed) then
+                    final_depth = -1.0d0*results(nt_total,2,j)*dz
+                    write(13,*) closure_time,final_depth
+                else
+                    write(13,'(A,I5,A)') '# horizon',j,' not closed at end of model run'
+                endif
+            enddo
+        endif
+
     enddo
     close(13)
 endif
+
+
+!----
+! Write when each horizon is within temperature range
+!----
+if (temp_range_file.ne.'') then
+    open(unit=14,file=temp_range_file,status='unknown')
+    do i = 1,ntemprange
+
+        ! Make sure temp1<temp2
+        if (temp_ranges(i,2).lt.temp_ranges(i,1)) then
+            temp1 = temp_ranges(i,1)
+            temp_ranges(i,1) = temp_ranges(i,2)
+            temp_ranges(i,2) = temp1
+        endif
+
+        ! Write temperature range to header
+        write(14,'(A,2F10.3)') '>',temp_ranges(i,1),temp_ranges(i,2)
+
+        ! Find time that each horizon was in temperature range
+        do j = 1,nhorizons
+
+            ! Initialize horizon as not in range at time zero
+            isInRange = .false.
+
+            final_depth = -1.0d0*results(nt_total,2,j)*dz
+
+            do k = 1,nt_total
+                temp1 = results(k,1,j)
+                if (temp_ranges(i,1).le.temp1 .and. temp1.le.temp_ranges(i,2)) then
+                    if (.not.isInRange) then
+                        ! Temperature of horizon entered range
+                        closure_time = k*dt*2.0d0
+                        isInRange = .true.
+                        ! write(14,'(A,I6,A,F10.3)') '> Horizon',j,' temp=',temp1
+                        write(14,'(A)') '>'
+                        write(14,*) closure_time,final_depth
+                    endif
+                else
+                    if (isInRange) then
+                        ! Temperature of horizon exited range
+                        closure_time = k*dt*2.0d0
+                        isInRange = .false.
+                        write(14,*) closure_time,final_depth
+                    endif
+                endif
+            enddo
+
+            if (isInRange) then
+                write(14,*) closure_time,final_depth
+            else
+                write(14,'(A,I5,A)') '# horizon',j,' not in temp range at end of model run'
+            endif
+        enddo
+
+    enddo
+    close(14)
+endif
+
 
 ! C
 ! 150   FORMAT(I2,2F7.1,I7)
@@ -498,13 +627,17 @@ use readtqtec, only: tqtec_output_file, &
                      hf_file, &
                      closure_file, &
                      nclosure, &
-                     closure_temps
+                     closure_temps, &
+                     isPartialAnnealTemp, &
+                     temp_range_file, &
+                     ntemprange, &
+                     temp_ranges
 
 implicit none
 
 ! Local variables
 character(len=512) arg
-integer :: i, j, ios, narg
+integer :: i, j, k, ios, narg
 logical :: isNumber
 double precision :: dp
 
@@ -519,6 +652,7 @@ dep_file = ''
 time_file = ''
 hf_file = ''
 closure_file = ''
+temp_range_file = ''
 nclosure = 0
 isNumber = .false.
 
@@ -531,6 +665,10 @@ endif
 i = 1
 if (i.le.narg) then
     call get_command_argument(i,tqtec_output_file)
+    if (tqtec_output_file.eq.'-format') then
+        print *,'here'
+        call usage('Output file formats:fileformats')
+    endif
 endif
 i = i + 1
 
@@ -548,26 +686,66 @@ do while (i.le.narg)
     elseif (arg.eq.'-hf') then
         i = i + 1
         call get_command_argument(i,hf_file)
+
     elseif (arg.eq.'-closure') then
         i = i + 1
-        call get_command_argument(i,closure_file)
-        do
+        call get_command_argument(i,closure_file)                               ! Read output file name
+        do                                                                      ! Count number of closure Ts
             i = i + 1
             call get_command_argument(i,arg)
-            read(arg,*,iostat=ios) dp
-            if (ios.ne.0) then
-                exit
+            k = index(arg,'p')                                                  ! Ignore partial annealing details
+            arg(k:k) = ''
+            read(arg,*,iostat=ios) dp                                           ! Read as double precision value
+            if (ios.ne.0) then                                                  ! New or last arg => IOS=0
+                exit                                                            ! End count
             else
-                nclosure = nclosure + 1
+                nclosure = nclosure + 1                                         ! Found closure T, add to count
             endif
         enddo
-        i = i - nclosure - 1
-        allocate(closure_temps(nclosure))
-        do j = 1,nclosure
+        i = i - nclosure - 1                                                    ! Reset arg index to 1st closure T
+        allocate(closure_temps(nclosure))                                       ! Allocate closure T array
+        allocate(isPartialAnnealTemp(nclosure))                                 ! Allocate partial annealing flag array
+        closure_temps = 0.0d0
+        isPartialAnnealTemp = .false.
+        do j = 1,nclosure                                                       ! Read values and fill arrays
             i = i + 1
             call get_command_argument(i,arg)
+            k = index(arg,'p')                                                  ! Check whether "p" flag is set
+            if (k.ne.0) then                                                    ! Found partial annealing T
+                isPartialAnnealTemp(j) = .true.
+                arg(k:k) = ''
+            endif
             read(arg,*) closure_temps(j)
         enddo
+
+    elseif (arg.eq.'-temp:range') then
+        i = i + 1
+        call get_command_argument(i,temp_range_file)                            ! Read output file name
+        do                                                                      ! Count number of temp ranges
+            i = i + 1
+            call get_command_argument(i,arg)
+            k = index(arg,'-')                                              
+            arg(k:k) = ' '
+            read(arg,*,iostat=ios) dp                                           ! Read as double precision value
+            if (ios.ne.0) then                                                  ! New or last arg => IOS=0
+                exit                                                            ! End count
+            else
+                ntemprange = ntemprange + 1                                     ! Found temp range, add to count
+            endif
+        enddo
+        i = i - ntemprange - 1                                                  ! Reset arg index to 1st temp range
+        allocate(temp_ranges(ntemprange,2))                                     ! Allocate temp range array
+        temp_ranges = 0.0d0
+        do j = 1,ntemprange                                                     ! Read values and fill arrays
+            i = i + 1
+            call get_command_argument(i,arg)
+            k = index(arg,'-')
+            arg(k:k) = ' '
+            read(arg,*) temp_ranges(j,1),temp_ranges(j,2)
+        enddo
+    elseif (arg.eq.'-format') then
+        print *,'here'
+        call usage('Output file formats:fileformats')
     endif
     i = i + 1
 enddo
@@ -581,19 +759,59 @@ end subroutine
 subroutine usage(str)
 implicit none
 character(len=*) :: str
+integer :: i
+logical :: printFileFormats
+printFileFormats = .false.
+i = index(str,':fileformats')
+if (i.ne.0) then
+    printFileFormats = .true.
+else
+    i = len_trim(str) + 1
+endif
 if (str.ne.'') then
-    write(0,*) trim(str)
+    write(0,*) trim(str(1:i-1))
     write(0,*)
 endif
-write(0,*) 'Usage: readtqtec TQTEC_OUTPUT_FILE [-temp TEMP_FILE] [-dep DEP_FILE] [-time TIME_FILE]'
-write(0,*) '                                   [-hf HF_FILE] [-closure T1 T2...]'
+write(0,*) 'Usage: readtqtec TQTEC_OUTPUT_FILE'
+write(0,*) '                 [-temp TEMP_FILE]'
+write(0,*) '                 [-dep DEP_FILE]'
+write(0,*) '                 [-time TIME_FILE]'
+write(0,*) '                 [-hf HF_FILE]'
+write(0,*) '                 [-closure FILE  T1[p] T2[p] T3[p]...]'
+write(0,*) '                 [-temp:range FILE  T1-T2]'
+write(0,*) '                 [-format]'
 write(0,*)
-write(0,*) 'TQTEC_OUTPUT_FILE       TQTec output file'
-write(0,*) '-temp TEMP_FILE         Temperature file'
-write(0,*) '-dep DEP_FILE           Depth file'
-write(0,*) '-time TIME_FILE         Time file'
-write(0,*) '-hf HF_FILE             Heat flow file'
-write(0,*) '-closure FILE T1 T2...  Closure temperatures file'
+write(0,*) 'TQTEC_OUTPUT_FILE                   TQTec output file'
 write(0,*)
+write(0,*) '-temp TEMP_FILE                     Temperature over time for each horizon'
+write(0,*) '-dep DEP_FILE                       Depth over time for each horizon'
+write(0,*) '-time TIME_FILE                     Time file'
+write(0,*) '-hf HF_FILE                         Surface heat flow over time'
+write(0,*) '-closure FILE  T1[p] T2[p] T3[p]...  Closure temperature timing for each horizon'
+write(0,*) '-temp:range FILE  T1-T2  T1-T2...  Closure temperature timing for each horizon'
+write(0,*) '-format                             Print file formats and exit'
+write(0,*)
+if (printFileFormats) then
+    write(0,*)
+    write(0,*) 'File formats:'
+    write(0,*) 'TEMP_FILE:'
+    write(0,*) 'time_total(Ma)  timestep_interval(Ma)  number_timesteps'
+    write(0,*) 'temp(t1,hor1) temp(t1,hor2) temp(t1,hor3)...'
+    write(0,*) 'temp(t2,hor1) temp(t2,hor2) temp(t2,hor3)...'
+    write(0,*) ':'
+    write(0,*) ':'
+    write(0,*)
+    write(0,*) 'DEP_FILE:'
+    write(0,*) 'time_total(Ma)  timestep_interval(Ma)  number_timesteps'
+    write(0,*) 'dep(t1,hor1) dep(t1,hor2) dep(t1,hor3)...'
+    write(0,*) 'dep(t2,hor1) dep(t2,hor2) dep(t2,hor3)...'
+    write(0,*) ':'
+    write(0,*) ':'
+    write(0,*)
+    write(0,*) 'TIME_FILE:'
+    write(0,*) 'HF_FILE'
+    write(0,*) 'CLOSURE_FILE:'
+    write(0,*)
+endif
 stop
 end subroutine
