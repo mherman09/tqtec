@@ -268,6 +268,30 @@ gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya5g5+l"Surface Heat Flow (W/
 
 awk '{if (NR > 1) print '$tMIN'+(NR-1)*'$dt',$1}' $HFFILE |\
     gmt psxy $PROJ $LIMS -W1p -K -O >> $PSFILE
+NPTAVG=100
+NPTS=`wc $HFFILE | awk '{print $1-1}'`
+awk '{
+    if (NR>1) {
+        hf[NR-1] = $1
+    }
+}END{
+    sum = 0
+    for (i=1;i<NR;i++) {
+        if (i<int('$NPTAVG'/2)) {
+            print hf[i]
+        } else if (i>'$NPTS'-int('$NPTAVG'/2)) {
+            print hf[i]
+        } else {
+            sum = 0
+            for (j=-int('$NPTAVG'/2);j<=int('$NPTAVG'/2)-1;j++) {
+                sum = sum + hf[i+j]/'$NPTAVG'
+            }
+            print sum
+        }
+    }
+}' $HFFILE |
+    awk '{print '$tMIN'+(NR-1)*'$dt',$1}' |\
+    gmt psxy $PROJ $LIMS -W1p,green -K -O >> $PSFILE
 
 
 
