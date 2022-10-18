@@ -260,7 +260,7 @@ echo "$0: plotting surface heat flow vs. time"
 
 LIMS="-R$tMIN/$tMAX/$HFMIN/$HFMAX"
 
-echo 0 0 | gmt psxy $PROJ $LIMS -Y4i -K -O >> $PSFILE
+echo 0 0 | gmt psxy $PROJ $LIMS -Y4.5i -K -O >> $PSFILE
 
 if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
@@ -336,22 +336,22 @@ then
     done
 fi
 
-for i in $(seq 1 $NCOL)
-do
-    COLOR=$(sed -ne "${i}p" color_list.tmp | awk '{print $1}')
-    # Plot curves
-    paste $TEMPFILE $DEPFILE |\
-        awk '{if (NR > 1) print $'$i',$('$i'+10)}' |\
-        gmt psxy $PROJ $LIMS -W1p,$COLOR -K -O >> $PSFILE
-    # Large dot at 0 Ma
-    paste $TEMPFILE $DEPFILE |\
-        awk '{if (NR == 2) print $'$i',$('$i'+10)}' |\
-        gmt psxy $PROJ $LIMS -Sc0.10i -G$COLOR -W0.5p -K -O >> $PSFILE
-    # Dots every 10 Ma
-    paste $TEMPFILE $DEPFILE |\
-        awk '{if (NR>1 && ((NR-1)*0.01)%10 == 0) print $'$i',$('$i'+10)}' |\
-        gmt psxy $PROJ $LIMS -Sc0.05i -G$COLOR -W0.5p -K -O >> $PSFILE
-done
+# for i in $(seq 1 $NCOL)
+# do
+#     COLOR=$(sed -ne "${i}p" color_list.tmp | awk '{print $1}')
+#     # Plot curves
+#     paste $TEMPFILE $DEPFILE |\
+#         awk '{if (NR > 1) print $'$i',$('$i'+10)}' |\
+#         gmt psxy $PROJ $LIMS -W1p,$COLOR -K -O >> $PSFILE
+#     # Large dot at 0 Ma
+#     paste $TEMPFILE $DEPFILE |\
+#         awk '{if (NR == 2) print $'$i',$('$i'+10)}' |\
+#         gmt psxy $PROJ $LIMS -Sc0.10i -G$COLOR -W0.5p -K -O >> $PSFILE
+#     # Dots every 10 Ma
+#     paste $TEMPFILE $DEPFILE |\
+#         awk '{if (NR>1 && ((NR-1)*0.01)%10 == 0) print $'$i',$('$i'+10)}' |\
+#         gmt psxy $PROJ $LIMS -Sc0.05i -G$COLOR -W0.5p -K -O >> $PSFILE
+# done
 
 
 # Temperature-depth contours over time
@@ -396,7 +396,7 @@ then
     # tMAX2=$(awk '{if(!/>/){print '$tMIN'+$1}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $2}')
     if [ "$CLOSURE_LIMS" == "" ]
     then
-    LIMS="-R$tMIN/$tMAX/$ZMIN2/$ZMAX2"
+        LIMS="-R$tMIN/$tMAX/$ZMIN2/$ZMAX2"
     else
         LIMS=$CLOSURE_LIMS
     fi
@@ -449,15 +449,15 @@ then
             if (/Partial/) {
                 p = 1
                 print $0
-        } else {
+            } else {
                 p = 0
             }
             getline
         }
         if (p==1) {
             if ($1!="#" && $1>'$dt') {
-            print '$tMIN'+$1,$2
-        }
+                print '$tMIN'+$1,$2
+            }
         }
     }' $CLOSURE_FILE > closure.tmp
     gmt psxy closure.tmp $PROJ $LIMS -G255/235/230 -K -O >> $PSFILE
@@ -467,14 +467,17 @@ then
         if (/>/) {
             temp = $2+0
             p = 1
-                getline
-            }
+            getline
+        }
         if (!/#/ && $1>'$dt' && p==1) {
             print '$tMIN'+$1,$2,"10,2 CM",temp "\\260"
             p = 0
         }
     }' $CLOSURE_FILE |\
         gmt pstext $PROJ $LIMS -Gwhite -F+f+j -N -K -O >> $PSFILE
+
+    awk '{if(/>/){print $0}else{print '$tMIN'+$1,$2}}' MWX_test6.3.trange | gmt psxy $PROJ $LIMS -W2p,blue -K -O >> $PSFILE
+
 fi
 
 
