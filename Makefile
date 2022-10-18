@@ -21,15 +21,15 @@ BIN = ./bin
 
 .PHONY: clean \
         tqtec \
-        readtqtec #\
-        #fission_track_module \
+        readtqtec \
+        fission_track_module #\
         #ftage
 
 
 # Programs to compile
 all: tqtec \
-     readtqtec #\
-     #fission_track_module \
+     readtqtec \
+     fission_track_module #\
     #  #ftage
 
 
@@ -43,10 +43,10 @@ readtqtec: $(BIN)/readtqtec
 $(BIN)/readtqtec: ./obj src/readtqtec.f90
 	$(FC) src/readtqtec.f90   -o $(BIN)/readtqtec   $(FOPT)
 
-# # Object/module files
-# fission_track_module: ./obj/fission_track_module.o
-# ./obj/fission_track_module.o: ./obj src/fission_track_module.f90
-# 	$(FC) src/fission_track_module.f90    -c -o ./obj/fission_track_module.o   $(FOPT)
+# Object/module files
+fission_track_module: ./obj/fission_track_module.o
+./obj/fission_track_module.o: ./obj src/fission_track_module.f90
+	$(FC) src/fission_track_module.f90    -c -o ./obj/fission_track_module.o   $(FOPT)
 
 ./obj/error_exit.o: ./obj src/error_exit.c
 	$(CC) -c src/error_exit.c -o obj/error_exit.o
