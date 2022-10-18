@@ -21,28 +21,43 @@ BIN = ./bin
 
 .PHONY: clean \
         tqtec \
-        readtqtec
+        readtqtec #\
+        #fission_track_module \
+        #ftage
 
 
 # Programs to compile
 all: tqtec \
-     readtqtec
+     readtqtec #\
+     #fission_track_module \
+    #  #ftage
 
 
 # Compilation rules
+# Executables
 tqtec: $(BIN)/tqtec
-$(BIN)/tqtec: src/tqtec.f90 obj/error_exit.o
-	test -d ./obj || mkdir ./obj
-	$(FC) $^ -o $@ $(FOPT)
+$(BIN)/tqtec: ./obj src/tqtec.f90 ./obj/error_exit.o
+	$(FC) src/tqtec.f90 ./obj/error_exit.o   -o $(BIN)/tqtec   $(FOPT)
 
 readtqtec: $(BIN)/readtqtec
-$(BIN)/readtqtec: src/readtqtec.f90
-	test -d ./obj || mkdir ./obj
-	$(FC) $< -o $@ $(FOPT)
+$(BIN)/readtqtec: ./obj src/readtqtec.f90
+	$(FC) src/readtqtec.f90   -o $(BIN)/readtqtec   $(FOPT)
 
-obj/error_exit.o: src/error_exit.c
-	test -d ./obj || mkdir ./obj
+# # Object/module files
+# fission_track_module: ./obj/fission_track_module.o
+# ./obj/fission_track_module.o: ./obj src/fission_track_module.f90
+# 	$(FC) src/fission_track_module.f90    -c -o ./obj/fission_track_module.o   $(FOPT)
+
+./obj/error_exit.o: ./obj src/error_exit.c
 	$(CC) -c src/error_exit.c -o obj/error_exit.o
+
+./obj:
+	test -d ./obj || mkdir ./obj
+
+
+
+
+
 
 
 # Old executables, no longer compiled by default
