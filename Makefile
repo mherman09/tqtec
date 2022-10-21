@@ -24,6 +24,7 @@ BIN = ./bin
         tqtec \
         readtqtec \
         fission_track_module \
+        helium_diffusion_module \
         minage
 
 
@@ -51,6 +52,10 @@ $(BIN)/minage: src/minage.f90    ./obj/fission_track_module.o ./obj/error_exit.o
 fission_track_module: ./obj/fission_track_module.o
 ./obj/fission_track_module.o: src/fission_track_module.f90
 	$(FC) src/fission_track_module.f90    -c -o ./obj/fission_track_module.o   $(FOPT)
+
+helium_diffusion_module: ./obj/helium_diffusion_module.o
+./obj/helium_diffusion_module.o: src/helium_diffusion_module.f90
+	$(FC) src/helium_diffusion_module.f90    -c -o ./obj/helium_diffusion_module.o   $(FOPT)
 
 ./obj/error_exit.o: src/error_exit.c
 	$(CC) -c src/error_exit.c -o obj/error_exit.o
