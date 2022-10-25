@@ -369,22 +369,22 @@ do itime = 2,nresamp
 
         ! Solve for the new helium concentration (the substituted function)
         ! write(*,*) 'calc_he_conc_apatite: solving equation for updated helium concentration'
-        ! call tridiag(a(:,1),a(:,2),a(:,3),b(:,1),he_conc_sub_new(2:nnodes_sphere-1),nnodes_sphere-2)
-        call dgtsv(nnodes_sphere, &
-                   1, &
-                   a(2:nnodes_sphere,1), &
-                   a(:,2), &
-                   a(1:nnodes_sphere-1,3), &
-                   b, &
-                   nnodes_sphere, &
-                   i)
+        call tridiag(a(:,1),a(:,2),a(:,3),b(:,1),he_conc_sub_new,nnodes_sphere)
+        ! call dgtsv(nnodes_sphere, &
+        !            1, &
+        !            a(2:nnodes_sphere,1), &
+        !            a(:,2), &
+        !            a(1:nnodes_sphere-1,3), &
+        !            b, &
+        !            nnodes_sphere, &
+        !            i)
 !     endif
 
     ! Update the helium concentration
     ! write(*,*) 'calc_he_conc_apatite: calculating helium concentration at each node'
     do i = 1,nnodes_sphere
-        ! he_conc(i) = he_conc_sub_new(i)/radius_shell(i)
-        he_conc(i) = b(i,1)/radius_shell(i)
+        he_conc(i) = he_conc_sub_new(i)/radius_shell(i)
+        ! he_conc(i) = b(i,1)/radius_shell(i)
         ! print *,he_conc(i),he_conc_sub_new(i),radius_shell(i)
     enddo
     he_conc(1) = he_conc(2)
