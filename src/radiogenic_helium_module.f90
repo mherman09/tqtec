@@ -11,15 +11,6 @@ double precision, parameter :: decay_u235 =  9.84850d-4/1.0d6/365.0d0/24.0d0/60.
 double precision, parameter :: decay_u238 =  1.55125d-4/1.0d6/365.0d0/24.0d0/60.0d0/60.0d0  ! [1/s]
 
 
-! Diffusivity of helium in apatite (Farley, 2000: p. 2910)
-! Note: this ranges from 0.0008 for c-perpendicular diffusion to 0.0130 for c-parallel diffusion
-double precision, parameter :: he_diffusivity_apatite = 0.005d0             ! [m^2/s]
-
-! Helium diffusion activation energy in apatite (Farley, 2000: p. 2910)
-double precision, parameter :: he_activation_energy_apatite = 32.9d0        ! [kcal/mol]
-
-
-
 
 !==================================================================================================!
 contains
@@ -148,6 +139,7 @@ do while (t_seconds.le.tmax_seconds)
 
 enddo
 
+! Calculate age
 age = t_seconds/ma2s
 
 return

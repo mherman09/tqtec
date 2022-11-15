@@ -2,43 +2,35 @@ module apatite_helium
 !----
 ! This module contains procedures for studying the thermochronology of radiogenic helium in apatite
 !
-! Determine the amount of radiogenic helium and the corresponding thermochronologic age in
-! grains that have undergone some thermal history by solving the production-diffusion equation
-! in a spherical coordinate system (Carslaw and Jaeger, 1959):
-!
-!   dH            1       d           dH
-!  ----  =  D * ----- * ---- [ r^2 * ---- ]  +  P
-!   dt           r^2     dr           dr
-!
-! where
-!     - H: Helium concentration
-!     - P: Rate of radiogenic helium production
-!     - D: Diffusivity of helium (thermally controlled)
-!     - r: distance from the center of the grain
-!
 ! The derivation of the finite difference approximation and the original Matlab program HeAge are
-! from Piotraschke (2012). The diffusion routines are in diffusion_module.f90.
+! from Piotraschke (2012). The diffusion routines are in diffusion_module.f90. The routines for
+! analyzing (U-Th)/He ages are in radiogenic_helium_module.f90.
 !
 ! References:
-!     Farley, K.A. (2000). Helium diffusion from apatite: General behavior as illustrated by
-!         Durango fluorapatite. Journal of Geophysical Research, 105, B2, 2903-2914.
-!     Piotraschke, R. (2012). Thermal and Geologic Constraints on the Cretaceous-to-Neogene Tectonic
-!         Development of the Klamath Mountains, Northern California. M.Sc. Thesis, Pennsylvania
-!         State University.
+! Farley, K.A. (2000). Helium diffusion from apatite: General behavior as illustrated by Durango
+!     fluorapatite. Journal of Geophysical Research, 105, B2, 2903-2914.
+! Piotraschke, R. (2012). Thermal and Geologic Constraints on the Cretaceous-to-Neogene Tectonic
+!     Development of the Klamath Mountains, Northern California. M.Sc. Thesis, Pennsylvania State
+!     University.
 !----
 
 ! Physical constants
 double precision, parameter :: univ_gas_constant = 1.9858775d-3             ! [kcal/mol/K]        R
 
-! Spherical finite difference parameters (generated in init_spherical_node_geometry)
-integer :: nnodes_sphere
-double precision, allocatable :: radius_shell(:)                            ! [m]
-double precision, allocatable :: volume_shell(:)                            ! [m^3]
-double precision :: volume_sphere                                           ! [m^3]
+! Diffusivity of helium in apatite (Farley, 2000: p. 2910)
+! Note: this ranges from 0.0008 for c-perpendicular diffusion to 0.0130 for c-parallel diffusion
+double precision, parameter :: he_diffusivity_apatite = 0.005d0             ! [m^2/s]
+
+! Helium diffusion activation energy in apatite (Farley, 2000: p. 2910)
+double precision, parameter :: he_activation_energy_apatite = 32.9d0        ! [kcal/mol]
 
 ! Helium parameters (from calc_he_conc_apatite)
 double precision, allocatable :: he_conc(:)                                 ! [mol/m^3/s]
 double precision, allocatable :: he_total(:)                                ! [nano cm^3]
+
+
+double precision, parameter :: ma2s = 1.0d6*365d0*24d0*60d0*60d0
+
 
 
 !==================================================================================================!
@@ -47,7 +39,7 @@ contains
 
 
 
-subroutine calc_apatite_he_age(temp_celsius, n, dt_ma, radius_microns, beta)
+subroutine calc_apatite_he_age(temp_celsius, n, dt_ma, radius_microns, beta, age)
 !----
 ! Given a temperature-time history, calculate the concentration of helium in an a spherical apatite
 ! grain over time using a finite difference approximation for the diffusion equation
@@ -60,15 +52,18 @@ subroutine calc_apatite_he_age(temp_celsius, n, dt_ma, radius_microns, beta)
 !   beta:             implicitness weight in finite difference solution (0-1)
 !----
 
-use diffusion, only: diffusion_step_dirichlet
+use diffusion, only: nnodes_sphere, &
+                     radius_shell, &
+                     volume_shell, &
+                     volume_sphere, &
+                     init_spherical_node_geometry, &
+                     diffusion_step_dirichlet
 
 use radiogenic_helium, only: atomic_mass_th232, &
                              atomic_mass_u238, &
                              decay_th232, &
                              decay_u235, &
                              decay_u238, &
-                             he_diffusivity_apatite, &
-                             he_activation_energy_apatite, &
                              calc_he_production_rate, &
                              calc_u_th_he_age
 
@@ -80,10 +75,13 @@ double precision :: temp_celsius(n)
 double precision :: dt_ma
 double precision :: radius_microns
 double precision :: beta
+double precision :: age                                     ! (U-Th)/He age [Ma]
 
 ! Local variables
+double precision :: radius_meters                           ! grain radius [m]
 double precision :: dr_microns                              ! node spacing [microns]
 double precision :: dr_meters                               ! node spacing [m]
+integer :: nnodes                                           ! number of spatial nodes
 double precision :: dt_seconds                              ! input time spacing [s]
 double precision :: dt_seconds_resamp                       ! resampled time spacing [s]
 integer :: nresamp                                          ! resampled number of time steps
@@ -100,14 +98,12 @@ double precision, allocatable :: production_rate(:)         ! radiogenic He prod
 double precision :: he_conc_surf                            ! He surface BC [mol/m^3/s]
 double precision :: he_conc_init                            ! He initial BC [mol/m^3/s]
 double precision, allocatable :: he_conc_sub(:)             ! radius x He concentration
-double precision, allocatable :: he_conc_sub_new(:)         ! updated concentration after diffusion
 double precision, allocatable :: he_mol(:)                  ! moles of He at each node [mol]
 double precision :: diffusion_number                        ! diffusivity x dt / dr^2
-double precision, allocatable :: a(:,:)                     ! LHS matrix for implicit solution
-double precision, allocatable :: b(:,:)                     ! RHS vector for implicit solution
 double precision :: arg                                     ! dummy variable for exp arguments
-integer :: i, j, itime
-double precision :: age
+double precision :: tau                                     ! Non-dimensional time
+logical :: runDiffusion                                     ! Diffusion switch
+integer :: i, j, itime                                      ! loop indices
 
 
 
@@ -116,18 +112,23 @@ double precision :: age
 !----
 write(*,*) 'calc_apatite_he_age: setting up finite difference spatial grid' 
 
-! Generate spherical nodes and geometric variables (module variables):
+! Generate spherical nodes and geometric variables (diffusion module):
 !     - nnodes_sphere           spatial nodes + 2 BC nodes (at sphere center and beyond sphere edge)
-!     - radius_shell [m]        distance of each node from center of sphere
-!     - volume_shell [m^3]      volume of spherical shell for each node
-!     - volume_sphere [m^3]     volume of entire sphere
-nnodes_sphere = 502
-dr_microns = radius_microns/dble(nnodes_sphere-2) ! Spatial step size (microns)
+!     - radius_shell [m]        distance of each node from center of sphere [m]
+!     - volume_shell [m^3]      volume of spherical shell for each node [m^3]
+!     - volume_sphere [m^3]     volume of entire sphere [m^3]
+nnodes = 502
+radius_meters = radius_microns/1.0d6             ! Radius of grain (meters)
+dr_microns = radius_microns/dble(nnodes-2)        ! Spatial step size (microns)
 dr_meters = dr_microns*1.0d-6                     ! Spatial step size (meters)
-call init_spherical_node_geometry(radius_microns,dr_microns)
-! write(*,*) '    radius_microns=',radius_microns
-! write(*,*) '    dr_microns=    ',dr_microns
-! write(*,*) '    nnodes_sphere= ',nnodes_sphere
+call init_spherical_node_geometry(radius_meters,dr_meters,nnodes)
+! write(*,*) '    radius_meters=',radius_meters
+! write(*,*) '    dr_meters=    ',dr_microns
+! write(*,*) '    nnodes_sphere=',nnodes_sphere
+! do i=1,nnodes_sphere
+!     write(*,*) i,radius_shell(i), volume_shell(i)
+! enddo
+! write(*,*) '    volume_sphere=',volume_sphere
 
 
 
@@ -137,18 +138,19 @@ call init_spherical_node_geometry(radius_microns,dr_microns)
 write(*,*) 'calc_apatite_he_age: resampling temperature history onto new time grid' 
 
 ! Calculate time step size in seconds for input thermal history
-dt_seconds = dt_ma*1.0d6*365d0*24.0d0*60.0d0*60.0d0
+dt_seconds = dt_ma*ma2s
 
 ! Determine new time step size based on maximum diffusivity
 temp_max_kelvin = maxval(temp_celsius) + 273.0d0
 arg = -he_activation_energy_apatite/(univ_gas_constant*temp_max_kelvin)
 diffusivity_max = he_diffusivity_apatite * exp(arg)
 dt_seconds_resamp = 0.5d0*dr_meters**2/diffusivity_max ! Stability for fully explicit problems
+! write(*,*) '    dt_ma_resamp=',dt_seconds_resamp
 
 ! Check resampling time step size
-if (dt_seconds_resamp.lt.0.01d0*dt_seconds) then
-    ! Implicit solution should be stable, so limit shrinking of resampled time step
-    dt_seconds_resamp = 0.01d0*dt_seconds
+if (dt_seconds_resamp.lt.0.1d0*dt_seconds) then
+    ! Implicit solution should be stable (IT IS NOT!), so limit shrinking of resampled time step
+    dt_seconds_resamp = 0.1d0*dt_seconds
 elseif (dt_seconds_resamp.gt.dt_seconds) then
     ! Keep thermal history time step if smaller than resampled time step
     dt_seconds_resamp = dt_seconds
@@ -174,6 +176,7 @@ do i = 1,nresamp
     endif
     temp_kelvin(i) = temp_celsius(j) + 273.0d0
 enddo
+
 
 
 !----
@@ -227,9 +230,6 @@ endif
 if (.not.allocated(he_conc_sub)) then
     allocate(he_conc_sub(nnodes_sphere))
 endif
-if (.not.allocated(he_conc_sub_new)) then
-    allocate(he_conc_sub_new(nnodes_sphere))
-endif
 if (.not.allocated(he_mol)) then
     allocate(he_mol(nnodes_sphere))
 endif
@@ -242,8 +242,8 @@ he_conc_init = 0.0d0                      ! Initial helium concentration
 he_conc_surf = 0.0d0                      ! Surface helium concentration
 he_conc = he_conc_init                    ! Set all nodes to have initial helium concentration
 he_conc(nnodes_sphere) = he_conc_surf     ! Except surface boundary condition node...
-write(*,*) '    he_conc_init=',he_conc_init
-write(*,*) '    he_conc_surf=',he_conc_surf
+! write(*,*) '    he_conc_init=',he_conc_init
+! write(*,*) '    he_conc_surf=',he_conc_surf
 
 
 
@@ -255,32 +255,22 @@ write(*,*) '    he_conc_surf=',he_conc_surf
 write(*,*) 'calc_apatite_he_age: determining helium concentration over time'
 open(unit=63,file='junk.out',status='unknown')
 
-! Initialize total helium to be zero
+! Initialize total helium array to be zero
 he_total = 0.0d0
-
-
-! Allocate arrays for determining helium concentration at each node at each time step
-if (.not.allocated(a)) then
-    allocate(a(nnodes_sphere,3))
-endif
-if (.not.allocated(b)) then
-    allocate(b(nnodes_sphere,1))
-endif
 
 
 ! Calculate helium concentration at each time step by solving implicit finite difference
 ! approximation to the diffusion equation. The degree of implicitness is beta.
 do itime = 1,nresamp
 
-    ! write(*,*) 'calc_apatite_he_age: working on itime=',itime,' of',nresamp
+    if (mod(itime,nresamp/100).eq.1) then
+        write(*,*) 'calc_apatite_he_age:',itime*100/nresamp,'% complete'
+    endif
 
 
-
-    ! Calculate diffusion number
-    diffusion_number = diffusivity(itime)*dt_seconds_resamp/dr_meters**2
-    ! write(*,*) 'diffusion_number=',diffusion_number
-
-
+    !********************!
+    ! Produce new helium !
+    !********************!
     ! Update the helium production rate (mol/m^3/s)
     call calc_he_production_rate(mol_th232,mol_u235,mol_u238,volume_sphere,production_rate(1))
     production_rate = production_rate(1)
@@ -292,53 +282,86 @@ do itime = 1,nresamp
         he_conc(i) = he_conc(i) + production_rate(i)*dt_seconds_resamp
     enddo
 
-    ! Make the substitution for solving differential equation in spherical coordinates
-    ! write(*,*) 'calc_apatite_he_age: multiplying concentration by node radii'
-    do i = 1,nnodes_sphere
-        he_conc_sub(i) = he_conc(i)*radius_shell(i)
-        ! print *,i,radius_shell(i),he_conc(i),he_conc_sub(i)
-    enddo
 
-    ! Make sure boundary conditions are correct
-    he_conc_sub(1) = -he_conc_sub(2)
-    he_conc_sub(nnodes_sphere) = he_conc_surf*radius_shell(nnodes_sphere)
-
-
-    !**************************************************!
-    ! Solve for helium concentration at next time step !
-    !**************************************************!
-    call diffusion_step_dirichlet(he_conc_sub,nnodes_sphere,diffusion_number,beta)
-
-
-    ! Calculate the new helium concentration at each node
-    ! write(*,*) 'calc_apatite_he_age: calculating helium concentration at each node'
-    do i = 1,nnodes_sphere
-        he_conc(i) = he_conc_sub(i)/radius_shell(i)
-        ! print *,he_conc(i),he_conc_sub_new(i),radius_shell(i)
-        ! stop
-    enddo
-    if (mod(itime,10000).eq.1) then
-        ! print *,'itime',itime
-        write(63,'(A)') '>'
-        do i = 1,nnodes_sphere
-            write(63,*) radius_shell(i)/radius_microns,he_conc(i)/he_conc(2)
-            print *,itime,he_conc(i),he_conc_sub_new(i),radius_shell(i)
-        enddo
+    !***********************************************!
+    ! Check whether diffusion calculation is needed !
+    !***********************************************!
+    tau = diffusivity(itime)*1.0d0*ma2s/radius_meters**2
+    if (tau.gt.1.0d0) then
+        runDiffusion = .false.
+    else
+        runDiffusion = .true.
     endif
 
-    ! Calculate moles of helium in each shell
-    ! write(*,*) 'calc_apatite_he_age: calculating moles of helium in each shell'
-    do i = 2,nnodes_sphere-1
-        he_mol(i) = volume_shell(i)*he_conc(i)
-    enddo
 
-    ! Calculate total moles of helium in the grain
-    ! write(*,*) 'calc_apatite_he_age: calculating total helium in the grain'
-    do i = 2,nnodes_sphere-1
-        he_total(itime) = he_total(itime) + he_mol(i) ! moles
-    enddo
+    !*********!
+    ! DIFFUSE !
+    !*********!
+    if (runDiffusion) then
+
+        !******************************************!
+        ! Substitute helium concentration function !
+        !******************************************!
+        ! Make the substitution for solving differential equation in spherical coordinates
+        ! write(*,*) 'calc_apatite_he_age: multiplying concentration by node radii'
+        do i = 1,nnodes_sphere
+            he_conc_sub(i) = he_conc(i)*radius_shell(i)
+            ! print *,i,radius_shell(i),he_conc(i),he_conc_sub(i)
+        enddo
+
+        ! Make sure boundary conditions are correct
+        he_conc_sub(1) = -he_conc_sub(2)
+        he_conc_sub(nnodes_sphere) = he_conc_surf*radius_shell(nnodes_sphere)
 
 
+        !**************************************************!
+        ! Solve for helium concentration at next time step !
+        !**************************************************!
+        ! Calculate diffusion number at current time step
+        diffusion_number = diffusivity(itime)*dt_seconds_resamp/dr_meters**2
+
+        ! write(*,*) 'diffusion_number=',diffusion_number
+        call diffusion_step_dirichlet(he_conc_sub,nnodes_sphere,diffusion_number,beta)
+
+
+        !***************************!
+        ! Calculate moles of helium !
+        !***************************!
+        ! Calculate the new helium concentration at each node ("unsubstitute")
+        ! write(*,*) 'calc_apatite_he_age: calculating helium concentration at each node'
+        do i = 1,nnodes_sphere
+            he_conc(i) = he_conc_sub(i)/radius_shell(i)
+            if (he_conc(i).gt.1d20) then
+                write(0,*) 'calc_apatite_he_age: looks like you ran into a stability problem...'
+                write(0,*) 'Stopping...'
+                stop
+            endif
+        enddo
+
+        ! Calculate moles of helium in each shell
+        ! write(*,*) 'calc_apatite_he_age: calculating moles of helium in each shell'
+        do i = 2,nnodes_sphere-1
+            he_mol(i) = volume_shell(i)*he_conc(i)
+        enddo
+
+        ! Calculate total moles of helium in the grain
+        ! write(*,*) 'calc_apatite_he_age: calculating total helium in the grain'
+        do i = 2,nnodes_sphere-1
+            he_total(itime) = he_total(itime) + he_mol(i) ! moles
+        enddo
+
+    else
+
+        !***********************************************!
+        ! Set moles of helium to 0 at high temperatures !
+        !***********************************************!
+        he_total(itime) = 0.0d0
+
+    endif
+
+    !******************************************!
+    ! Reduce amount of parent that has decayed !
+    !******************************************!
     ! Update amount of radioactive parent elements
     mol_th232 = mol_th232*exp(-decay_th232*dt_seconds_resamp)
     mol_u235 = mol_u235*exp(-decay_u235*dt_seconds_resamp)
@@ -346,86 +369,17 @@ do itime = 1,nresamp
 
 enddo
 
+
+!----
 ! Calculate (U-Th)/He age of grain
-print *,'actual age:',nresamp*dt_seconds_resamp/1d6/365.0d0/24.0d0/60.0d0/60.0d0
-print *,'mol_th232:',mol_th232
-print *,'mol_u235:',mol_u235
-print *,'mol_u238:',mol_u238
-print *,'he_total(nresamp):',he_total(nresamp)
+!----
+write(*,*) 'calc_apatite_he_age: calculating (U-Th)/He age'
 call calc_u_th_he_age(mol_th232,mol_u235,mol_u238,he_total(nresamp),age)
-print *,'calculated age:',age
 
 
 return
 end subroutine
 
-
-
-!--------------------------------------------------------------------------------------------------!
-
-
-
-subroutine init_spherical_node_geometry(radius_microns,dr_microns)
-!----
-! Create spherical node geometry for finite difference procedure
-!
-!   Center of sphere
-!          |
-!          |       dr_microns                          \ radius_microns
-!          V        -------                             |
-!       o  X  *     *     *     *     *     *     *     *     o
-! BC node                                               |     BC node
-!                                                      /
-!
-! Inputs (arguments):
-!   radius_microns:   radius of sphere (microns)
-!   dr_microns:       spatial step size (microns)
-!
-! Inputs (helium_diffusion module variables):
-!   nnodes_sphere:    number of spatial nodes, including 2 BC nodes
-!
-! Outputs (helium_diffusion module variables)
-!   radius_shell:     distance from center of sphere to each node [m]
-!   volume_shell:     volume of shell corresponding to each node  [m^3]
-!   volume_sphere:    volume of entire sphere                     [m^3]
-!----
-
-implicit none
-
-
-! Arguments
-double precision :: dr_microns
-double precision :: radius_microns
-
-! Local variables
-integer :: i
-
-
-! Allocate memory to shell radius/volume arrays
-if (.not.allocated(radius_shell)) then
-    allocate(radius_shell(nnodes_sphere))
-endif
-if (.not.allocated(volume_shell)) then
-    allocate(volume_shell(nnodes_sphere))
-endif
-
-! Distance from center of grain at each spatial node (meters)
-do i = 1,nnodes_sphere
-    radius_shell(i) = (dble(i)-1.5d0)*dr_microns*1.0d-6
-enddo
-
-! Volume of each spherical shell (m^3)
-volume_shell(1) = 0.0d0
-volume_shell(2) = 4.0d0/3.0d0*3.14159265d0*radius_shell(2)**3
-do i = 3,nnodes_sphere
-    volume_shell(i) = 4.0d0/3.0d0*3.14159265d0*(radius_shell(i)**3-radius_shell(i-1)**3)
-enddo
-
-! Sphere volume (m^3)
-volume_sphere = 4.0d0/3.0d0*3.14159265d0*(radius_microns*1.0d-6)**3
-
-return
-end subroutine
 
 
 

@@ -6,19 +6,101 @@ module diffusion
 !  ----  =  D * [ ---- ]  +  P
 !   dt             dx2
 !
+! Or in a spherical coordinate system:
+!
+!   du            1       d           du
+!  ----  =  D * ----- * ---- [ r^2 * ---- ]  +  P
+!   dt           r^2     dr           dr
+!
 ! where
 !     - u: function that will undergo diffusion (temperature, concentration, topography, etc.)
 !     - t: time
 !     - x: position
+!     - r: radius
 !     - D: diffusivity
 !     - P: rate of production
 !----
+
+! Spherical finite difference parameters
+integer :: nnodes_sphere
+double precision, allocatable :: radius_shell(:)
+double precision, allocatable :: volume_shell(:)
+double precision :: volume_sphere
 
 
 
 !==================================================================================================!
 contains
 !==================================================================================================!
+
+
+
+subroutine init_spherical_node_geometry(r,dr,n)
+!----
+! Create spherical node geometry for finite difference procedure with two extra nodes at ends for
+! boundary conditions specifications
+!
+!   Center of sphere
+!          |
+!          |           dr                              \ r
+!          V        -------                             |
+!       o  X  *     *     *     *     *     *     *     *     o
+! BC node                                               |     BC node
+!                                                      /
+!
+! Inputs (arguments):
+!   r:   radius of sphere
+!   dr:  spatial step size
+!   n:   number of spatial nodes, including 2 BC nodes
+!
+! Outputs:
+!   radius_shell:     distance from center of sphere to each node [m]
+!   volume_shell:     volume of shell corresponding to each node  [m^3]
+!   volume_sphere:    volume of entire sphere                     [m^3]
+!----
+
+implicit none
+
+
+! Arguments
+double precision :: r
+double precision :: dr
+integer :: n
+
+! Local variables
+integer :: i
+
+
+! Allocate memory to shell radius/volume arrays
+nnodes_sphere = n
+if (.not.allocated(radius_shell)) then
+    allocate(radius_shell(nnodes_sphere))
+endif
+if (.not.allocated(volume_shell)) then
+    allocate(volume_shell(nnodes_sphere))
+endif
+
+! Distance from center of sphere at each spatial node
+do i = 1,nnodes_sphere
+    radius_shell(i) = (dble(i)-1.5d0)*dr
+enddo
+
+! Volume of each spherical shell
+volume_shell(1) = 0.0d0
+volume_shell(2) = 4.0d0/3.0d0*3.14159265d0 * radius_shell(2)**3
+do i = 3,nnodes_sphere
+    volume_shell(i) = 4.0d0/3.0d0*3.14159265d0*(radius_shell(i)**3-radius_shell(i-1)**3)
+enddo
+
+! Sphere volume
+volume_sphere = 4.0d0/3.0d0*3.14159265d0 * r**3
+
+return
+end subroutine
+
+
+
+!--------------------------------------------------------------------------------------------------!
 
 
 
