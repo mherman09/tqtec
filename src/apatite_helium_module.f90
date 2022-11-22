@@ -28,6 +28,8 @@ double precision, parameter :: he_activation_energy_apatite = 32.9d0        ! [k
 double precision, allocatable :: he_conc(:)                                 ! [mol/m^3/s]
 double precision, allocatable :: he_total(:)                                ! [nano cm^3]
 
+! Maximum dimensionless time to run helium calculation
+double precision :: tau_max
 
 double precision, parameter :: ma2s = 1.0d6*365d0*24d0*60d0*60d0
 
@@ -39,7 +41,14 @@ contains
 
 
 
-subroutine calc_apatite_he_age(temp_celsius, n, dt_ma, radius_microns, beta, age)
+subroutine calc_apatite_he_age(temp_celsius, &
+                               n, &
+                               dt_ma, &
+                               dt_max_reduction_factor, &
+                               radius_microns, &
+                               nnodes, &
+                               beta, &
+                               age)
 !----
 ! Given a temperature-time history, calculate the concentration of helium in an a spherical apatite
 ! grain over time using a finite difference approximation for the diffusion equation
@@ -49,7 +58,11 @@ subroutine calc_apatite_he_age(temp_celsius, n, dt_ma, radius_microns, beta, age
 !   temp_celsius:     n-point double precision array of temperatures (Celsius)
 !   dt_ma:            time step size for the temperature history (Ma)
 !   radius_microns:   radius of the (spherical) apatite grain (microns)
+!   nnodes:           number of spatial nodes + 2 boundary condition nodes
 !   beta:             implicitness weight in finite difference solution (0-1)
+!
+! Output:
+!   age:              age of grain (Ma)
 !----
 
 use diffusion, only: nnodes_sphere, &
@@ -70,18 +83,19 @@ use radiogenic_helium, only: atomic_mass_th232, &
 implicit none
 
 ! Arguments
-integer :: n
-double precision :: temp_celsius(n)
-double precision :: dt_ma
-double precision :: radius_microns
-double precision :: beta
+integer :: n                                                ! number of input timesteps
+double precision :: temp_celsius(n)                         ! temperature history [C]
+double precision :: dt_ma                                   ! input timestep size [Ma]
+double precision :: dt_max_reduction_factor                 ! resampled timestep reduction factor
+double precision :: radius_microns                          ! grain radius [um]
+integer :: nnodes                                           ! number of spatial nodes
+double precision :: beta                                    ! implicitness parameter
 double precision :: age                                     ! (U-Th)/He age [Ma]
 
 ! Local variables
 double precision :: radius_meters                           ! grain radius [m]
 double precision :: dr_microns                              ! node spacing [microns]
 double precision :: dr_meters                               ! node spacing [m]
-integer :: nnodes                                           ! number of spatial nodes
 double precision :: dt_seconds                              ! input time spacing [s]
 double precision :: dt_seconds_resamp                       ! resampled time spacing [s]
 integer :: nresamp                                          ! resampled number of time steps
@@ -117,7 +131,6 @@ write(*,*) 'calc_apatite_he_age: setting up finite difference spatial grid'
 !     - radius_shell [m]        distance of each node from center of sphere [m]
 !     - volume_shell [m^3]      volume of spherical shell for each node [m^3]
 !     - volume_sphere [m^3]     volume of entire sphere [m^3]
-nnodes = 502
 radius_meters = radius_microns/1.0d6             ! Radius of grain (meters)
 dr_microns = radius_microns/dble(nnodes-2)        ! Spatial step size (microns)
 dr_meters = dr_microns*1.0d-6                     ! Spatial step size (meters)
@@ -148,9 +161,9 @@ dt_seconds_resamp = 0.5d0*dr_meters**2/diffusivity_max ! Stability for fully exp
 ! write(*,*) '    dt_ma_resamp=',dt_seconds_resamp
 
 ! Check resampling time step size
-if (dt_seconds_resamp.lt.0.1d0*dt_seconds) then
+if (dt_seconds_resamp.lt.dt_max_reduction_factor*dt_seconds) then
     ! Implicit solution should be stable (IT IS NOT!), so limit shrinking of resampled time step
-    dt_seconds_resamp = 0.1d0*dt_seconds
+    dt_seconds_resamp = dt_max_reduction_factor*dt_seconds
 elseif (dt_seconds_resamp.gt.dt_seconds) then
     ! Keep thermal history time step if smaller than resampled time step
     dt_seconds_resamp = dt_seconds
@@ -198,6 +211,8 @@ enddo
 ! write(*,*) '    min(diffusion_number)=',minval(diffusivity)*dt_seconds_resamp/dr_meters**2
 ! write(*,*) '    max(diffusion_number)=',maxval(diffusivity)*dt_seconds_resamp/dr_meters**2
 
+! Maximum dimensionless time to keep helium and calculate diffusion
+tau_max = 0.3d0
 
 
 !----
@@ -264,8 +279,12 @@ he_total = 0.0d0
 do itime = 1,nresamp
 
     if (mod(itime,nresamp/100).eq.1) then
-        write(*,*) 'calc_apatite_he_age:',itime*100/nresamp,'% complete'
+        write(*,1000,advance='no') 'calc_apatite_he_age:',itime*100/nresamp,char(13)
     endif
+    if (itime.eq.nresamp) then
+        write(*,1000) 'calc_apatite_he_age:',itime*100/nresamp,''
+    endif
+    1000 format (1X,A,' progress: [',I3,'% complete]',A)
 
 
     !********************!
@@ -287,7 +306,7 @@ do itime = 1,nresamp
     ! Check whether diffusion calculation is needed !
     !***********************************************!
     tau = diffusivity(itime)*1.0d0*ma2s/radius_meters**2
-    if (tau.gt.1.0d0) then
+    if (tau.gt.tau_max) then
         runDiffusion = .false.
     else
         runDiffusion = .true.
@@ -333,8 +352,18 @@ do itime = 1,nresamp
             he_conc(i) = he_conc_sub(i)/radius_shell(i)
             if (he_conc(i).gt.1d20) then
                 write(0,*) 'calc_apatite_he_age: looks like you ran into a stability problem...'
-                write(0,*) 'Stopping...'
-                stop
+                write(0,'(5X,A,I14)')     'number of nodes:        ',nnodes_sphere
+                write(0,'(5X,A,1PE14.6)') 'spatial step size (m):  ',dr_meters
+                write(0,'(5X,A,1PE14.6)') 'resampled timestep (s): ',dt_seconds_resamp
+                write(0,'(5X,A,F14.6)')   'timestep scale factor:  ',dt_max_reduction_factor
+                write(0,'(5X,A,F14.3)')   'tau | 1 Ma:             ',tau
+                write(0,'(5X,A,F14.3)')   'tau_max:                ',tau_max
+                write(0,'(5X,A,F14.3)')   'beta:                   ',beta
+                write(0,*) 'Options:'
+                write(0,*) '    1. Reduce timestep scale factor (-ahe:resamp)'
+                write(0,*) '    2. Reduce number of nodes (-ahe:nnodes)'
+                write(0,*) '    3. Increase implicitness factor (-ahe:beta)'
+                call error_exit(1)
             endif
         enddo
 
@@ -352,9 +381,10 @@ do itime = 1,nresamp
 
     else
 
-        !***********************************************!
-        ! Set moles of helium to 0 at high temperatures !
-        !***********************************************!
+        !**************************************!
+        ! Set helium to 0 at high temperatures !
+        !**************************************!
+        he_conc = 0.0d0
         he_total(itime) = 0.0d0
 
     endif
@@ -374,6 +404,10 @@ enddo
 ! Calculate (U-Th)/He age of grain
 !----
 write(*,*) 'calc_apatite_he_age: calculating (U-Th)/He age'
+! print *,'mol_th232',mol_th232
+! print *,'mol_u235',mol_u235
+! print *,'mol_u238',mol_u238
+! print *,'mol_he4',he_total(nresamp)
 call calc_u_th_he_age(mol_th232,mol_u235,mol_u238,he_total(nresamp),age)
 
 
