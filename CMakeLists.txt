@@ -15,6 +15,10 @@ add_executable(tqtec src/tqtec.f90)
 add_dependencies(tqtec tqteclib)
 target_link_libraries(tqtec tqteclib)
 
+add_executable(readtqtec src/readtqtec.f90)
+add_dependencies(readtqtec tqteclib)
+target_link_libraries(readtqtec tqteclib)
+
 add_executable(minage src/minage.f90)
 add_dependencies(minage tqteclib)
 target_link_libraries(minage tqteclib)
