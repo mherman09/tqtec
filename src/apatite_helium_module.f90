@@ -40,6 +40,7 @@ contains
 
 
 subroutine calc_apatite_he_age(temp_celsius, &
+                               dep_km, &
                                n, &
                                dt_ma, &
                                dt_var, &
@@ -55,6 +56,7 @@ subroutine calc_apatite_he_age(temp_celsius, &
 ! Inputs:
 !   n:                number of time steps
 !   temp_celsius:     n-point double precision array of temperatures (Celsius)
+!   dep_km:           n-point double precision array of depths, positive up (km)
 !   dt_ma:            time step size for the temperature history (Ma)
 !   radius_microns:   radius of the (spherical) apatite grain (microns)
 !   nnodes:           number of spatial nodes + 2 boundary condition nodes
@@ -85,6 +87,7 @@ implicit none
 ! Arguments
 integer :: n                                                ! number of input timesteps
 double precision :: temp_celsius(n)                         ! temperature history [C]
+double precision :: dep_km(n)                               ! depth history [km]
 double precision :: dt_ma                                   ! input timestep size [Ma]
 double precision :: dt_var                                  ! >0: dt reduction; <0: timestep [Ma]
 double precision :: radius_microns                          ! grain radius [um]
@@ -118,6 +121,7 @@ double precision :: diffusion_number                        ! diffusivity x dt /
 double precision :: arg                                     ! dummy variable for exp arguments
 double precision :: tau                                     ! Non-dimensional time
 logical :: runDiffusion                                     ! Diffusion switch
+integer :: istart                                           ! starting index for diffusion
 integer :: i, j, itime                                      ! loop indices
 
 
@@ -195,6 +199,16 @@ do i = 1,nresamp
     temp_kelvin(i) = temp_celsius(j) + 273.0d0
 enddo
 
+! Determine starting time for diffusion calculation (rock has to exist!)
+do i = 1,n
+    if (dep_km(i).le.0.0d0) then ! Rock is born when it hits depth of 0
+        istart = nint(dble(i)*dt_seconds/dt_seconds_resamp)
+        if (istart.lt.1) then
+            istart = 1
+        endif
+        exit
+    endif
+enddo
 
 
 !----
@@ -278,7 +292,7 @@ he_total = 0.0d0
 
 ! Calculate helium concentration at each time step by solving implicit finite difference
 ! approximation to the diffusion equation. The degree of implicitness is beta.
-do itime = 1,nresamp
+do itime = istart,nresamp
 
     if (mod(itime,nresamp/100).eq.1) then
         write(*,1000,advance='no') 'calc_apatite_he_age:',itime*100/nresamp,char(13)

@@ -408,6 +408,7 @@ use minage, only: ahe_file, &
                   dt_ma, &
                   ntimes, &
                   temp_celsius_array, &
+                  dep_km_array, &
                   ahe_beta, &
                   ahe_dt_var, &
                   ahe_nnodes, &
@@ -461,6 +462,7 @@ do ihorizon = 1,nhorizons
         ! Calculate (U-Th)/He age
         radius_microns = grain_radius_array(iradius)
         call calc_apatite_he_age(temp_celsius_array(ihorizon,:), &
+                                 dep_km_array(ihorizon,:), &
                                  ntimes, &
                                  dt_ma, &
                                  ahe_dt_var, &
