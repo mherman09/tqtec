@@ -44,7 +44,7 @@ contains
 subroutine calc_apatite_he_age(temp_celsius, &
                                n, &
                                dt_ma, &
-                               dt_max_reduction_factor, &
+                               dt_var, &
                                radius_microns, &
                                nnodes, &
                                beta, &
@@ -86,7 +86,7 @@ implicit none
 integer :: n                                                ! number of input timesteps
 double precision :: temp_celsius(n)                         ! temperature history [C]
 double precision :: dt_ma                                   ! input timestep size [Ma]
-double precision :: dt_max_reduction_factor                 ! resampled timestep reduction factor
+double precision :: dt_var                 ! resampled timestep reduction factor
 double precision :: radius_microns                          ! grain radius [um]
 integer :: nnodes                                           ! number of spatial nodes
 double precision :: beta                                    ! implicitness parameter
@@ -124,7 +124,7 @@ integer :: i, j, itime                                      ! loop indices
 !----
 ! Set up finite difference spatial grid (assuming spherical apatite grain)
 !----
-write(*,*) 'calc_apatite_he_age: setting up finite difference spatial grid' 
+! write(*,*) 'calc_apatite_he_age: setting up finite difference spatial grid' 
 
 ! Generate spherical nodes and geometric variables (diffusion module):
 !     - nnodes_sphere           spatial nodes + 2 BC nodes (at sphere center and beyond sphere edge)
@@ -148,25 +148,29 @@ call init_spherical_node_geometry(radius_meters,dr_meters,nnodes)
 !----
 ! Set up finite difference time stepping
 !----
-write(*,*) 'calc_apatite_he_age: resampling temperature history onto new time grid' 
+! write(*,*) 'calc_apatite_he_age: resampling temperature history onto new time grid' 
 
 ! Calculate time step size in seconds for input thermal history
 dt_seconds = dt_ma*ma2s
 
-! Determine new time step size based on maximum diffusivity
-temp_max_kelvin = maxval(temp_celsius) + 273.0d0
-arg = -he_activation_energy_apatite/(univ_gas_constant*temp_max_kelvin)
-diffusivity_max = he_diffusivity_apatite * exp(arg)
-dt_seconds_resamp = 0.5d0*dr_meters**2/diffusivity_max ! Stability for fully explicit problems
-! write(*,*) '    dt_ma_resamp=',dt_seconds_resamp
+if (dt_var.gt.0.0d0) then
+    ! Determine new time step size based on maximum diffusivity
+    temp_max_kelvin = maxval(temp_celsius) + 273.0d0
+    arg = -he_activation_energy_apatite/(univ_gas_constant*temp_max_kelvin)
+    diffusivity_max = he_diffusivity_apatite * exp(arg)
+    dt_seconds_resamp = 0.5d0*dr_meters**2/diffusivity_max ! Stability for fully explicit problems
+    ! write(*,*) '    dt_ma_resamp=',dt_seconds_resamp
 
-! Check resampling time step size
-if (dt_seconds_resamp.lt.dt_max_reduction_factor*dt_seconds) then
-    ! Implicit solution should be stable (IT IS NOT!), so limit shrinking of resampled time step
-    dt_seconds_resamp = dt_max_reduction_factor*dt_seconds
-elseif (dt_seconds_resamp.gt.dt_seconds) then
-    ! Keep thermal history time step if smaller than resampled time step
-    dt_seconds_resamp = dt_seconds
+    ! Check resampling time step size
+    if (dt_seconds_resamp.lt.dt_var*dt_seconds) then
+        ! Implicit solution should be stable (IT IS NOT!), so limit shrinking of resampled time step
+        dt_seconds_resamp = dt_var*dt_seconds
+    elseif (dt_seconds_resamp.gt.dt_seconds) then
+        ! Keep thermal history time step if smaller than resampled time step
+        dt_seconds_resamp = dt_seconds
+    endif
+else
+    dt_seconds_resamp = -dt_var*ma2s
 endif
 ! write(*,*) '    dt_ma=       ',dt_ma
 ! write(*,*) '    dt_seconds=  ',dt_seconds
@@ -195,7 +199,7 @@ enddo
 !----
 ! Calculate diffusivity of helium in apatite over (resampled) temperature history
 !----
-write(*,*) 'calc_apatite_he_age: calculating helium diffusivity over temperature history'
+! write(*,*) 'calc_apatite_he_age: calculating helium diffusivity over temperature history'
 
 ! Diffusivity at each time step (Farley, 2000) [m^2/s]
 if (.not.allocated(diffusivity)) then
@@ -218,7 +222,7 @@ tau_max = 0.3d0
 !----
 ! Calculate helium production rate
 !----
-write(*,*) 'calc_apatite_he_age: calculating helium production rate'
+! write(*,*) 'calc_apatite_he_age: calculating helium production rate'
 
 ! Calculate radiogenic helium production rate (mol/m^3/s), assuming uniform distribution of
 ! radioactive uranium and thorium
@@ -236,7 +240,7 @@ endif
 !----
 ! Initialize helium concentration arrays
 !----
-write(*,*) 'calc_apatite_he_age: initializing helium concentration'
+! write(*,*) 'calc_apatite_he_age: initializing helium concentration'
 
 ! Allocate helium arrays
 if (.not.allocated(he_conc)) then
@@ -267,7 +271,7 @@ he_conc(nnodes_sphere) = he_conc_surf     ! Except surface boundary condition no
 !----
 ! Determine helium concentration in the apatite grain over temperature history
 !----
-write(*,*) 'calc_apatite_he_age: determining helium concentration over time'
+! write(*,*) 'calc_apatite_he_age: determining helium concentration over time'
 open(unit=63,file='junk.out',status='unknown')
 
 ! Initialize total helium array to be zero
@@ -355,7 +359,7 @@ do itime = 1,nresamp
                 write(0,'(5X,A,I14)')     'number of nodes:        ',nnodes_sphere
                 write(0,'(5X,A,1PE14.6)') 'spatial step size (m):  ',dr_meters
                 write(0,'(5X,A,1PE14.6)') 'resampled timestep (s): ',dt_seconds_resamp
-                write(0,'(5X,A,F14.6)')   'timestep scale factor:  ',dt_max_reduction_factor
+                write(0,'(5X,A,F14.6)')   'timestep scale factor:  ',dt_var
                 write(0,'(5X,A,F14.3)')   'tau | 1 Ma:             ',tau
                 write(0,'(5X,A,F14.3)')   'tau_max:                ',tau_max
                 write(0,'(5X,A,F14.3)')   'beta:                   ',beta
@@ -409,6 +413,19 @@ write(*,*) 'calc_apatite_he_age: calculating (U-Th)/He age'
 ! print *,'mol_u238',mol_u238
 ! print *,'mol_he4',he_total(nresamp)
 call calc_u_th_he_age(mol_th232,mol_u235,mol_u238,he_total(nresamp),age)
+
+
+
+!----
+! Clean up
+!----
+if (allocated(he_conc)) then
+    deallocate(he_conc)
+endif
+if (allocated(he_total)) then
+    deallocate(he_total)
+endif
+
 
 
 return

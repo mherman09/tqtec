@@ -15,7 +15,7 @@ double precision, allocatable :: temp_celsius_array(:,:)
 
 ! Apatite (U-Th)/He variables
 double precision :: ahe_beta
-double precision :: ahe_dt_max_reduction_factor
+double precision :: ahe_dt_var
 integer :: ahe_nnodes
 double precision :: ahe_taumax
 
@@ -306,8 +306,9 @@ use minage, only: ahe_file, &
                   ntimes, &
                   temp_celsius_array, &
                   ahe_beta, &
-                  ahe_dt_max_reduction_factor, &
-                  ahe_nnodes
+                  ahe_dt_var, &
+                  ahe_nnodes, &
+                  ahe_taumax
 
 use apatite_helium, only: calc_apatite_he_age
 
@@ -315,7 +316,7 @@ implicit none
 
 integer :: ihorizon
 integer :: iradius
-integer, parameter :: nradius = 1
+integer, parameter :: nradius = 7
 double precision :: grain_radius_array(nradius)
 double precision :: radius_microns
 double precision :: he_age
@@ -324,14 +325,14 @@ character(len=32) :: fmt_string
 
 
 ! Apatite grain radii to calculate diffusion
-! grain_radius_array(1) = 10.0d0
-! grain_radius_array(2) = 20.0d0
-! grain_radius_array(3) = 50.0d0
-! grain_radius_array(4) = 100.0d0
-! grain_radius_array(5) = 200.0d0
-! grain_radius_array(6) = 500.0d0
-! grain_radius_array(7) = 1000.0d0
-grain_radius_array(1) = 100.0d0
+grain_radius_array(1) = 10.0d0
+grain_radius_array(2) = 20.0d0
+grain_radius_array(3) = 50.0d0
+grain_radius_array(4) = 100.0d0
+grain_radius_array(5) = 200.0d0
+grain_radius_array(6) = 500.0d0
+grain_radius_array(7) = 1000.0d0
+! grain_radius_array(1) = 100.0d0
 
 write(*,*) 'minage: calculating apatite (U-Th)/He ages'
 open(unit=23,file=ahe_file,status='unknown')
@@ -345,10 +346,10 @@ horizon_ahe_age = 0.0d0
 
 
 ! For each horizon...
-do ihorizon = 2,2
+do ihorizon = 1,nhorizons
 
     ! For each grain radius...
-    do iradius = 1,1
+    do iradius = 1,nradius
 
         write(*,*) 'minage: working on horizon',ihorizon,' and grain size',iradius,' of',nradius
 
@@ -357,7 +358,7 @@ do ihorizon = 2,2
         call calc_apatite_he_age(temp_celsius_array(ihorizon,:), &
                                  ntimes, &
                                  dt_ma, &
-                                 ahe_dt_max_reduction_factor, &
+                                 ahe_dt_var, &
                                  radius_microns, &
                                  ahe_nnodes, &
                                  ahe_beta, &
@@ -413,7 +414,7 @@ use minage, only: readtqtec_temp_file, &
                   ahe_file, &
                   isOutputDefined, &
                   ahe_beta, &
-                  ahe_dt_max_reduction_factor, &
+                  ahe_dt_var, &
                   ahe_nnodes, &
                   ahe_taumax
 
@@ -433,8 +434,8 @@ isOutputDefined = .false.
 
 ! Apatite (U-Th)/He variables
 ahe_beta = 0.85d0
-ahe_dt_max_reduction_factor = 0.1d0
-ahe_nnodes = 502
+ahe_dt_var = 0.1d0
+ahe_nnodes = 102
 
 
 ! Count number of command line arguments
@@ -473,7 +474,12 @@ do while (i.le.narg)
     elseif (trim(tag).eq.'-ahe:dtfactor') then
         i = i + 1
         call get_command_argument(i,tag,status=ios)
-        read(tag,*) ahe_dt_max_reduction_factor
+        read(tag,*) ahe_dt_var
+    elseif (trim(tag).eq.'-ahe:dtma') then
+        i = i + 1
+        call get_command_argument(i,tag,status=ios)
+        read(tag,*) ahe_dt_var
+        ahe_dt_var = -ahe_dt_var
     elseif (trim(tag).eq.'-ahe:nnodes') then
         i = i + 1
         call get_command_argument(i,tag,status=ios)
@@ -519,8 +525,9 @@ write(0,*) '-ahe AHE_FILE          Apatite (U-Th)/He age'
 write(0,*)
 write(0,*) 'Apatite (U-Th)/He options:'
 write(0,*) '-ahe:beta BETA         Finite difference implicitness coefficient (0.85)'
-write(0,*) '-ahe:nnodes NNODES     Number of spatial nodes + 2 BC nodes (502)'
+write(0,*) '-ahe:nnodes NNODES     Number of spatial nodes + 2 BC nodes (102)'
 write(0,*) '-ahe:taumax TAUMAX     Maximum dimensionless time to retain He for 1 Ma (0.30)'
+write(0,*) '-ahe:dtma DTMA         Resampled timestep size in Ma (0.10*dt_input)'
 write(0,*) '-ahe:dtfactor FACTOR   Timestep resampling factor (0.10)'
 write(0,*)
 call error_exit(1)
