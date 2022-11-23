@@ -259,6 +259,11 @@ do ihorizon = 1,nhorizons
         allocate(temp_ft_retention_age_corr(nhorizons))
     endif
     itemp = nint(-time_ma/dt_ma - ft_retention_age_corr/dt_ma)
+    if (itemp.lt.1) then
+        itemp = 1
+    elseif (itemp.gt.ntimes) then
+        itemp = ntimes
+    endif
     temp_ft_retention_age_corr(ihorizon) = temp_celsius_array(ihorizon,itemp)
 enddo
 
