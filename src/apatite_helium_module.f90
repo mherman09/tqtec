@@ -28,8 +28,6 @@ double precision, parameter :: he_activation_energy_apatite = 32.9d0        ! [k
 double precision, allocatable :: he_conc(:)                                 ! [mol/m^3/s]
 double precision, allocatable :: he_total(:)                                ! [nano cm^3]
 
-! Maximum dimensionless time to run helium calculation
-double precision :: tau_max
 
 double precision, parameter :: ma2s = 1.0d6*365d0*24d0*60d0*60d0
 
@@ -48,6 +46,7 @@ subroutine calc_apatite_he_age(temp_celsius, &
                                radius_microns, &
                                nnodes, &
                                beta, &
+                               tau_max, &
                                age)
 !----
 ! Given a temperature-time history, calculate the concentration of helium in an a spherical apatite
@@ -60,6 +59,7 @@ subroutine calc_apatite_he_age(temp_celsius, &
 !   radius_microns:   radius of the (spherical) apatite grain (microns)
 !   nnodes:           number of spatial nodes + 2 boundary condition nodes
 !   beta:             implicitness weight in finite difference solution (0-1)
+!   tau_max:          maximum dimensionless time to retain He and calculate diffusion (over 1 Ma)
 !
 ! Output:
 !   age:              age of grain (Ma)
@@ -86,10 +86,11 @@ implicit none
 integer :: n                                                ! number of input timesteps
 double precision :: temp_celsius(n)                         ! temperature history [C]
 double precision :: dt_ma                                   ! input timestep size [Ma]
-double precision :: dt_var                 ! resampled timestep reduction factor
+double precision :: dt_var                                  ! >0: dt reduction; <0: timestep [Ma]
 double precision :: radius_microns                          ! grain radius [um]
 integer :: nnodes                                           ! number of spatial nodes
 double precision :: beta                                    ! implicitness parameter
+double precision :: tau_max                                 ! Max dimensionless time to keep He
 double precision :: age                                     ! (U-Th)/He age [Ma]
 
 ! Local variables
@@ -214,9 +215,6 @@ enddo
 ! write(*,*) '    max(diffusivity)=     ',maxval(diffusivity)
 ! write(*,*) '    min(diffusion_number)=',minval(diffusivity)*dt_seconds_resamp/dr_meters**2
 ! write(*,*) '    max(diffusion_number)=',maxval(diffusivity)*dt_seconds_resamp/dr_meters**2
-
-! Maximum dimensionless time to keep helium and calculate diffusion
-tau_max = 0.3d0
 
 
 !----

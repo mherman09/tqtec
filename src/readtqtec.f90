@@ -257,8 +257,8 @@ CLOSE(8)
 !       GOTO 500
 if (temp_file.ne.'') then
     open(unit=9,file=temp_file,status='unknown')
-    write(9,'(2F10.3,I6)') -xmin,2.0d0*dt,nt_total
-    write(fmt_string,'("("I6,"F8.3)")') nhorizons
+    write(9,'(2F10.3,I6)') -xmin,2.0d0*dt,nt_total          ! xmin=time before present (Ma)
+    write(fmt_string,'("("I6,"F8.3)")') nhorizons           ! 2*dt=sample rate (Ma) (because saved every 2 points from tqtec run)
     do l = 1,nt_total
         write(9,fmt_string) (results(l,1,i),i=1,nhorizons)
     enddo
@@ -280,7 +280,7 @@ endif
 !       GOTO 500
 if (dep_file.ne.'') then
     open(unit=9,file=dep_file,status='unknown')
-    write(9,'(2F10.3,I6)') -xmin,2.0d0*dt,nt_total
+    write(9,'(2F10.3,I6)') -xmin,2.0d0*dt,nt_total 
     write(fmt_string,'("("I6,"F8.3)")') nhorizons
     do l = 1,nt_total
         write(9,fmt_string) (-1.0d0*results(l,2,i)*dz,i=1,nhorizons)

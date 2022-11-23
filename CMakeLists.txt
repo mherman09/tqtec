@@ -22,3 +22,5 @@ target_link_libraries(readtqtec tqteclib)
 add_executable(minage src/minage.f90)
 add_dependencies(minage tqteclib)
 target_link_libraries(minage tqteclib)
+
+add_executable(ftage src/ftage.f90)

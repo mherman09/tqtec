@@ -124,6 +124,7 @@
 	
 	WRITE (*,*) "term4;1,2: ", TERM4(1,1), TERM4(2,1)
 	WRITE (*,*) "term4;100,101: ", TERM4(100,1), TERM4(101,1)
+	WRITE (*,*) "term4;30000: ", TERM4(30000,1)
 
 	!CALCULATE THE FINAL LENGTH PL:	
 	!CARLSON (1990), EQUATION 4
@@ -136,6 +137,9 @@
 			END DO	!L LOOP
         END DO	!J LOOP
 	END DO  !I LOOP
+    print *,PL(6000,1,1)
+    print *,PL(14000,1,1)
+    print *,PL(28000,1,1)
 	
 	!PRINT *, "PL(50,1,10)=", PL(50,1,10)
 	

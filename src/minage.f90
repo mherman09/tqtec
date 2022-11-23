@@ -1,6 +1,7 @@
 module minage
 
 character(len=512) :: readtqtec_temp_file
+character(len=512) :: readtqtec_dep_file
 character(len=512) :: aft_file
 character(len=512) :: ahe_file
 logical :: isOutputDefined
@@ -12,6 +13,7 @@ double precision :: time_ma
 double precision :: dt_ma
 integer :: ntimes
 double precision, allocatable :: temp_celsius_array(:,:)
+double precision, allocatable :: dep_km_array(:,:)
 
 ! Apatite (U-Th)/He variables
 double precision :: ahe_beta
@@ -28,6 +30,7 @@ end module
 program main
 
 use minage, only: readtqtec_temp_file, &
+                  readtqtec_dep_file, &
                   aft_file, &
                   ahe_file, &
                   isOutputDefined !, &
@@ -79,6 +82,11 @@ if (readtqtec_temp_file.eq.'') then
     call usage('minage: no readtqtec output temperature file defined')
 endif
 
+! Is input depth history defined?
+if (readtqtec_dep_file.eq.'') then
+    call usage('minage: no readtqtec output depth file defined')
+endif
+
 ! Is an output defined?
 if (.not.isOutputDefined) then
     call usage('minage: no output defined')
@@ -89,6 +97,12 @@ endif
 ! Read temperature history
 !----
 call read_temp_history()
+
+
+!----
+! Read depth history
+!----
+call read_dep_history()
 
 
 
@@ -194,6 +208,86 @@ end subroutine
 
 
 !--------------------------------------------------------------------------------------------------!
+
+
+
+subroutine read_dep_history()
+!----
+! Program readtqtec reads output from TQTec and prints depth [C] over time [Ma] for each
+! user-specified horizon (-dep option). Read this depth-time history for each horizon into an
+! array.
+!----
+
+use minage, only: readtqtec_dep_file, &
+                  nhorizons, &
+                  nhorizons_max, &
+                  time_ma, &
+                  dt_ma, &
+                  ntimes, &
+                  dep_km_array
+
+implicit none
+
+! Local variables
+integer :: i
+integer :: ihorizon
+integer :: ios
+character(len=512) :: line
+real :: dum(nhorizons_max)
+
+
+! Open file for reading
+open(unit=20,file=readtqtec_dep_file,status='old')
+
+! First line: total time [Ma], sample rate [Ma], and number of depth-time points
+read(20,*,iostat=ios) time_ma, dt_ma, ntimes
+if (ios.ne.0) then
+    write(0,*) 'minage: error reading first line of tqtec output depth file'
+    call error_exit(1)
+endif
+
+! Extract number of horizons tracked in the thermal model from first line of temperatures
+nhorizons = 1
+read(20,'(A)',iostat=ios) line
+if (ios.ne.0) then
+    write(0,*) 'minage: error reading second line of tqtec output depth file'
+    call error_exit(1)
+endif
+do i = 1,nhorizons_max
+    read(line,*,iostat=ios) dum(1:i)
+    if (ios.ne.0) then
+        nhorizons = i-1
+        exit
+    endif
+enddo
+
+! Step back one line in depth file to read all depths
+backspace(20)
+
+! Allocate and initialize the depth array
+allocate(dep_km_array(nhorizons,ntimes))
+dep_km_array = 0.0d0
+
+! Fill the depth array
+do i = 1,ntimes
+    read(20,*,iostat=ios) (dep_km_array(ihorizon,i),ihorizon=1,nhorizons)
+    if (ios.ne.0) then
+        write(0,*) 'minage: error reading line',i,' of readtqtec output depth file'
+        call error_exit(1)
+    endif
+enddo
+
+! Close the depth file
+close(20)
+
+
+return
+end subroutine
+
+
+
+!--------------------------------------------------------------------------------------------------!
+
 
 subroutine calc_aft_ages()
 
@@ -356,7 +450,9 @@ do ihorizon = 1,nhorizons
     ! For each grain radius...
     do iradius = 1,nradius
 
-        write(*,*) 'minage: working on horizon',ihorizon,' and grain size',iradius,' of',nradius
+        write(*,2301) 'minage: working on horizon',ihorizon,'of',nhorizons, &
+                      ': grain size',iradius,'of',nradius
+        2301 format(X,2(A,I6,X,A,I6))
 
         ! Calculate (U-Th)/He age
         radius_microns = grain_radius_array(iradius)
@@ -367,6 +463,7 @@ do ihorizon = 1,nhorizons
                                  radius_microns, &
                                  ahe_nnodes, &
                                  ahe_beta, &
+                                 ahe_taumax, &
                                  he_age)
 
         ! Save grain-size-based ages for this horizon
@@ -415,6 +512,7 @@ subroutine gcmdln()
 !----
 
 use minage, only: readtqtec_temp_file, &
+                  readtqtec_dep_file, &
                   aft_file, &
                   ahe_file, &
                   isOutputDefined, &
@@ -433,6 +531,7 @@ character(len=512) :: tag
 
 ! Initialize variables
 readtqtec_temp_file = ''
+readtqtec_dep_file = ''
 aft_file = ''
 ahe_file = ''
 isOutputDefined = .false.
@@ -441,6 +540,7 @@ isOutputDefined = .false.
 ahe_beta = 0.85d0
 ahe_dt_var = 0.1d0
 ahe_nnodes = 102
+ahe_taumax = 0.40d0
 
 
 ! Count number of command line arguments
@@ -456,10 +556,17 @@ do while (i.le.narg)
 
     call get_command_argument(i,tag)
 
+    ! Input files
     if (trim(tag).eq.'-temp') then
         i = i + 1
         call get_command_argument(i,readtqtec_temp_file,status=ios)
 
+    elseif (trim(tag).eq.'-dep') then
+        i = i + 1
+        call get_command_argument(i,readtqtec_dep_file,status=ios)
+
+
+    ! Output files
     elseif (trim(tag).eq.'-aft') then
         i = i + 1
         call get_command_argument(i,aft_file,status=ios)
@@ -471,7 +578,7 @@ do while (i.le.narg)
         isOutputDefined = .true.
 
 
-    ! Apatite (U-Th)/He variables
+    ! Apatite (U-Th)/He age calculation variables
     elseif (trim(tag).eq.'-ahe:beta') then
         i = i + 1
         call get_command_argument(i,tag,status=ios)
@@ -522,16 +629,17 @@ if (str.ne.'') then
     write(0,*) trim(str)
     write(0,*)
 endif
-write(0,*) 'Usage: minage -temp TQTEC_TEMP_FILE [...options...]'
+write(0,*) 'Usage: minage -temp TQTEC_TEMP_FILE -dep TQTEC_DEP_FILE [...options...]'
 write(0,*)
 write(0,*) '-temp TQTEC_TEMP_FILE  Temperature history output from readtqtec'
+write(0,*) '-dep TQTEC_DEP_FILE    Depth history output from readtqtec'
 write(0,*) '-aft AFT_FILE          Apatite fission track age'
 write(0,*) '-ahe AHE_FILE          Apatite (U-Th)/He age'
 write(0,*)
 write(0,*) 'Apatite (U-Th)/He options:'
 write(0,*) '-ahe:beta BETA         Finite difference implicitness coefficient (0.85)'
 write(0,*) '-ahe:nnodes NNODES     Number of spatial nodes + 2 BC nodes (102)'
-write(0,*) '-ahe:taumax TAUMAX     Maximum dimensionless time to retain He for 1 Ma (0.30)'
+write(0,*) '-ahe:taumax TAUMAX     Maximum dimensionless time to retain He for 1 Ma (0.40)'
 write(0,*) '-ahe:dtma DTMA         Resampled timestep size in Ma (0.10*dt_input)'
 write(0,*) '-ahe:dtfactor FACTOR   Timestep resampling factor (0.10)'
 write(0,*)
