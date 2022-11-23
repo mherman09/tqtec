@@ -163,13 +163,14 @@ end subroutine
 !--------------------------------------------------------------------------------------------------!
 
 
-subroutine calc_fission_track_distribution(temp_celsius, n, dt_ma)
+subroutine calc_fission_track_distribution(temp_celsius, dep_km, n, dt_ma)
 !----
 ! Determine fission track length distribution for a temperature-time history
 !
 ! Inputs:
 !   n:                number of time steps
 !   temp_celsius:     n-point double precision array of temperatures (C)
+!   dep_km:           n-point double precision array of depths, positive up (km)
 !   dt_ma:            time step size (Ma)
 !
 ! Outputs (fission_track module variables)
@@ -186,6 +187,7 @@ implicit none
 ! Arguments
 integer :: n
 double precision :: temp_celsius(n)
+double precision :: dep_km(n)
 double precision :: dt_ma
 
 ! Local variables
@@ -194,6 +196,7 @@ double precision :: len
 double precision :: ratio
 integer :: ibin
 integer :: i, j
+logical :: keepTracks
 
 
 ! Set initial fission track distribution (Green et al., 1986)
@@ -209,6 +212,19 @@ if (.not.allocated(ft_len_final_all)) then
 endif
 do i = 1,ft_ninit
     call calc_fission_track_length(len_init(i), temp_celsius, n, dt_ma, ft_len_final_all(i,:))
+enddo
+
+
+! Remove tracks from time period before mineral actually formed
+keepTracks = .false. ! At start of run, assume mineral has not formed and do not keep tracks
+do i = 1,n           ! For each time...
+    if (.not.keepTracks) then
+        if (dep_km(i).le.0.0d0) then
+            keepTracks = .true.           ! Horizon is below surface => mineral exists, keep tracks from here on
+        else
+            ft_len_final_all(:,i) = 0.0d0 ! Horizon is still above surface => remove tracks corresponding to this time
+        endif
+    endif
 enddo
 
 

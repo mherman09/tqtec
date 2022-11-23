@@ -296,7 +296,8 @@ use minage, only: aft_file, &
                   time_ma, &
                   dt_ma, &
                   ntimes, &
-                  temp_celsius_array
+                  temp_celsius_array, &
+                  dep_km_array
 
 use fission_track, only: calc_fission_track_distribution, &
                          calc_fission_track_ages, &
@@ -327,7 +328,10 @@ open(unit=22,file=aft_file,status='unknown')
 do ihorizon = 1,nhorizons
 
     ! Calculate fission track distribution
-    call calc_fission_track_distribution(temp_celsius_array(ihorizon,:), ntimes, dt_ma)
+    call calc_fission_track_distribution(temp_celsius_array(ihorizon,:), &
+                                         dep_km_array(ihorizon,:), &
+                                         ntimes, &
+                                         dt_ma)
 
     ! Save corrected fission track distribution for this horizon
     if (.not.allocated(horizon_ft_hist_corr)) then
