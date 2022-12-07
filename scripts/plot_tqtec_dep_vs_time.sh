@@ -21,7 +21,7 @@ then
 fi
 shift
 
-# Optional files
+# Optional arguments
 TIMING_FILE=
 BASENAME=dep_vs_time
 while [ "$1" != "" ]

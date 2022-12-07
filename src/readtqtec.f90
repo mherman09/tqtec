@@ -694,7 +694,9 @@ do while (i.le.narg)
             i = i + 1
             call get_command_argument(i,arg)
             k = index(arg,'p')                                                  ! Ignore partial annealing details
-            arg(k:k) = ''
+            if (k.ne.0) then
+                arg(k:k) = ''
+            endif
             read(arg,*,iostat=ios) dp                                           ! Read as double precision value
             if (ios.ne.0) then                                                  ! New or last arg => IOS=0
                 exit                                                            ! End count
@@ -723,8 +725,11 @@ do while (i.le.narg)
         call get_command_argument(i,temp_range_file)                            ! Read output file name
         do                                                                      ! Count number of temp ranges
             i = i + 1
+            if (i.gt.narg) then
+                exit
+            endif
             call get_command_argument(i,arg)
-            k = index(arg,'-')                                              
+            k = index(arg,'-')
             arg(k:k) = ' '
             read(arg,*,iostat=ios) dp                                           ! Read as double precision value
             if (ios.ne.0) then                                                  ! New or last arg => IOS=0
@@ -783,13 +788,13 @@ write(0,*) '                 [-format]'
 write(0,*)
 write(0,*) 'TQTEC_OUTPUT_FILE                   TQTec output file'
 write(0,*)
-write(0,*) '-temp TEMP_FILE                     Temperature over time for each horizon'
-write(0,*) '-dep DEP_FILE                       Depth over time for each horizon'
-write(0,*) '-time TIME_FILE                     Time file'
-write(0,*) '-hf HF_FILE                         Surface heat flow over time'
+write(0,*) '-temp TEMP_FILE                      Temperature over time for each horizon'
+write(0,*) '-dep DEP_FILE                        Depth over time for each horizon'
+write(0,*) '-time TIME_FILE                      Time file'
+write(0,*) '-hf HF_FILE                          Surface heat flow over time'
 write(0,*) '-closure FILE  T1[p] T2[p] T3[p]...  Closure temperature timing for each horizon'
-write(0,*) '-temp:range FILE  T1-T2  T1-T2...  Closure temperature timing for each horizon'
-write(0,*) '-format                             Print file formats and exit'
+write(0,*) '-temp:range FILE  T1-T2  T1-T2...    Closure temperature timing for each horizon'
+write(0,*) '-format                              Print file formats and exit'
 write(0,*)
 if (printFileFormats) then
     write(0,*)
