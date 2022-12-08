@@ -57,7 +57,6 @@ ZMAX=`awk '{if (NR>1) print $0}' $DEPFILE | gmt gmtinfo -C |\
       awk '{print $2-$2%10+10}'`
 ZMIN2=$(awk '{if(!/>/){print $2}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $1}')
 ZMAX2=$(awk '{if(!/>/){print $2}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $2}')
-echo $ZMIN2 $ZMAX2
 
 # Time
 tMIN=`head -1 $DEPFILE | awk '{print $1}'`
@@ -104,7 +103,6 @@ then
 else
     LIMS=$CLOSURE_LIMS
 fi
-echo $LIMS
 
 AGE_TIKS=`echo $LIMS | sed -e "s/-R//" | awk -F"/" '{print $1,$2}' |\
             awk '{
@@ -159,24 +157,24 @@ awk 'BEGIN{p=0}{
 gmt psxy closure.tmp $PROJ $LIMS -W1p -K -O >> $PSFILE
 gmt psxy closure.tmp $PROJ $LIMS -Sc2p -W1p -G155 -K -O >> $PSFILE
 
-# Partial closure temperatures specified in readtqtec
-awk 'BEGIN{p=0}{
-    if ($1~/>/) {
-        if (/Partial/) {
-            p = 1
-            print $0
-        } else {
-            p = 0
-        }
-        getline
-    }
-    if (p==1) {
-        if ($1!="#" && $1>'$dt') {
-            print '$tMIN'+$1,$2
-        }
-    }
-}' $CLOSURE_FILE > closure.tmp
-gmt psxy closure.tmp $PROJ $LIMS -G255/235/230 -K -O >> $PSFILE
+# # Partial closure temperatures specified in readtqtec
+# awk 'BEGIN{p=0}{
+#     if ($1~/>/) {
+#         if (/Partial/) {
+#             p = 1
+#             print $0
+#         } else {
+#             p = 0
+#         }
+#         getline
+#     }
+#     if (p==1) {
+#         if ($1!="#" && $1>'$dt') {
+#             print '$tMIN'+$1,$2
+#         }
+#     }
+# }' $CLOSURE_FILE > closure.tmp
+# gmt psxy closure.tmp $PROJ $LIMS -G255/235/230 -K -O >> $PSFILE
 
 # Curve labels
 awk 'BEGIN{p=0}{

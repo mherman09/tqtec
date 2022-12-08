@@ -177,3 +177,4 @@ echo "Created file $(basename $PSFILE .ps).pdf"
 rm $PSFILE
 rm gmt.*
 rm color_list.tmp
+rm color_list.cpt
