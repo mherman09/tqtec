@@ -535,7 +535,7 @@ if (closure_file.ne.'') then
 
                 if (isClosed) then
                     final_depth = -1.0d0*results(nt_total,2,j)*dz
-                    write(13,*) closure_time,final_depth
+                    write(13,*) closure_time,final_depth,'# previous closure temp'
                 else
                     write(13,'(A,I5,A)') '# horizon',j,' not closed at end of model run'
                 endif
