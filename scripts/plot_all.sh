@@ -327,7 +327,9 @@ then
         WC_GEOTHERM=$(wc geotherm_$T.tmp | awk '{print $1}')
         if [ $WC_GEOTHERM -le 0 ]
         then
-            echo "Could not find a geotherm output at the specified time"
+            echo "    Could not find a geotherm output at the specified time ($T Ma)!"
+            echo "    Geotherms are available at the following times:"
+            grep ">" $GEOTHERM_FILE | awk '{print "    " $4,"Ma"}'
         else
             gmt psxy geotherm_$T.tmp $PROJ $LIMS -K -O >> $PSFILE
             awk '{if(NR>1&&($2<='$ZMIN'||$1>='$TMAX')){print $1,$2,"8,2 LM '$T2' Ma";exit}}' geotherm_$T.tmp |\
@@ -336,22 +338,22 @@ then
     done
 fi
 
-# for i in $(seq 1 $NCOL)
-# do
-#     COLOR=$(sed -ne "${i}p" color_list.tmp | awk '{print $1}')
-#     # Plot curves
-#     paste $TEMPFILE $DEPFILE |\
-#         awk '{if (NR > 1) print $'$i',$('$i'+10)}' |\
-#         gmt psxy $PROJ $LIMS -W1p,$COLOR -K -O >> $PSFILE
-#     # Large dot at 0 Ma
-#     paste $TEMPFILE $DEPFILE |\
-#         awk '{if (NR == 2) print $'$i',$('$i'+10)}' |\
-#         gmt psxy $PROJ $LIMS -Sc0.10i -G$COLOR -W0.5p -K -O >> $PSFILE
-#     # Dots every 10 Ma
-#     paste $TEMPFILE $DEPFILE |\
-#         awk '{if (NR>1 && ((NR-1)*0.01)%10 == 0) print $'$i',$('$i'+10)}' |\
-#         gmt psxy $PROJ $LIMS -Sc0.05i -G$COLOR -W0.5p -K -O >> $PSFILE
-# done
+for i in $(seq 1 $NCOL)
+do
+    COLOR=$(sed -ne "${i}p" color_list.tmp | awk '{print $1}')
+    # Plot curves
+    paste $TEMPFILE $DEPFILE |\
+        awk '{if (NR > 1) print $'$i',$('$i'+10)}' |\
+        gmt psxy $PROJ $LIMS -W1p,$COLOR -K -O >> $PSFILE
+    # Large dot at 0 Ma
+    paste $TEMPFILE $DEPFILE |\
+        awk '{if (NR == 2) print $'$i',$('$i'+10)}' |\
+        gmt psxy $PROJ $LIMS -Sc0.10i -G$COLOR -W0.5p -K -O >> $PSFILE
+    # Dots every 10 Ma
+    paste $TEMPFILE $DEPFILE |\
+        awk '{if (NR>1 && ((NR-1)*0.01)%10 == 0) print $'$i',$('$i'+10)}' |\
+        gmt psxy $PROJ $LIMS -Sc0.05i -G$COLOR -W0.5p -K -O >> $PSFILE
+done
 
 
 # Temperature-depth contours over time
