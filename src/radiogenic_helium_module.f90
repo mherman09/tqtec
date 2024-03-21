@@ -1,14 +1,33 @@
+!==================================================================================================!
+
 module radiogenic_helium
 
-! Atomic masses of helium-producing radioactive elements (IUGS 1977)
-double precision, parameter :: atomic_mass_th232 = 232.0380553d0
-double precision, parameter :: atomic_mass_u235 = 235.043928d0
-double precision, parameter :: atomic_mass_u238 = 238.0507826d0
 
-! Decay constants of helium-producing radioactive elements (IUGS 1977)
-double precision, parameter :: decay_th232 = 4.94750d-5/1.0d6/365.0d0/24.0d0/60.0d0/60.0d0  ! [1/s]
+! Atomic masses of helium-producing radioactive elements (IUGS 1977)
+! double precision, parameter :: atomic_mass_th232 = 232.0380553d0
+! double precision, parameter :: atomic_mass_u235 = 235.043928d0
+! double precision, parameter :: atomic_mass_u238 = 238.0507826d0
+
+! Atomic masses of helium-producing radioactive elements (IUPAC 2021)
+double precision, parameter :: atomic_mass_th232 = 232.03805d0
+double precision, parameter :: atomic_mass_u235 = 235.04393d0
+double precision, parameter :: atomic_mass_u238 = 238.05079d0
+
+
+! Decay constants of helium-producing radioactive elements (Steiger and Jager, 1977)
+double precision, parameter :: decay_th232 = 4.94750d-5/1.0d6/365.0d0/24.0d0/60.0d0/60.0d0  ! [1/s] ! should days/yr = 365.25??
 double precision, parameter :: decay_u235 =  9.84850d-4/1.0d6/365.0d0/24.0d0/60.0d0/60.0d0  ! [1/s]
 double precision, parameter :: decay_u238 =  1.55125d-4/1.0d6/365.0d0/24.0d0/60.0d0/60.0d0  ! [1/s]
+
+
+! References
+! Prohaska, T., Irrgeher, J., Benefield, J., Böhlke, J.K., Chesson, L. A., Coplen, T.B., Ding, T.,
+!     Dunn, P.J.H., Gröning, M., Holden, N.E., Meijer, H.A.J., Moossen, H., Possolo, A.,
+!     Takahashi, Y., Vogl, J., Walczyk, T., Wang, J., Wieser, M.E., Yoneda, S., Zhu, X.-K., Meija,
+!     J. (2022). Standard atomic weights of the elements 2021 (IUPAC Technical Report). Pure and
+!     Applied Chemistry, 94(5), 573–600.
+! Steiger, R.H., Jager, E. (1977). Subcomission on geochronology: Convention on the use of decay
+!     constants in geo- and cosmochronology. Earth and Planetary Science Letters, 36, 359-362.
 
 
 
@@ -61,6 +80,7 @@ mol_conc_u238 = mol_u238/volume
 ! uranium-238 -> lead-206: 8 alpha particles
 p = 8d0*mol_conc_u238*decay_u238 + 7d0*mol_conc_u235*decay_u235 + 6d0*mol_conc_th232*decay_th232
 
+
 return
 end subroutine
 
@@ -103,7 +123,7 @@ double precision :: tmax_ma
 double precision :: t_seconds
 double precision :: dt_seconds
 double precision :: tmax_seconds
-double precision, parameter :: ma2s = 1.0d6*365.0d0*24.0d0*60.0d0*60.0d0
+double precision, parameter :: ma2s = 1.0d6*365.0d0*24.0d0*60.0d0*60.0d0 ! should days/yr = 365.25??
 double precision :: f
 
 
@@ -120,7 +140,7 @@ dt_seconds = dt_ma*ma2s
 ! Solve for age by searching for zeros of helium production function
 do while (t_seconds.le.tmax_seconds)
 
-    ! Age function, f, is monotonically increasing, and its zero is the age
+    ! Age function, f, (a) starts negative, (b) is monotonically increasing, and (c) its zero is the age
     f = 8.0d0*mol_u238*(exp(decay_u238*t_seconds)-1.0d0) + &
         7.0d0*mol_u235*(exp(decay_u235*t_seconds)-1.0d0) + &
         6.0d0*mol_th232*(exp(decay_th232*t_seconds)-1.0d0) - &
@@ -128,18 +148,19 @@ do while (t_seconds.le.tmax_seconds)
 
     ! Crossed zero?
     if (f.gt.0.0d0) then
-        t_seconds = t_seconds - dt_seconds
-        dt_seconds = dt_seconds/10.0d0
-        if (dt_seconds.lt.1d-6*ma2s) then
+        t_seconds = t_seconds - dt_seconds ! Step back to the last age before crossing zero
+        dt_seconds = dt_seconds/10.0d0     ! Decrease the time step size
+        if (dt_seconds.lt.1d-6*ma2s) then  ! Finish when time step is less than 1 year
             exit
         endif
     endif
 
+    ! Advance to next time
     t_seconds = t_seconds + dt_seconds
 
 enddo
 
-! Calculate age
+! Calculate age in Ma
 age = t_seconds/ma2s
 
 return
