@@ -123,7 +123,7 @@ gmt psxy -T -K > $PSFILE
 
 if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
-gmt psbasemap $PROJ $LIMS -Bxa${AGE_TIKS}g${AGE_TIKS}+l"Time Before Present (Ma)" -Bya${HF_TIKS}g${HF_TIKS}+l"Heat Flow (W/m/K)" -BWeS -K -O >> $PSFILE
+gmt psbasemap $PROJ $LIMS -Bxa${AGE_TIKS}g${AGE_TIKS}+l"Time Before Present (Ma)" -Bya${HF_TIKS}g${HF_TIKS}+l"Heat Flow (mW/m@+2@+)" -BWeS -K -O >> $PSFILE
 gmt psbasemap $PROJ $LIMS_MODEL -Bxa${AGE_TIKS}+l"Model Time (Ma)" -BN -K -O >> $PSFILE
 
 # Surface heat flow versus time

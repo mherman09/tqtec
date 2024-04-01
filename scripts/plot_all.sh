@@ -264,7 +264,7 @@ echo 0 0 | gmt psxy $PROJ $LIMS -Y4.5i -K -O >> $PSFILE
 
 if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
-gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya5g5+l"Surface Heat Flow (W/m/K)" -BWeSn -K -O >> $PSFILE
+gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya5g5+l"Surface Heat Flow (mW/m@+2@+)" -BWeSn -K -O >> $PSFILE
 
 awk '{if (NR > 1) print '$tMIN'+(NR-1)*'$dt',$1}' $HFFILE |\
     gmt psxy $PROJ $LIMS -W1p -K -O >> $PSFILE
