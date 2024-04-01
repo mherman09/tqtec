@@ -14,13 +14,17 @@ add_library(tqteclib
 add_executable(tqtec src/tqtec.f90)
 add_dependencies(tqtec tqteclib)
 target_link_libraries(tqtec tqteclib)
+install(TARGETS tqtec DESTINATION bin)
 
 add_executable(readtqtec src/readtqtec.f90)
 add_dependencies(readtqtec tqteclib)
 target_link_libraries(readtqtec tqteclib)
+install(TARGETS readtqtec DESTINATION bin)
 
 add_executable(minage src/minage.f90)
 add_dependencies(minage tqteclib)
 target_link_libraries(minage tqteclib)
+install(TARGETS minage DESTINATION bin)
 
 add_executable(ftage src/ftage.f90)
+install(TARGETS ftage DESTINATION bin)
