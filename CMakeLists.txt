@@ -11,7 +11,7 @@ add_library(tqteclib
             src/radiogenic_helium_module.f90
 )
 
-add_executable(tqtec src/tqtec.f90 src/tqtec_io.f90)
+add_executable(tqtec src/tqtec.f90 src/tqtec_io.f90 src/tqtec_actions.f90)
 add_dependencies(tqtec tqteclib)
 target_link_libraries(tqtec tqteclib)
 install(TARGETS tqtec DESTINATION bin)
