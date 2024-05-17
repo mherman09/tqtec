@@ -336,17 +336,7 @@ k = ithrust(istep)
 thick_init = int(thrust_dat(k,3)/dz)  ! Thickness prior to thrusting, in nodes
 thrust_dep = int(thrust_dat(k,4)/dz)  ! Depth of emplacement, in nodes
 thick_end = int(thrust_dat(k,5)/dz)   ! Final thickness of thrust sheet, in nodes
-if (thick_init.lt.thick_end) then
-    write(0,*) 'thrust_upperplate: final thickness must be less than or equal to initial thickness'
-    call error_exit(1)
-endif
-if (2*thick_init.ge.nnodes) then
-    write(0,*) 'thrust_upperplate: not enough nodes in model to smooth thrust sheet geotherm'
-    write(0,*) 'thrust sheet is',thick_init,' nodes'
-    write(0,*) 'model is       ',nnodes    ,' nodes'
-    write(0,*) 'model must be > 2*thrust'
-    call error_exit(1)
-endif
+
 
 ! C     COPY THE PART OF THE ARRAY THAT WILL BE THRUSTED AND ERODE OFF
 ! C     AMOUNT THAT GETS ERODED DURING THRUST EVENT.
@@ -448,10 +438,7 @@ k = ithrust(istep)
 thick_init = int(thrust_dat(k,3)/dz)  ! Thickness prior to thrusting, in nodes
 thrust_dep = int(thrust_dat(k,4)/dz)  ! Depth of emplacement, in nodes
 thick_end = int(thrust_dat(k,5)/dz)   ! Final thickness of thrust sheet, in nodes
-if (thick_init.lt.thick_end) then
-    write(0,*) 'thrust_lowerplate: final thickness must be less than or equal to initial thickness'
-    call error_exit(1)
-endif
+
 
 dnode = thick_end - thrust_dep
 
@@ -506,3 +493,45 @@ end subroutine
 
 
 
+!--------------------------------------------------------------------------------------------------!
+
+
+subroutine check_actions()
+
+use tqtec
+
+implicit none
+
+
+! Local variables
+integer :: i
+double precision :: thick_init
+double precision :: thrust_dep
+double precision :: thick_end
+
+
+! Check thrust geometry is compatible with model setup
+do i = 1,nthrust
+
+    thick_init = int(thrust_dat(i,3)/dz)  ! Thickness prior to thrusting, in nodes
+    thrust_dep = int(thrust_dat(i,4)/dz)  ! Depth of emplacement, in nodes
+    thick_end = int(thrust_dat(i,5)/dz)   ! Final thickness of thrust sheet, in nodes
+
+    if (thick_init.lt.thick_end) then
+        write(0,*) 'tqtec: final thrust sheet thickness must be <= initial thickness'
+        call error_exit(1)
+    endif
+    if (2*thick_init.ge.nnodes) then
+        write(0,*) 'tqtec: not enough nodes in model to smooth thrust sheet geotherm'
+        write(0,*) 'thrust sheet is',thick_init,' nodes'
+        write(0,*) 'model is       ',nnodes    ,' nodes'
+        write(0,*) 'model must be > 2*thrust'
+        call error_exit(1)
+    endif
+
+enddo
+
+
+
+return
+end subroutine

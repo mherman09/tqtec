@@ -192,6 +192,7 @@ allocate(results(nt_total,2,nhorizons))               ! Temperature and depth at
 
 ! Set up tectonic action timing arrays (formerly: HIST, now in tqtec_actions.f90)
 call setup_action_arrays()
+call check_actions()
 
 
 
