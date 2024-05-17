@@ -25,6 +25,7 @@ use tqtec, only: timing_file, &
                  uplift_dat, &
                  nthrust, &
                  thrust_dat, &
+                 ithrust, &
                  nhfvars, &
                  hfvar, &
                  bas_grad, &
@@ -55,9 +56,26 @@ endif
 if (allocated(bcond)) then
     deallocate(bcond)
 endif
+if (allocated(bas_grad)) then
+    deallocate(bas_grad)
+endif
+if (allocated(ithrust)) then
+    deallocate(ithrust)
+endif
+
+
 allocate(action(nt_total))
 allocate(bcond(nt_total))
 allocate(bas_grad(nt_total))
+if (nthrust.gt.0) then             ! Only allocate ithrust() if we have thrust events
+    allocate(ithrust(nt_total))
+    ithrust = 0
+endif
+
+! Initialize arrays
+action = 0
+bcond = 0.0d0
+bas_grad = 0.0d0
 
 
 ! Burial periods
@@ -102,7 +120,8 @@ enddo
 ! Thrust events
 do i = 1,nthrust
     nstart = int(thrust_dat(i,1)/dt)              ! Starting timestep
-    action(nstart) = i+2
+    action(nstart) = 3
+    ithrust(nstart) = i                           ! Save thrust number
     ! THTYPE(I): thrust_dat(i,2)
 enddo
 
@@ -291,8 +310,8 @@ use tqtec, only: verbosity, &
                  nhorizons, &
                  depth_node, &
                  temp_surf, &
-                 thrust_dat, &
-                 action
+                 ithrust, &
+                 thrust_dat
 
 implicit none
 
@@ -311,7 +330,7 @@ endif
 nsmooth = 10
 
 ! Set the thrust number
-k = action(istep) - 2
+k = ithrust(istep)
 
 ! Save thrust sheet parameters
 thick_init = int(thrust_dat(k,3)/dz)  ! Thickness prior to thrusting, in nodes
@@ -319,7 +338,14 @@ thrust_dep = int(thrust_dat(k,4)/dz)  ! Depth of emplacement, in nodes
 thick_end = int(thrust_dat(k,5)/dz)   ! Final thickness of thrust sheet, in nodes
 if (thick_init.lt.thick_end) then
     write(0,*) 'thrust_upperplate: final thickness must be less than or equal to initial thickness'
-    stop 1
+    call error_exit(1)
+endif
+if (2*thick_init.ge.nnodes) then
+    write(0,*) 'thrust_upperplate: not enough nodes in model to smooth thrust sheet geotherm'
+    write(0,*) 'thrust sheet is',thick_init,' nodes'
+    write(0,*) 'model is       ',nnodes    ,' nodes'
+    write(0,*) 'model must be > 2*thrust'
+    call error_exit(1)
 endif
 
 ! C     COPY THE PART OF THE ARRAY THAT WILL BE THRUSTED AND ERODE OFF
@@ -372,6 +398,7 @@ do ismooth = 1,nsmooth
         temp(i) = (temp(i-2)+temp(i-1)+temp(i)+temp(i+1)+temp(i+2))/5.0d0
     enddo
 enddo
+! NOTE: Smoothing does not take into account a thrust sheet emplaced at depth
 
 return
 end subroutine
@@ -395,8 +422,8 @@ use tqtec, only: verbosity, &
                  nhorizons, &
                  depth_node, &
                  temp_surf, &
-                 thrust_dat, &
-                 action
+                 ithrust, &
+                 thrust_dat
 
 implicit none
 
@@ -415,7 +442,7 @@ endif
 nsmooth = 10
 
 ! Set the thrust number
-k = action(istep) - 2
+k = ithrust(istep)
 
 ! Save thrust sheet parameters
 thick_init = int(thrust_dat(k,3)/dz)  ! Thickness prior to thrusting, in nodes
@@ -423,6 +450,7 @@ thrust_dep = int(thrust_dat(k,4)/dz)  ! Depth of emplacement, in nodes
 thick_end = int(thrust_dat(k,5)/dz)   ! Final thickness of thrust sheet, in nodes
 if (thick_init.lt.thick_end) then
     write(0,*) 'thrust_lowerplate: final thickness must be less than or equal to initial thickness'
+    call error_exit(1)
 endif
 
 dnode = thick_end - thrust_dep

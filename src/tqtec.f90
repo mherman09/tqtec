@@ -88,6 +88,7 @@ double precision, allocatable :: uplift_dat(:,:)  ! uplift_dat(:,1): start (Ma) 
                                                   ! uplift_dat(:,3): thickness (km)                 AN(3)
 
 integer :: nthrust                                ! number of thrusting events                      NTP
+integer, allocatable :: ithrust(:)                ! thrusting event array
 double precision, allocatable :: thrust_dat(:,:)  ! thrust_dat(:,1): start (Ma)                     AN(1)
                                                   ! thrust_dat(:,2): upper (1) or lower (2) plate   AN(2)
                                                   ! thrust_dat(:,3): initial base (km)              AZ(1)
@@ -137,6 +138,7 @@ implicit none
 integer :: i
 integer :: np
 integer :: ierr
+integer :: iplate
 double precision :: cond_surf
 
 
@@ -222,8 +224,10 @@ endif
 istep = 0
 do while (istep.lt.nt_total)
 
+
     ! Update the adjusted temperature at the base of the model
     temp_base_adj = temp(nnodes) + bas_grad(istep+1)
+
 
     ! Calculate the updated temperatures at each node (the main finite difference procedure)
     ! (formerly: MAT and TRID)
@@ -232,6 +236,7 @@ do while (istep.lt.nt_total)
         write(0,*) 'tqtec: error in update_temps() TRID algorithm at step',istep
         stop 1
     endif
+
 
     ! Increment the time step
     istep = istep + 1
@@ -249,6 +254,7 @@ do while (istep.lt.nt_total)
         endif
     endif
 
+
     ! Tectonic actions (in tqtec_actions.f90)
     if (action(istep).eq.1) then
         ! Add material to the top of the model (burial)
@@ -258,17 +264,23 @@ do while (istep.lt.nt_total)
         ! Remove material from the top of the model (erosion)
         call erode() ! (Formerly: EROS)
 
-    elseif (action(istep).ge.3) then
+    elseif (action(istep).eq.3) then
+        ! Get thrust event number
+        iplate = int(thrust_dat(ithrust(istep),2))
+        if (iplate.eq.0) then
+            write(0,*) 'tqtec: error setting thrust number'
+        endif
         ! Duplicate material and insert it (thrusting)
-        if (int(thrust_dat(action(istep)-2,2)).eq.1) then
+        if (iplate.eq.1) then
             ! Track horizons in the hanging wall (upper plate) of the thrust sheet
             call thrust_upperplate() ! (Formerly: THSTUP)
-        elseif (int(thrust_dat(action(istep)-2,2)).eq.2) then
+        elseif (iplate.eq.2) then
             ! Track horizons in the footwall (lower plate) of the thrust sheet
             call thrust_lowerplate() ! (Formerly: THSTLP)
         endif
 
     endif
+
 
     ! Calculate surface heat flow for this time step
     hf(istep) = (temp(10)-temp(5))/(5.0d0*dz)   ! Temperature gradient near surface
