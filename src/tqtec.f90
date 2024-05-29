@@ -22,7 +22,7 @@ module tqtec
 character(len=512) :: input_file                  ! name of input file                              INFIL
 character(len=8) :: input_mode                    ! how to read input parameters (user, file)
 character(len=512) :: output_file                 ! name of output file                             OUTFIL
-character(len=512) :: temp_file                   ! name of temperature file
+character(len=512) :: geotherm_file               ! name of output geotherm file
 character(len=512) :: timing_file                 ! name of tectonic action timing file
 integer :: verbosity                              ! level of information to print during execution
 
@@ -209,8 +209,8 @@ endif
 
 
 ! Print the geotherm to a file (-geotherm flag)
-if (temp_file.ne.'') then
-    open(unit=12,file=temp_file,status='unknown')
+if (geotherm_file.ne.'') then
+    open(unit=12,file=geotherm_file,status='unknown')
     ! Header contains time step, time since start in Ma, and time until end in Ma
     write(12,'(A,I10,2F10.3)') '> #',0,0.0d0,0.0d0-t_total
     do i = 1,nnodes
@@ -306,7 +306,7 @@ do while (istep.lt.nt_total)
     enddo
 
     ! Print geotherm every nt_geotherm_output steps
-    if (temp_file.ne.'') then
+    if (geotherm_file.ne.'') then
         if (mod(istep,nt_geotherm_output).eq.0) then
             ! Header contains time step, time since start in Ma, and time until end in Ma
             write(12,'(A,I10,2F10.3)') '> #',istep,dble(istep)*dt,dble(istep)*dt-t_total
@@ -320,7 +320,7 @@ enddo
 
 
 ! Close the geotherm file if needed
-if (temp_file.ne.'') then
+if (geotherm_file.ne.'') then
     close(12)
 endif
 
@@ -837,7 +837,7 @@ subroutine gcmdln()
 use tqtec, only: input_mode, &
                  input_file, &
                  output_file, &
-                 temp_file, &
+                 geotherm_file, &
                  timing_file, &
                  verbosity, &
                  nnodes, &
@@ -858,7 +858,7 @@ ios = 0
 input_file = ''
 input_mode = 'user'
 output_file = ''
-temp_file = ''
+geotherm_file = ''
 timing_file = ''
 
 
@@ -887,7 +887,7 @@ do while (i.le.narg)
 
     elseif (arg.eq.'-geotherm') then
         i = i + 1
-        call get_command_argument(i,temp_file,status=ios)
+        call get_command_argument(i,geotherm_file,status=ios)
 
     elseif (arg.eq.'-timing') then
         i = i + 1
