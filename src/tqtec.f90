@@ -937,14 +937,17 @@ if (str.ne.'') then
     write(0,*) trim(str)
     write(0,*)
 endif
-write(0,*) 'Usage: tqtec -i|-f INPUT_FILE  [-o OUTPUT_FILE] [-geotherm TEMP_FILE] [-timing TIMING_FILE]'
+write(0,*) 'Usage: tqtec -i|-f INPUT_FILE  [-o OUTPUT_FILE] [-geotherm geotherm_file] [-timing TIMING_FILE]'
 write(0,*)
-write(0,*) '-i[nteractive]        Interactively defined model parameters'
-write(0,*) '-f INPUT_FILE         Input model parameter file'
-write(0,*) '-o OUTPUT_FILE        Output temperature-depth-time file for specified horizons'
-write(0,*) '-geotherm TEMP_FILE   Geotherms (output frequency defined in INPUT_FILE)'
-write(0,*) '-timing Timing_FILE   Timing of tectonic actions'
-write(0,*) '-v VERBOSITY          Verbosity level'
+write(0,*) 'INPUTS'
+write(0,*) '-i[nteractive]           Interactively defined model parameters'
+write(0,*) '-f INPUT_FILE            Input model parameter file'
+write(0,*)
+write(0,*) 'OUTPUTS'
+write(0,*) '-o OUTPUT_FILE           Output temperature-depth-time file for specified horizons'
+write(0,*) '-geotherm GEOTHERM_FILE  Geotherms (output frequency defined in INPUT_FILE)'
+write(0,*) '-timing TIMING_FILE      Timing of tectonic actions'
+write(0,*) '-v VERBOSITY             Verbosity level'
 write(0,*)
 call error_exit(1)
 stop
