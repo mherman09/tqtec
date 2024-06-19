@@ -5,6 +5,171 @@
 !--------------------------------------------------------------------------------------------------!
 
 
+subroutine usage(str)
+!----
+! Print error statement (if provided) and tqtec usage, then exit with error code 1
+!----
+
+implicit none
+
+character(len=*) :: str
+
+! Print error statement if provided as an argument
+if (str.ne.'') then
+    write(0,*) trim(str)
+    write(0,*)
+endif
+
+! Print tqtec usage statement
+write(0,*) 'Usage: tqtec -i|-f INPUT_FILE  [-o OUTPUT_FILE] [-geotherm geotherm_file] [-timing TIMING_FILE]'
+write(0,*)
+write(0,*) 'INPUTS'
+write(0,*) '-i[nteractive]           Interactively defined model parameters'
+write(0,*) '-f INPUT_FILE            Input model parameter file (type "tqtec -fd" for details)'
+write(0,*)
+write(0,*) 'OUTPUTS'
+write(0,*) '-o OUTPUT_FILE           Output temperature-depth-time file for specified horizons'
+write(0,*) '-geotherm GEOTHERM_FILE  Geotherms (output frequency defined in INPUT_FILE)'
+write(0,*) '-timing TIMING_FILE      Timing of tectonic actions'
+write(0,*) '-v VERBOSITY             Verbosity level'
+write(0,*)
+write(0,*) 'MODEL PARAMETERS'
+write(0,*) 'Note: values set in INPUT_FILE new format overrides these command line values'
+write(0,*) 'NNODES=<nnodes>          Number of nodes (default: 5000)'
+write(0,*) 'DZ=<dz>                  Node spacing (default: 0.01 km = 10 m)'
+write(0,*) 'DT=<dt>                  Time step size (default: 0.001 Ma = 1 ka)'
+write(0,*)
+
+! Exit with error code 1
+call error_exit(1)
+
+stop
+end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+subroutine gcmdln()
+!----
+! Parse tqtec command line arguments defining input/output modes and files
+!----
+
+use tqtec, only: input_file, &
+                 input_mode, &
+                 output_file, &
+                 geotherm_file, &
+                 timing_file, &
+                 verbosity, &
+                 nnodes, &
+                 dz, &
+                 dt
+
+implicit none
+
+! Local variables
+character(len=512) arg
+integer :: i, j, ios, narg
+
+
+! Initialize control variables
+ios = 0
+
+
+! Initialize default values
+input_file = ''
+input_mode = 'user'
+output_file = ''
+geotherm_file = ''
+timing_file = ''
+
+
+! Count arguments, then exit with usage statement if no arguments
+narg = command_argument_count()
+if (narg.eq.0) then
+    call usage('')
+endif
+
+
+! Parse command line arguments
+i = 1
+do while (i.le.narg)
+
+    call get_command_argument(i,arg)
+
+
+    if (arg.eq.'-f') then
+        input_mode = 'file'
+        i = i + 1
+        call get_command_argument(i,input_file,status=ios)
+    elseif (arg.eq.'-fd') then
+        call print_input_file_details()
+
+
+    elseif (arg.eq.'-i'.or.arg.eq.'-interactive') then
+        input_mode = 'user'
+
+
+    elseif (arg.eq.'-o') then
+        i = i + 1
+        call get_command_argument(i,output_file,status=ios)
+
+
+    elseif (arg.eq.'-geotherm') then
+        i = i + 1
+        call get_command_argument(i,geotherm_file,status=ios)
+
+
+    elseif (arg.eq.'-timing') then
+        i = i + 1
+        call get_command_argument(i,timing_file,status=ios)
+
+
+    elseif (arg.eq.'-v'.or.arg.eq.'-verbosity') then
+        i = i + 1
+        call get_command_argument(i,arg,status=ios)
+        read(arg,*) verbosity
+
+
+    elseif (arg.eq.'-h') then
+        call usage('')
+
+
+    elseif (arg(1:7).eq.'NNODES=') then
+        j = index(arg,'=')
+        arg(1:j) = ' '
+        read(arg,*,iostat=ios) nnodes
+    elseif (arg(1:3).eq.'DZ=') then
+        j = index(arg,'=')
+        arg(1:j) = ' '
+        read(arg,*,iostat=ios) dz
+    elseif (arg(1:3).eq.'DT=') then
+        j = index(arg,'=')
+        arg(1:j) = ' '
+        read(arg,*,iostat=ios) dt
+
+
+    else
+        call usage('tqtec: no option '//trim(arg))
+    endif
+
+
+    if (ios.ne.0) then
+        call usage('tqtec: error parsing "'//trim(arg)//'" flag arguments')
+    endif
+
+
+    i = i + 1
+
+enddo
+
+return
+end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
 subroutine initialize_defaults()
 !----
 ! Initialize default model parameters
@@ -67,8 +232,8 @@ if (verbosity.ge.2) then
 endif
 
 
-! Interactive mode (like original version of tqtec)
-if (input_mode.eq.'user') then
+
+if (input_mode.eq.'user') then  ! Interactive mode (like original tqtec)
 
     ! Ask if user wants to create a new data file
     write(*,*) 'Do you want to manually create a new data file? (Y/N)'
@@ -83,19 +248,20 @@ if (input_mode.eq.'user') then
         read(*,*) input_file
         call read_input_file()                                  ! Read existing data file
     else
-        write(0,*) 'tqtec: could not understand response "',trim(reply),'"'
-        stop
+        write(0,*) 'tqtec: could not understand response "',trim(reply),'"...'
+        write(0,*) 'Exiting tqtec'
+        call error_exit(1)
     endif
 
-
-! Read directly from input file
-elseif (input_mode.eq.'file') then
+elseif (input_mode.eq.'file') then  ! Input file mode (for batch processing)
 
     call read_input_file()
 
 else
+
     write(0,*) 'tqtec: no input mode named "',trim(input_mode),'"'
-    stop
+    call error_exit(1)
+
 endif
 
 
@@ -365,16 +531,16 @@ logical :: ex
 inquire(file=input_file,exist=ex)
 if (.not.ex) then
     write(0,*) 'tqtec: could not find input file "',trim(input_file),'"'
-    stop
+    call error_exit(1)
 endif
 
 ! Check the input file format
 ! Old version is fixed format
-! New version has VAR=VALUE
+! New version has format "VAR=VALUE"
 open(unit=8,file=input_file,iostat=ios)
 if (ios.ne.0) then
     write(0,*) 'tqtec: something went wrong trying to open input file "',trim(input_file),'"'
-    stop
+    call error_exit(1)
 endif
 read(8,'(A)') input_line
 close(8)
@@ -469,7 +635,7 @@ if (ios.ne.0) then
     write(0,*) 'tqtec: something went wrong trying to read model parameters'
     write(0,*) 'Offending line:'
     write(0,*) trim(input_line)
-    stop 1
+    call error_exit(1)
 endif
 
 
@@ -547,7 +713,7 @@ do i = 1,nthrust
 enddo
 
 
-! Read basal heat flow variations
+! Read surface heat flow variations
 read(8,*,end=1004,iostat=ios) nhfvars
 if (allocated(hfvar)) then
     deallocate(hfvar)
@@ -577,19 +743,19 @@ ios = 0
 ! Errors if unable to read number of specified tectonic events
 1101 if (ios.ne.0) then
     write(0,*) 'tqtec: input file only specified',i-1,' of',nburial,' burial events'
-    stop 1
+    call error_exit(1)
 endif
 1102 if (ios.ne.0) then
     write(0,*) 'tqtec: input file only specified',i-1,' of',nuplift,' uplift events'
-    stop 1
+    call error_exit(1)
 endif
 1103 if (ios.ne.0) then
     write(0,*) 'tqtec: input file only specified',i-1,' of',nthrust,' thrust events'
-    stop 1
+    call error_exit(1)
 endif
 1104 if (ios.ne.0) then
     write(0,*) 'tqtec: input file only specified',i-1,' of',nhfvars,' heat flow variations'
-    stop 1
+    call error_exit(1)
 endif
 
 ! Errors if tectonic events lines are too short
@@ -597,25 +763,25 @@ endif
     write(0,*) 'tqtec: could not parse:'
     write(0,*) '"',trim(input_line),'"'
     write(0,*) 'As: TSTART  TDURATION  BURIAL  CONDUCTIVITY'
-    stop 1
+    call error_exit(1)
 endif
 1202 if (ios.ne.0) then
     write(0,*) 'tqtec: could not parse:'
     write(0,*) '"',trim(input_line),'"'
     write(0,*) 'As: TSTART  TDURATION  UPLIFT'
-    stop 1
+    call error_exit(1)
 endif
 1203 if (ios.ne.0) then
     write(0,*) 'tqtec: could not parse:'
     write(0,*) '"',trim(input_line),'"'
     write(0,*) 'As: TSTART  1/0  BASE  DEPTH  THICKNESS'
-    stop 1
+    call error_exit(1)
 endif
 1204 if (ios.ne.0) then
     write(0,*) 'tqtec: could not parse:'
     write(0,*) '"',trim(input_line),'"'
     write(0,*) 'As: TSTART  HEAT_FLOW'
-    stop 1
+    call error_exit(1)
 endif
 
 
@@ -682,7 +848,7 @@ isMaxDepthDefined = .false.
 open(unit=8,file=input_file,iostat=ios)
 if (ios.ne.0) then
     write(0,*) 'tqtec: something went wrong trying to open input file "',trim(input_file),'"'
-    stop
+    call error_exit(1)
 endif
 
 
@@ -712,7 +878,7 @@ do while (iend.eq.0)
     read(input_line,*,iostat=ios) var, value
     if (ios.ne.0) then
         write(0,*) 'tqtec: something went wrong trying to read "',trim(input_line),'"'
-        stop
+        call error_exit(1)
     endif
 
     ! Big if statement to handle all cases of VAR definitions
@@ -807,7 +973,7 @@ do while (iend.eq.0)
         isMaxDepthDefined = .true.
     else
         write(0,*) 'tqtec: no variable option named "',trim(var),'"'
-        stop
+        call error_exit(1)
     endif
 
     ! Reached the end of the file, exit
@@ -820,34 +986,154 @@ enddo
 ! Check that necessary variables have been defined
 if (t_total.lt.0.0) then
     write(0,*) 'tqtec: t_total has not been defined'
-    stop
+    call error_exit(1)
 endif
 if (temp_surf.lt.0.0) then
     write(0,*) 'tqtec: temp_surf has not been defined'
-    stop
+    call error_exit(1)
 endif
 if (hf_surf.lt.0.0) then
     write(0,*) 'tqtec: hf_surf has not been defined'
-    stop
+    call error_exit(1)
 endif
 if (cond_base.lt.0.0) then
     write(0,*) 'tqtec: cond_base has not been defined'
-    stop
+    call error_exit(1)
 endif
 if (nhorizons.le.0) then
     write(0,*) 'tqtec: no horizons have been defined'
-    stop
+    call error_exit(1)
 endif
 if (temp_surf.lt.0.0) then
     write(0,*) 'tqtec: temp_surf has not been defined'
-    stop
+    call error_exit(1)
 endif
 if (nburial.eq.0.and.nuplift.eq.0.and.nthrust.eq.0.and.nhfvars.eq.0) then
     write(0,*) 'tqtec: no tectonic actions have been defined'
-    stop
+    call error_exit(1)
 endif
 
 close(8)
 
+return
+end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+subroutine print_input_file_details()
+implicit none
+write(0,*) ''
+write(0,*) 'The model parameters for TQTec are input via user interaction or control files.'
+write(0,*) 'Selecting the "-i" option will lead to a series of prompts that allow you to set'
+write(0,*) 'model parameters interactively. Selecting the "-f" option requires an additional'
+write(0,*) 'argument defining the file name. This file must be in one of two formats:'
+write(0,*)
+write(0,*)
+write(0,*) '1. Original TQTec Input File Format'
+write(0,*) 'This format was originally fixed format, although TQTec no longer requires'
+write(0,*) 'parameters to have strict widths, only that they be in the right order:'
+write(0,*)
+write(0,*) ' <input_file>'
+write(0,*) ' <total_time_ma> <geotherm_output_ma> <temp_surf_c> <hf_surf_mW/m2> <cond_base_W/mk> <hp_surf_uW/m3> [<hp_dep_km>]'
+write(0,*) ' <nlayers>'
+write(0,*) ' <layer_1_dep_top_km> <layer_1_thick_km> <layer_1_cond_W/mk>'
+write(0,*) ' :'
+write(0,*) ' <horizon_1_dep_km> <horizon_2_dep_km> ...'
+write(0,*) ' <nburial>'
+write(0,*) ' <burial_1_start_ma> <burial_1_duration_ma> <burial_1_thick_km> <burial_1_cond_W/mk>'
+write(0,*) ' :'
+write(0,*) ' <nuplift>'
+write(0,*) ' <uplift_1_start_ma> <uplift_1_duration_ma> <uplift_1_thick_km>'
+write(0,*) ' :'
+write(0,*) ' <nthrust>'
+write(0,*) '  <thrust_1_start_ma> <upper1_or_lower2> <thrust_1_base_km> <thrust_1_depth_km> <thrust_1_thick_km>'
+write(0,*) ' :'
+write(0,*)
+write(0,*)
+write(0,*) '2. Modern TQTec Input File Format'
+write(0,*) 'This format sets parameters (in any order) using the format PAR=value. Comments can'
+write(0,*) 'be added to the file by starting a line with "#", but note that comments cannot'
+write(0,*) 'be inserted within parameter blocks (e.g., between NUPLIFT= and the definition of'
+write(0,*) 'the uplift events in the following lines)'
+write(0,*)
+write(0,*) 'T_TOTAL=total_time                      [Ma]'
+write(0,*) 'T_GEOTHERM_OUTPUT=time_geotherm_output  [Ma]'
+write(0,*) 'TEMP_SURF=temp_surf                     [Celsius]'
+write(0,*) 'HF_SURF=hf_surf                         [mW/m2]'
+write(0,*) 'COND_BASE=cond_base                     [W/mK]'
+write(0,*) 'HP_SURF=hp_surf                         [uW/m3]'
+write(0,*) 'HP_DEP=hp_dep                           [km]'
+write(0,*) '# Define bottom of model with number of nodes or depth'
+write(0,*) 'NNODES=nnodes'
+write(0,*) 'MAX_DEPTH=max_depth                     [km]'
+write(0,*) '# Node spacing'
+write(0,*) 'DZ=dz                                   [km]'
+write(0,*) 'NLAYERS=nlayers'
+write(0,*) '<layer_1_dep_top_km> <layer_1_thick_km> <layer_1_cond_W/mk>'
+write(0,*) ' :'
+write(0,*) '# Depth horizons to track'
+write(0,*) 'NHORIZONS=nhorizons'
+write(0,*) '<horizon_1_dep_km> <horizon_2_dep_km> ...'
+write(0,*) '# Burial events'
+write(0,*) 'NBURIAL=nburial'
+write(0,*) '<burial_1_start_ma> <burial_1_duration_ma> <burial_1_thick_km> <burial_1_cond_W/mk>'
+write(0,*)  ':'
+write(0,*) '# Uplift/erosion events'
+write(0,*) 'NUPLIFT=nuplift'
+write(0,*) '<uplift_1_start_ma> <uplift_1_duration_ma> <uplift_1_thick_km>'
+write(0,*) ':'
+write(0,*) '# Thrust faulting events (1: track in uhanging wall; 2: track in footwall)'
+write(0,*) 'NTHRUST=nthrust'
+write(0,*) '<thrust_1_start_ma> <upper1_or_lower2> <thrust_1_base_km> <thrust_1_depth_km> <thrust_1_thick_km>'
+write(0,*) ':'
+write(0,*) '# Surface heat flow variations'
+write(0,*) 'NHFVARS=nhfvars'
+write(0,*) '<hf_var_1_start_ma> <hf_var_1_value_mW/m2>'
+write(0,*) ':'
+write(0,*)
+write(0,*)
+write(0,*) 'Example of the same model in the different formats:'
+write(0,*)
+write(0,*) 'Original Format:'
+write(0,*) ' tqtec.in'
+write(0,*) '         50         5    0.0000   30.0000    3.0000    0.0000'
+write(0,*) '          0'
+write(0,*) '   2.0000  4.0000  6.0000  8.0000 10.0000 12.0000 14.0000 16.0000 18.0000 20.0000'
+write(0,*) '          1'
+write(0,*) '    10.0000   10.0000    5.0000    2.0000'
+write(0,*) '          1'
+write(0,*) '    20.0000   20.0000   10.0000'
+write(0,*) '          1'
+write(0,*) '    40.0000         1   25.0000    0.0000  25.0000'
+write(0,*)
+write(0,*)
+write(0,*) 'Modern Format:'
+write(0,*) 'T_TOTAL=50'
+write(0,*) 'T_GEOTHERM_OUTPUT=5'
+write(0,*) 'TEMP_SURF=0'
+write(0,*) 'HF_SURF=30'
+write(0,*) 'COND_BASE=3'
+write(0,*) 'HP_SURF=0'
+write(0,*) 'HP_DEP=0'
+write(0,*) 'NLAYERS=0'
+write(0,*) 'NHORIZONS=10'
+write(0,*) '2 4 6 8 10 12 14 16 18 20'
+write(0,*) 'NBURIAL=1'
+write(0,*) '10 10 5 2'
+write(0,*) 'NUPLIFT=2'
+write(0,*) '20 20 10'
+write(0,*) '45 2 1'
+write(0,*) 'NTHRUST=1'
+write(0,*) '40 1 25 0 25'
+write(0,*) 'NHFVARS=1'
+write(0,*) '15 10'
+
+
+
+
+write(0,*) ''
+call error_exit(1)
 return
 end subroutine

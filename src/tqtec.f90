@@ -23,7 +23,7 @@ character(len=512) :: input_file                  ! name of input file          
 character(len=8) :: input_mode                    ! how to read input parameters (user, file)
 character(len=512) :: output_file                 ! name of output file                             OUTFIL
 character(len=512) :: geotherm_file               ! name of output geotherm file
-character(len=512) :: timing_file                 ! name of tectonic action timing file
+character(len=512) :: timing_file                 ! name of output tectonic action timing file
 integer :: verbosity                              ! level of information to print during execution
 
 
@@ -76,18 +76,21 @@ double precision :: temp_base_adj                 ! temp at node nnodes+1       
 
 
 ! Tectonic events
-integer :: nburial                                ! number of burial events                         NBP
+integer, allocatable :: action(:)                 ! burial (1), erosion (2), thrust (3)             P
+double precision, allocatable :: bcond(:)         ! boundary condition magnitude                    BCOND ! SHOULD PROBABLY CHANGE THIS TO "TCOND" TO REPRESENT TOPMOST CONDUCTIVITY...
+
+integer :: nburial !------------------------------! number of burial events                         NBP
 double precision, allocatable :: burial_dat(:,:)  ! burial_dat(:,1): start (Ma)                     AN(1)
                                                   ! burial_dat(:,2): duration (Ma)                  AN(2)
                                                   ! burial_dat(:,3): thickness (km)                 AN(3)
                                                   ! burial_dat(:,4): conductivity (W/(m*K))         AN(4)
 
-integer :: nuplift                                ! number of uplift/erosion events                 NUEP
+integer :: nuplift !------------------------------! number of uplift/erosion events                 NUEP
 double precision, allocatable :: uplift_dat(:,:)  ! uplift_dat(:,1): start (Ma)                     AN(1)
                                                   ! uplift_dat(:,2): duration (Ma)                  AN(2)
                                                   ! uplift_dat(:,3): thickness (km)                 AN(3)
 
-integer :: nthrust                                ! number of thrusting events                      NTP
+integer :: nthrust !------------------------------! number of thrusting events                      NTP
 integer, allocatable :: ithrust(:)                ! thrusting event array
 double precision, allocatable :: thrust_dat(:,:)  ! thrust_dat(:,1): start (Ma)                     AN(1)
                                                   ! thrust_dat(:,2): upper (1) or lower (2) plate   AN(2)
@@ -95,7 +98,7 @@ double precision, allocatable :: thrust_dat(:,:)  ! thrust_dat(:,1): start (Ma) 
                                                   ! thrust_dat(:,4): initial depth (km)             AZ(2)
                                                   ! thrust_dat(:,5): initial thickness (km)         AZ(3)
 
-integer :: nhfvars                                ! number of surface heat flow variations          QSTEP
+integer :: nhfvars !------------------------------! number of surface heat flow variations          QSTEP
 double precision, allocatable :: hfvar(:,:)       ! (1) start (2) new heat flow                     QVTIME
 double precision, allocatable :: bas_grad(:)      ! temperature gradient at the base of the model   BASGRAD
 integer, allocatable :: action(:)                 ! burial (1), erosion (2), or thrust (>=3)        P
@@ -142,15 +145,14 @@ integer :: iplate
 double precision :: cond_surf
 
 
+
 ! Initialize default model parameters
-call initialize_defaults()
+call initialize_defaults()                       ! tqtec_io.f90
 
 
-! Parse command line
-! Matt's note: this is a totally new subroutine for tqtec (which I use in all my other programs)
-! that allows better control over user input/output. Here, most of the model I/O is done via a
-! control file, so gcmdln() is much simpler, only allowing specification of basic program I/O.
-call gcmdln()
+
+! Parse command line options
+call gcmdln()                                    ! tqtec_io.f90
 
 
 
@@ -160,8 +162,8 @@ endif
 
 
 
-! Read control file or user input from standard input (formerly INPUT, all in tqtec_io.f90)
-call read_model_parameters()
+! Read control file or user input from standard input (formerly INPUT)
+call read_model_parameters()                     ! tqtec_io.f90
 
 
 
@@ -196,7 +198,7 @@ call check_actions()
 
 
 
-! Initialize the temperature, heat flow, and heat production at each node (formerly: INIT)
+! Initialize the temperature, heat flow, and heat production at each node (formerly: INIT) (tqtec.f90)
 call initialize_thermal_parameters()
 
 
@@ -826,129 +828,4 @@ return
 end subroutine
 
 
-!--------------------------------------------------------------------------------------------------!
 
-
-subroutine gcmdln()
-!----
-! Parse tqtec command line arguments defining input/output modes and files
-!----
-
-use tqtec, only: input_mode, &
-                 input_file, &
-                 output_file, &
-                 geotherm_file, &
-                 timing_file, &
-                 verbosity, &
-                 nnodes, &
-                 dz, &
-                 dt
-
-implicit none
-
-! Local variables
-character(len=512) arg
-integer :: i, j, ios, narg
-
-
-! Initialize control variables
-ios = 0
-
-! Initialize defaults
-input_file = ''
-input_mode = 'user'
-output_file = ''
-geotherm_file = ''
-timing_file = ''
-
-
-narg = command_argument_count()
-if (narg.eq.0) then
-    call usage('')
-endif
-
-
-i = 1
-do while (i.le.narg)
-
-    call get_command_argument(i,arg)
-
-    if (arg.eq.'-f') then
-        input_mode = 'file'
-        i = i + 1
-        call get_command_argument(i,input_file,status=ios)
-
-    elseif (arg.eq.'-i'.or.arg.eq.'-interactive') then
-        input_mode = 'user'
-
-    elseif (arg.eq.'-o') then
-        i = i + 1
-        call get_command_argument(i,output_file,status=ios)
-
-    elseif (arg.eq.'-geotherm') then
-        i = i + 1
-        call get_command_argument(i,geotherm_file,status=ios)
-
-    elseif (arg.eq.'-timing') then
-        i = i + 1
-        call get_command_argument(i,timing_file,status=ios)
-
-    elseif (arg.eq.'-v'.or.arg.eq.'-verbosity') then
-        i = i + 1
-        call get_command_argument(i,arg,status=ios)
-        read(arg,*) verbosity
-
-    elseif (arg.eq.'-h') then
-        call usage('')
-
-    elseif (arg(1:7).eq.'NNODES=') then
-        j = index(arg,'=')
-        arg(1:j) = ' '
-        read(arg,*,iostat=ios) nnodes
-    elseif (arg(1:3).eq.'DZ=') then
-        j = index(arg,'=')
-        arg(1:j) = ' '
-        read(arg,*,iostat=ios) dz
-    elseif (arg(1:3).eq.'DT=') then
-        j = index(arg,'=')
-        arg(1:j) = ' '
-        read(arg,*,iostat=ios) dt
-
-    else
-        call usage('tqtec: no option '//trim(arg))
-    endif
-
-    if (ios.ne.0) then
-        call usage('tqtec: error parsing "'//trim(arg)//'" flag arguments')
-    endif
-
-    i = i + 1
-enddo
-
-return
-end subroutine
-
-!--------------------------------------------------------------------------------------------------!
-
-subroutine usage(str)
-implicit none
-character(len=*) :: str
-if (str.ne.'') then
-    write(0,*) trim(str)
-    write(0,*)
-endif
-write(0,*) 'Usage: tqtec -i|-f INPUT_FILE  [-o OUTPUT_FILE] [-geotherm geotherm_file] [-timing TIMING_FILE]'
-write(0,*)
-write(0,*) 'INPUTS'
-write(0,*) '-i[nteractive]           Interactively defined model parameters'
-write(0,*) '-f INPUT_FILE            Input model parameter file'
-write(0,*)
-write(0,*) 'OUTPUTS'
-write(0,*) '-o OUTPUT_FILE           Output temperature-depth-time file for specified horizons'
-write(0,*) '-geotherm GEOTHERM_FILE  Geotherms (output frequency defined in INPUT_FILE)'
-write(0,*) '-timing TIMING_FILE      Timing of tectonic actions'
-write(0,*) '-v VERBOSITY             Verbosity level'
-write(0,*)
-call error_exit(1)
-stop
-end subroutine
