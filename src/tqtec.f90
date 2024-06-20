@@ -77,13 +77,13 @@ double precision :: temp_base_adj                 ! temp at node nnodes+1       
 
 ! Tectonic events
 integer, allocatable :: action(:)                 ! burial (1), erosion (2), thrust (3)             P
-double precision, allocatable :: bcond(:)         ! boundary condition magnitude                    BCOND ! SHOULD PROBABLY CHANGE THIS TO "TCOND" TO REPRESENT TOPMOST CONDUCTIVITY...
 
 integer :: nburial !------------------------------! number of burial events                         NBP
 double precision, allocatable :: burial_dat(:,:)  ! burial_dat(:,1): start (Ma)                     AN(1)
                                                   ! burial_dat(:,2): duration (Ma)                  AN(2)
                                                   ! burial_dat(:,3): thickness (km)                 AN(3)
                                                   ! burial_dat(:,4): conductivity (W/(m*K))         AN(4)
+double precision, allocatable :: burial_cond(:)   ! conductivity of new material at each timestep   BCOND
 
 integer :: nuplift !------------------------------! number of uplift/erosion events                 NUEP
 double precision, allocatable :: uplift_dat(:,:)  ! uplift_dat(:,1): start (Ma)                     AN(1)
@@ -91,7 +91,7 @@ double precision, allocatable :: uplift_dat(:,:)  ! uplift_dat(:,1): start (Ma) 
                                                   ! uplift_dat(:,3): thickness (km)                 AN(3)
 
 integer :: nthrust !------------------------------! number of thrusting events                      NTP
-integer, allocatable :: ithrust(:)                ! thrusting event array
+integer, allocatable :: thrust_step(:)            ! thrusting timestep array
 double precision, allocatable :: thrust_dat(:,:)  ! thrust_dat(:,1): start (Ma)                     AN(1)
                                                   ! thrust_dat(:,2): upper (1) or lower (2) plate   AN(2)
                                                   ! thrust_dat(:,3): initial base (km)              AZ(1)
@@ -271,7 +271,17 @@ do while (istep.lt.nt_total)
 
     elseif (action(istep).eq.3) then
         ! Get thrust event number
-        iplate = int(thrust_dat(ithrust(istep),2))
+        j = 0
+        do i = 1,nthrust
+            if (thrust_step(i).eq.istep) then
+                j = i
+                exit
+            endif
+        enddo
+        if (j.eq.0) then
+            write(0,*) 'tqtec: error setting thrust number'
+        endif
+        iplate = int(thrust_dat(j,2))
         if (iplate.eq.0) then
             write(0,*) 'tqtec: error setting thrust number'
         endif
@@ -322,7 +332,7 @@ do while (istep.lt.nt_total)
         endif
     endif
 
-enddo
+enddo   ! end of timestep loop
 
 
 ! Close the geotherm file if needed
@@ -338,6 +348,9 @@ call output()                                         ! tqtec_io.f90
 if (verbosity.ge.1) then
     write(*,*) 'tqtec: finished'
     write(*,*) 'Results can be found in ',trim(output_file)
+    if (geotherm_file.ne.'') then
+        write(*,*) 'Geotherms every ',t_geotherm_output,' Ma can be found in ',trim(geotherm_file)
+    endif
 endif
 
 end

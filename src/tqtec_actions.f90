@@ -7,7 +7,7 @@
 
 subroutine setup_action_arrays()
 !----
-! Define arrays to control burial, erosion, and thrusting events
+! Define arrays to control tectonic action events
 !----
 
 use tqtec, only: timing_file, &
@@ -25,12 +25,14 @@ use tqtec, only: timing_file, &
                  uplift_dat, &
                  nthrust, &
                  thrust_dat, &
-                 ithrust, &
+                 thrust_step, &
                  nhfvars, &
                  hfvar, &
                  bas_grad, &
                  action, &
-                 bcond
+                 burial_cond, &
+                 nthicken, &
+                 thicken_dat
 
 implicit none
 
@@ -38,10 +40,11 @@ implicit none
 ! Local variables
 integer :: i, ct
 integer :: j, jbeg, jend
-integer :: nstart, nduration, nthick
+integer :: nstart, nduration, nthick, top_crust, crust_thick, bot_crust
 double precision :: rate, arg
 double precision :: hf_surf_var(nt_total)
 integer :: intqt(nhfvars)
+
 
 
 if (verbosity.ge.2) then
@@ -49,33 +52,37 @@ if (verbosity.ge.2) then
 endif
 
 
-! Allocate memory to tectonic action arrays
+! Free memory from tectonic action arrays - these should not be allocated, but ¯\_(ツ)_/¯
 if (allocated(action)) then
     deallocate(action)
 endif
-if (allocated(bcond)) then
-    deallocate(bcond)
+if (allocated(burial_cond)) then
+    deallocate(burial_cond)
 endif
 if (allocated(bas_grad)) then
     deallocate(bas_grad)
 endif
-if (allocated(ithrust)) then
-    deallocate(ithrust)
+if (allocated(thrust_step)) then
+    deallocate(thrust_step)
 endif
 
 
-allocate(action(nt_total))
-allocate(bcond(nt_total))
-allocate(bas_grad(nt_total))
-if (nthrust.gt.0) then             ! Only allocate ithrust() if we have thrust events
-    allocate(ithrust(nt_total))
-    ithrust = 0
+! Allocate memory to tectonic action arrays
+allocate(action(nt_total))         ! action code at each timestep: 0=no action, >0=action
+allocate(burial_cond(nt_total))    ! conductivity of material added to model during burial step
+allocate(bas_grad(nt_total))       ! temperature gradient at the base of the model
+if (nthrust.gt.0) then
+    allocate(thrust_step(nthrust)) ! thrust timestep for each thrust action
 endif
+
 
 ! Initialize arrays
 action = 0
-bcond = 0.0d0
+burial_cond = 0.0d0
 bas_grad = 0.0d0
+if (nthrust.gt.0) then
+    thrust_step = 0
+endif
 
 
 ! Burial periods
@@ -90,8 +97,8 @@ do i = 1,nburial
     do j = jbeg,jend
         arg = dble(j-nstart)*rate - dble(ct)      ! Test for burying at this timestep
         if (arg.ge.1.0d0) then
-            action(j) = 1
-            bcond(j) = burial_dat(i,4)
+            action(j) = 1                         ! Set burial action code = 1
+            burial_cond(j) = burial_dat(i,4)
             ct = ct + 1
         endif
     enddo
@@ -110,7 +117,7 @@ do i = 1,nuplift
     do j = jbeg,jend
         arg = dble(j-nstart)*rate - dble(ct)      ! Test for eroding at this timestep
         if (arg.ge.1.0d0) then
-            action(j) = 2
+            action(j) = 2                         ! Set uplift action code = 2
             ct = ct + 1
         endif
     enddo
@@ -120,8 +127,8 @@ enddo
 ! Thrust events
 do i = 1,nthrust
     nstart = int(thrust_dat(i,1)/dt)              ! Starting timestep
-    action(nstart) = 3
-    ithrust(nstart) = i                           ! Save thrust number
+    action(nstart) = 3                            ! Set thrust action code = 3
+    thrust_step(i) = nstart                       ! Save thrust timestep for each thrust action
     ! THTYPE(I): thrust_dat(i,2)
 enddo
 
@@ -203,7 +210,7 @@ use tqtec, only: verbosity, &
                  nhorizons, &
                  depth_node, &
                  temp_surf, &
-                 bcond
+                 burial_cond
 
 implicit none
 
@@ -227,7 +234,7 @@ enddo
 ! Update the top node temperature, heat production, and conductivity
 temp(1) = temp_surf
 hp(1) = 0.0d0
-conductivity(1) = bcond(istep)
+conductivity(1) = burial_cond(istep)
 
 ! Move all of the tracked horizons down by one node
 do i = 1,nhorizons
@@ -310,7 +317,8 @@ use tqtec, only: verbosity, &
                  nhorizons, &
                  depth_node, &
                  temp_surf, &
-                 ithrust, &
+                 nthrust, &
+                 thrust_step, &
                  thrust_dat
 
 implicit none
@@ -330,7 +338,13 @@ endif
 nsmooth = 10
 
 ! Set the thrust number
-k = ithrust(istep)
+k = 0
+do i = 1,nthrust
+    if (thrust_step(i).eq.istep) then
+        k = i
+        exit
+    endif
+enddo
 
 ! Save thrust sheet parameters
 thick_init = int(thrust_dat(k,3)/dz)  ! Thickness prior to thrusting, in nodes
@@ -412,7 +426,8 @@ use tqtec, only: verbosity, &
                  nhorizons, &
                  depth_node, &
                  temp_surf, &
-                 ithrust, &
+                 nthrust, &
+                 thrust_step, &
                  thrust_dat
 
 implicit none
@@ -432,7 +447,13 @@ endif
 nsmooth = 10
 
 ! Set the thrust number
-k = ithrust(istep)
+k = 0
+do i = 1,nthrust
+    if (thrust_step(i).eq.istep) then
+        k = i
+        exit
+    endif
+enddo
 
 ! Save thrust sheet parameters
 thick_init = int(thrust_dat(k,3)/dz)  ! Thickness prior to thrusting, in nodes
