@@ -924,7 +924,14 @@ do while (iend.eq.0)
             endif
             allocate(burial_dat(nburial,4))
             do i = 1,nburial
-                read(8,*) (burial_dat(i,j),j=1,4)           ! start duration thickness conductivity
+                read(8,'(A)') input_line
+                read(input_line,*,iostat=ios) (burial_dat(i,j),j=1,4) ! start duration thickness conductivity
+                if (ios.ne.0) then
+                    write(0,*) 'tqtec: error reading burial parameters for burial event',i
+                    write(0,*) 'Looking for: start(Ma) duration(Ma) thick(km) cond(W/mK)'
+                    write(0,*) 'Read:        ',trim(input_line)
+                    call error_exit(1)
+                endif
             enddo
         endif
     elseif (var.eq.'NUPLIFT'.or.var.eq.'nuplift') then
