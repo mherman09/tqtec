@@ -147,12 +147,12 @@ double precision :: cond_surf
 
 
 ! Initialize default model parameters
-call initialize_defaults()                       ! tqtec_io.f90
+call initialize_defaults()                            ! tqtec_io.f90
 
 
 
 ! Parse command line options
-call gcmdln()                                    ! tqtec_io.f90
+call gcmdln()                                         ! tqtec_io.f90
 
 
 
@@ -163,7 +163,7 @@ endif
 
 
 ! Read control file or user input from standard input (formerly INPUT)
-call read_model_parameters()                     ! tqtec_io.f90
+call read_model_parameters()                          ! tqtec_io.f90
 
 
 
@@ -174,12 +174,14 @@ if (dz*dble(nnodes).lt.maxval(depth)) then
 endif
 
 
+
 ! Calculate model parameters
 nt_total = int(t_total/dt)                            ! number of time steps
-nt_geotherm_output = int(t_geotherm_output/dt)        ! number of geotherm outputs
+nt_geotherm_output = int(t_geotherm_output/dt)        ! number of time steps between geotherm outputs
 temp_factor = diffusivity*dt/cond_base                ! temperature scaling factor
 r1 = diffusivity*dt/(dz*dz)                           ! finite difference time factor
 dtemp_wo_hp = (hf_surf - hp_surf*hp_dep)*dz/cond_base ! temperature difference without heat production
+
 
 
 ! Allocate arrays
@@ -192,20 +194,20 @@ allocate(results(nt_total,2,nhorizons))               ! Temperature and depth at
 
 
 
-! Set up tectonic action timing arrays (formerly: HIST, now in tqtec_actions.f90)
-call setup_action_arrays()
-call check_actions()
+! Set up tectonic action timing arrays (formerly HIST)
+call setup_action_arrays()                            ! tqtec_actions.f90
+call check_actions()                                  ! tqtec_actions.f90
 
 
 
-! Initialize the temperature, heat flow, and heat production at each node (formerly: INIT) (tqtec.f90)
-call initialize_thermal_parameters()
+! Initialize the temperature, heat flow, and heat production at each node (formerly INIT)
+call initialize_thermal_parameters()                  ! tqtec.f90
 
 
 
 ! Print model parameters to standard output
 if (verbosity.ge.1) then
-    call print_model_parameters()
+    call print_model_parameters()                     ! tqtec_io.f90
 endif
 
 
@@ -232,12 +234,12 @@ do while (istep.lt.nt_total)
     temp_base_adj = temp(nnodes) + bas_grad(istep+1)
 
 
-    ! Calculate the updated temperatures at each node (the main finite difference procedure)
-    ! (formerly: MAT and TRID)
-    call update_temps(nnodes,ierr)
+    ! Calculate the updated temperatures at each node (***THE MAIN FINITE DIFFERENCE PROCEDURE***)
+    ! (formerly MAT and TRID)
+    call update_temps(nnodes,ierr)                    ! tqtec.f90
     if (ierr.ne.0) then
         write(0,*) 'tqtec: error in update_temps() TRID algorithm at step',istep
-        stop 1
+        call error_exit(1)
     endif
 
 
@@ -294,6 +296,7 @@ do while (istep.lt.nt_total)
     cond_surf = cond_surf/5.0d0
     hf(istep) = hf(istep)*cond_surf             ! Heat flow = dT/dz * conductivity
 
+
     ! Save depths and temperatures of tracked horizons in results array
     do i = 1,nhorizons
         np = depth_node(i)
@@ -306,6 +309,7 @@ do while (istep.lt.nt_total)
         endif
         results(istep,2,i) = dble(depth_node(i))
     enddo
+
 
     ! Print geotherm every nt_geotherm_output steps
     if (geotherm_file.ne.'') then
@@ -328,7 +332,7 @@ endif
 
 
 ! Print the results to the defined output file
-call output()
+call output()                                         ! tqtec_io.f90
 
 
 if (verbosity.ge.1) then
@@ -453,95 +457,6 @@ endif
 
 return
 end subroutine
-
-
-!--------------------------------------------------------------------------------------------------!
-
-
-subroutine print_model_parameters()
-!----
-! Print salient model parameters to standard output (useful for debugging)
-!----
-
-use tqtec
-
-implicit none
-
-! Local variables
-integer :: i, j
-
-write(*,*) 'Nodes'
-write(*,2002) 'nnodes:           ',nnodes
-write(*,2001) 'dz:               ',dz,'km'
-write(*,2001) 'max_depth:        ',dble(nnodes)*dz,'km'
-write(*,*) 'Timing'
-write(*,2001) 't_total:          ',t_total,'Ma'
-write(*,2002) 'nt_total:         ',nt_total
-write(*,2001) 't_geotherm_output:',t_geotherm_output,'Ma'
-write(*,2001) 'dt:               ',dt,'Ma'
-write(*,*) 'Boundary conditions'
-write(*,2001) 'temp_surf:        ',temp_surf,'C'
-write(*,2001) 'hf_surf:          ',hf_surf,'mW/m^2'
-write(*,2001) 'hp_surf:          ',hp_surf,'uW/m^3'
-write(*,2001) 'hp_dep:           ',hp_dep,'km'
-write(*,*) 'Material properties'
-write(*,2001) 'cond_base:        ',cond_base,'W/(m*K)'
-write(*,2001) 'diffusivity:      ',diffusivity,'km^2/Ma'
-write(*,2002) 'nlayers:          ',nlayers
-if (nlayers.gt.0) then
-    write(*,'(5X,3A14)') 'top(km)', 'thick(km)', 'cond(W/(m*K))'
-    do i = 1,nlayers
-        write(*,'(5X,3F14.3)') layer(i,1),layer(i,2),layer(i,3)
-    enddo
-endif
-write(*,*) 'Tracked horizons'
-write(*,2002) 'nhorizons:        ',nhorizons
-write(*,'(5X,4A14)') 'depth(km)','depth_node'
-do i = 1,nhorizons
-    write(*,'(5X,F14.3,I14)') depth(i),depth_node(i)
-enddo
-write(*,*) 'Tectonic actions'
-write(*,2002) 'nburial:          ',nburial
-if (nburial.gt.0) then
-    write(*,'(5X,4A14)') 'start(Ma)', 'duration(Ma)', 'thickness(km)', 'cond(W/(m*K))'
-    do i = 1,nburial
-        write(*,'(5X,4F14.3)') (burial_dat(i,j),j=1,4)
-    enddo
-endif
-write(*,2002) 'nuplift:          ',nuplift
-if (nuplift.gt.0) then
-    write(*,'(5X,3A14)') 'start(Ma)', 'duration(Ma)', 'thickness(km)'
-    do i = 1,nuplift
-        write(*,'(5X,3F14.3)') (uplift_dat(i,j),j=1,3)
-    enddo
-endif
-write(*,2002) 'nthrust:          ',nthrust
-if (nthrust.gt.0) then
-    write(*,'(5X,2A14,2X,3A14)') 'start(Ma)', 'upper/lower', 'thick_init(km)', 'dep_base(km)', &
-                                 'thick_end(km)'
-    do i = 1,nthrust
-        write(*,'(5X,2F14.3,2X,3F14.3)') (thrust_dat(i,j),j=1,5)
-    enddo
-endif
-
-2001 format(5X,A18,F10.3,X,A)
-2002 format(5X,A18,I10,X,A)
-
-! write(0,*) 'istep:         ',istep
-! write(0,*) 'r1:            ',r1
-! write(0,*) 'nt_geotherm_output:     ',nt_geotherm_output
-! write(0,*) 'hf_base:       ',hf_base
-! write(0,*) 'dtemp_wo_hp:   ',dtemp_wo_hp
-! write(0,*) 'dtemp_wo_hp:   ',dtemp_wo_hp
-! write(0,*) 'temp_factor:   ',temp_factor
-! write(0,*) 'temp_base_adj:  ',temp_base_adj
-! write(0,*) 'nhfvars:        ',nhfvars
-! write(0,*) 'hfvar(:,1):     ',hfvar(:,1)
-! write(0,*) 'hfvar(:,2):     ',hfvar(:,2)
-
-return
-end subroutine
-
 
 
 
@@ -751,78 +666,6 @@ if (verbosity.ge.3) then
     write(*,*) '    update_temps: finished'
 endif
 
-
-return
-end subroutine
-
-
-
-!--------------------------------------------------------------------------------------------------!
-!--------------------------------------------------------------------------------------------------!
-!-------------------------------------- OUTPUTS ---------------------------------------------------!
-!--------------------------------------------------------------------------------------------------!
-!--------------------------------------------------------------------------------------------------!
-
-
-subroutine output()
-!----
-! Print model results to a file
-!----
-
-use tqtec
-
-implicit none
-
-! Local variables
-integer :: i, j, k
-
-
-! Open the output file
-open(unit=7,file=output_file,status='unknown')
-
-
-! Write the results in the format originally specified by Kevin Furlong
-
-! Output file name
-write(7,*) trim(output_file)
-
-! Model parameters
-write(7,110) dz
-write(7,110) dt
-write(7,110) hp_surf
-write(7,110) hp_dep
-write(7,110) t_total
-write(7,110) diffusivity
-write(7,110) temp_factor
-write(7,'(I10)') nhorizons
-write(7,110) 0.0 ! II(9)
-write(7,110) 0.0 ! II(10)
-110 format(F7.3)
-
-! Heat flow
-do j = 2,nt_total,2
-    write(7,115) hf(j)
-enddo
-115 format(F6.2)
-
-! Temperature and depth of tracked horizons
-do k = 1,nhorizons
-    do j = 1,2
-        do i = 2,nt_total,2
-            write(7,120) results(i,j,k)
-        enddo
-    enddo
-enddo
-120 format(F7.1)
-
-! Horizon depths
-do i = 1,nhorizons
-    write(7,130) depth_node(i)
-enddo
-! 130 format(F11.4)
-130 format(I11)
-
-close(7)
 
 return
 end subroutine
