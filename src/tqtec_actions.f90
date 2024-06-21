@@ -126,7 +126,7 @@ enddo
 
 ! Thrust events
 do i = 1,nthrust
-    nstart = int(thrust_dat(i,1)/dt)              ! Starting timestep
+    nstart = int(thrust_dat(i,1)/dt) + 1          ! Timestep of thrust faulting
     action(nstart) = 3                            ! Set thrust action code = 3
     thrust_step(i) = nstart                       ! Save thrust timestep for each thrust action
     ! THTYPE(I): thrust_dat(i,2)
