@@ -842,6 +842,7 @@ logical :: isMaxDepthDefined
 ios = 0
 iend = 0
 isMaxDepthDefined = .false.
+isTectonicActionDefined = .false.
 
 
 ! Open the input file for reading in free format
@@ -916,6 +917,7 @@ do while (iend.eq.0)
             allocate(depth(nhorizons))
             read(8,*) (depth(i),i=1,nhorizons)              ! depth
         endif
+
     elseif (var.eq.'NBURIAL'.or.var.eq.'nburial') then
         read(value,*) nburial
         if (nburial.gt.0) then
@@ -933,7 +935,9 @@ do while (iend.eq.0)
                     call error_exit(1)
                 endif
             enddo
+            isTectonicActionDefined = .true.
         endif
+
     elseif (var.eq.'NUPLIFT'.or.var.eq.'nuplift') then
         read(value,*) nuplift
         if (nuplift.gt.0) then
@@ -944,7 +948,9 @@ do while (iend.eq.0)
             do i = 1,nuplift
                 read(8,*) (uplift_dat(i,j),j=1,3)           ! start duration thickness
             enddo
+            isTectonicActionDefined = .true.
         endif
+
     elseif (var.eq.'NTHRUST'.or.var.eq.'nthrust') then
         read(value,*) nthrust
         if (nthrust.gt.0) then
@@ -955,7 +961,9 @@ do while (iend.eq.0)
             do i = 1,nthrust
                 read(8,*) (thrust_dat(i,j),j=1,5)           ! start upper/lower thick_init depth thick_final
             enddo
+            isTectonicActionDefined = .true.
         endif
+
     elseif (var.eq.'NHFVARS'.or.var.eq.'nhfvars') then
         read(value,*) nhfvars
         if (nhfvars.gt.0) then
@@ -966,7 +974,9 @@ do while (iend.eq.0)
             do i = 1,nhfvars
                 read(8,*) (hfvar(i,j),j=1,2)                ! start heat_flow
             enddo
+            isTectonicActionDefined = .true.
         endif
+
     elseif (var.eq.'NNODES'.or.var.eq.'nnodes') then
         read(value,*) nnodes
     elseif (var.eq.'DZ'.or.var.eq.'dz') then

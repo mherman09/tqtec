@@ -77,6 +77,7 @@ double precision :: temp_base_adj                 ! temp at node nnodes+1       
 
 ! Tectonic events
 integer, allocatable :: action(:)                 ! burial (1), erosion (2), thrust (3)             P
+logical :: isTectonicActionDefined
 
 integer :: nburial !------------------------------! number of burial events                         NBP
 double precision, allocatable :: burial_dat(:,:)  ! burial_dat(:,1): start (Ma)                     AN(1)
