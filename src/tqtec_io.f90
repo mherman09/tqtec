@@ -572,6 +572,10 @@ subroutine read_input_file_old()
 !    20.0000   20.0000   10.0000
 !          1
 !    40.0000         1   25.0000    0.0000  25.0000
+!          1
+!    45.0000   34.0000
+!          1
+!     5.0000    2.0000    1.0000    0.0000   9.0000
 !----
 
 use tqtec, only: input_file, &
@@ -594,7 +598,9 @@ use tqtec, only: input_file, &
                  nthrust, &
                  thrust_dat, &
                  nhfvars, &
-                 hfvar
+                 hfvar, &
+                 nthicken, &
+                 thicken_dat
 
 implicit none
 
@@ -725,6 +731,23 @@ do i = 1,nhfvars
 enddo
 
 
+! Read thickening events
+read(8,*,end=1005,iostat=ios) nthicken
+if (allocated(thicken_dat)) then
+    deallocate(thicken_dat)
+endif
+allocate(thicken_dat(nthicken,5))
+do i = 1,nthicken
+    if (i.eq.1) then
+        write(0,*) 'tqtec: reading thickening event data'
+        write(0,*) 'For more precise control, use modern mode input'
+        write(0,*) 'Type "tqtec -fd" for details'
+    endif
+    read(8,'(A)',end=1105,iostat=ios) input_line
+    read(input_line,*,end=1205,iostat=ios) (thicken_dat(i,j),j=1,5)
+enddo
+
+
 ! Warning messages if unable to find tectonic events
 1001 if (ios.ne.0) then
     write(0,*) 'tqtec: could not find any burial event settings in input file'
@@ -737,6 +760,9 @@ endif
 endif
 1004 if (ios.ne.0) then
     write(0,*) 'tqtec: could not find any heat flow variation settings in input file'
+endif
+1005 if (ios.ne.0) then
+    write(0,*) 'tqtec: could not find any thickening event settings in input file'
 endif
 ios = 0
 
@@ -755,6 +781,10 @@ endif
 endif
 1104 if (ios.ne.0) then
     write(0,*) 'tqtec: input file only specified',i-1,' of',nhfvars,' heat flow variations'
+    call error_exit(1)
+endif
+1105 if (ios.ne.0) then
+    write(0,*) 'tqtec: input file only specified',i-1,' of',nthicken,' thickening events'
     call error_exit(1)
 endif
 
@@ -781,6 +811,12 @@ endif
     write(0,*) 'tqtec: could not parse:'
     write(0,*) '"',trim(input_line),'"'
     write(0,*) 'As: TSTART  HEAT_FLOW'
+    call error_exit(1)
+endif
+1205 if (ios.ne.0) then
+    write(0,*) 'tqtec: could not parse:'
+    write(0,*) '"',trim(input_line),'"'
+    write(0,*) 'As: TSTART  TDURATION  THICKENING  TOPCRUST  THICK0'
     call error_exit(1)
 endif
 
@@ -820,7 +856,9 @@ subroutine read_input_file_new()
 ! NTHRUST=1
 ! 40 1 25 0 25
 ! NHFVARS=1
-! 15 10
+! 45 34
+! NTHICKEN=1
+! 5 2 1 0 9
 ! NNODES=
 ! DZ=
 ! MAX_DEPTH=
@@ -977,6 +1015,19 @@ do while (iend.eq.0)
             isTectonicActionDefined = .true.
         endif
 
+    elseif (var.eq.'NTHICKEN'.or.var.eq.'nthicken') then
+        read(value,*) nthicken
+        if (nthicken.gt.0) then
+            if (allocated(thicken_dat)) then
+                deallocate(thicken_dat)
+            endif
+            allocate(thicken_dat(nthicken,5))
+            do i = 1,nthicken
+                read(8,*) (thicken_dat(i,j),j=1,5)          ! start duration thickening top thick0
+            enddo
+            isTectonicActionDefined = .true.
+        endif
+
     elseif (var.eq.'NNODES'.or.var.eq.'nnodes') then
         read(value,*) nnodes
     elseif (var.eq.'DZ'.or.var.eq.'dz') then
@@ -1025,7 +1076,7 @@ if (temp_surf.lt.0.0) then
     write(0,*) 'tqtec: temp_surf has not been defined'
     call error_exit(1)
 endif
-if (nburial.eq.0.and.nuplift.eq.0.and.nthrust.eq.0.and.nhfvars.eq.0) then
+if (.not.isTectonicActionDefined) then
     write(0,*) 'tqtec: no tectonic actions have been defined'
     call error_exit(1)
 endif
@@ -1066,6 +1117,9 @@ write(0,*) ' <uplift_1_start_ma> <uplift_1_duration_ma> <uplift_1_thick_km>'
 write(0,*) ' :'
 write(0,*) ' <nthrust>'
 write(0,*) '  <thrust_1_start_ma> <upper1_or_lower2> <thrust_1_base_km> <thrust_1_depth_km> <thrust_1_thick_km>'
+write(0,*) ' :'
+write(0,*) ' <nthicken>'
+write(0,*) '  <thicken_1_start_ma> <thicken_1_duration_ma> <thicken_1_amount_km> <thicken_1_top_km> <thicken_1_thick0_km>'
 write(0,*) ' :'
 write(0,*)
 write(0,*)
@@ -1109,6 +1163,9 @@ write(0,*) '# Surface heat flow variations'
 write(0,*) 'NHFVARS=nhfvars'
 write(0,*) '<hf_var_1_start_ma> <hf_var_1_value_mW/m2>'
 write(0,*) ':'
+write(0,*) ' NTHICKEN=nthicken'
+write(0,*) '  <thicken_1_start_ma> <thicken_1_duration_ma> <thicken_1_amount_km> <thicken_1_top_km> <thicken_1_thick0_km>'
+write(0,*) ' :'
 write(0,*)
 write(0,*)
 write(0,*) 'Example of the same model in the different formats:'
@@ -1124,6 +1181,8 @@ write(0,*) '          1'
 write(0,*) '    20.0000   20.0000   10.0000'
 write(0,*) '          1'
 write(0,*) '    40.0000         1   25.0000    0.0000  25.0000'
+write(0,*) '          1'
+write(0,*) '     5.0000    2.0000    1.0000    0.0000   9.0000'
 write(0,*)
 write(0,*)
 write(0,*) 'Modern Format:'
@@ -1146,6 +1205,8 @@ write(0,*) 'NTHRUST=1'
 write(0,*) '40 1 25 0 25'
 write(0,*) 'NHFVARS=1'
 write(0,*) '15 10'
+write(0,*) 'NTHICKEN=1'
+write(0,*) '5 2 1 0 9   [For additional controls on thickening parameters, see Modern Format above]'
 
 
 

@@ -174,26 +174,15 @@ enddo
 
 
 
-! Crustal thickening/thinning
-! PREVIOUSLY IN CHRIS GUZOFSKI'S SUBROUTINE INPUT
-if (allocated(thicken_dat)) then
-    deallocate(thicken_dat)
-endif
+! *** Bulk Crustal Thickening/Thinning ***
 if (allocated(crust_dat)) then
     deallocate(crust_dat)
 endif
 if (allocated(thicken_start)) then
     deallocate(thicken_start)
 endif
-nthicken = 1
-allocate(thicken_dat(nthicken,5))
 allocate(crust_dat(nthicken,2))
 allocate(thicken_start(nthicken))
-thicken_dat(1,1) = 10.0d0
-thicken_dat(1,2) = 5.0d0
-thicken_dat(1,3) = 1.0d0
-thicken_dat(1,4) = 0.0d0
-thicken_dat(1,5) = 10.0d0
 crust_dat = 0
 thicken_start = 0
 thickenHorizons = .false.
