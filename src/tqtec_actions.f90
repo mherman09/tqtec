@@ -15,6 +15,8 @@ use tqtec, only: timing_file, &
                  nt_total, &
                  dz, &
                  dt, &
+                 nhorizons, &
+                 depth_node, &
                  cond_base, &
                  hf_surf, &
                  hp_surf, &
@@ -35,20 +37,24 @@ use tqtec, only: timing_file, &
                  thicken_dat, &
                  thicken_start, &
                  crust_dat, &
-                 thickenHorizons
+                 thickenHorizons, &
+                 horizon_shift
 
 implicit none
 
 
 ! Local variables
 integer :: i, ct
+integer :: ihor
 integer :: j, jbeg, jend
 integer :: itop
 integer :: ithick
 integer :: nstart, nduration, nthick !, top_crust, crust_thick, bot_crust
 double precision :: rate, arg
 double precision :: hf_surf_var(nt_total)
+double precision :: delta_depth
 integer :: intqt(nhfvars)
+integer, allocatable :: total_shift(:)
 
 
 
@@ -70,27 +76,72 @@ endif
 if (allocated(thrust_step)) then
     deallocate(thrust_step)
 endif
+if (allocated(crust_dat)) then
+    deallocate(crust_dat)
+endif
+if (allocated(thicken_start)) then
+    deallocate(thicken_start)
+endif
+if (allocated(horizon_shift)) then
+    deallocate(horizon_shift)
+endif
+if (allocated(total_shift)) then
+    deallocate(total_shift)
+endif
 
 
 ! Allocate memory to tectonic action arrays
+! DO NOT NEED TO STORE CONDUCTIVITY AND BASE TEMP GRADIENT FOR ALL TIMESTEPS.
+! THOSE ARRAYS ARE MOSTLY ZEROS!
 allocate(action(nt_total))         ! action code at each timestep: 0=no action, >0=action
-allocate(burial_cond(nt_total))    ! conductivity of material added to model during burial step
+
+if (nburial.gt.0) then
+    allocate(burial_cond(nt_total))! conductivity of material added to model during burial step
+endif
+
 allocate(bas_grad(nt_total))       ! temperature gradient at the base of the model
+
 if (nthrust.gt.0) then
-    allocate(thrust_step(nthrust)) ! thrust timestep for each thrust action
+    allocate(thrust_step(nthrust)) ! timestep for each thrust action
+endif
+
+if (nthicken.gt.0) then
+    allocate(crust_dat(nthicken,2))
+    allocate(thicken_start(nthicken))
+endif
+
+if (nthicken.gt.0.and.thickenHorizons) then
+    allocate(horizon_shift(nhorizons,nt_total))
+    allocate(total_shift(nhorizons))
 endif
 
 
 ! Initialize arrays
 action = 0
+
+if (nburial.gt.0) then
 burial_cond = 0.0d0
+endif
+
 bas_grad = 0.0d0
+
 if (nthrust.gt.0) then
     thrust_step = 0
 endif
 
+if (nthicken.gt.0) then
+    crust_dat = 0
+    thicken_start = 0
+endif
 
-! Burial periods
+if (nthicken.gt.0.and.thickenHorizons) then
+    horizon_shift = 0
+    total_shift = 0
+endif
+
+
+
+! *** Burial Events ***
 do i = 1,nburial
     nstart = int(burial_dat(i,1)/dt)              ! Starting timestep
     nduration = int(burial_dat(i,2)/dt)           ! Duration in timesteps
@@ -110,7 +161,8 @@ do i = 1,nburial
 enddo
 
 
-! Uplift/erosion periods
+
+! *** Uplift/Erosion Events ***
 do i = 1,nuplift
     nstart = int(uplift_dat(i,1)/dt)              ! Starting timestep
     nduration = int(uplift_dat(i,2)/dt)           ! Duration in timesteps
@@ -129,7 +181,8 @@ do i = 1,nuplift
 enddo
 
 
-! Thrust events
+
+! *** Thrust Events ***
 do i = 1,nthrust
     nstart = int(thrust_dat(i,1)/dt) + 1          ! Timestep of thrust faulting
     action(nstart) = 3                            ! Set thrust action code = 3
@@ -138,11 +191,9 @@ do i = 1,nthrust
 enddo
 
 
-! Basal heat flow
-! Initialize heat flow over time to be surface heat flow
-hf_surf_var = hf_surf
 
-! Timing of heat flow changes
+! *** Surface Heat Flow Changes ***
+hf_surf_var = hf_surf                             ! Initialize surface heat flow to be initial value
 do i = 1,nhfvars
     intqt(i) = int(hfvar(i,1)/dt)                 ! Timestep of heat flow change
 enddo
@@ -150,14 +201,14 @@ do i = 1,nhfvars-1
     jbeg = intqt(i)
     jend = intqt(i+1)
     do j = jbeg,jend
-        hf_surf_var(j) = hfvar(i,2)
+        hf_surf_var(j) = hfvar(i,2)               ! Update surface heat flow
     enddo
 enddo
 if (nhfvars.ge.1) then
     jbeg = intqt(nhfvars)
     jend = nt_total
     do j = jbeg,jend
-        hf_surf_var(j) = hfvar(nhfvars,2)
+        hf_surf_var(j) = hfvar(nhfvars,2)         ! Update surface heat flow (to end of model)
     enddo
 endif
 
@@ -174,19 +225,7 @@ enddo
 
 
 
-! *** Bulk Crustal Thickening/Thinning ***
-if (allocated(crust_dat)) then
-    deallocate(crust_dat)
-endif
-if (allocated(thicken_start)) then
-    deallocate(thicken_start)
-endif
-allocate(crust_dat(nthicken,2))
-allocate(thicken_start(nthicken))
-crust_dat = 0
-thicken_start = 0
-thickenHorizons = .false.
-! PREVIOUSLY IN CHRIS GUZOFSKI'S SUBROUTINE HIST
+! *** Bulk Crustal Thickening ***
 do i = 1,nthicken
     nstart = int(thicken_dat(i,1)/dt)             ! Starting timestep                           NN(1)
     nduration = int(thicken_dat(i,2)/dt)          ! Duration in timesteps                       NN(2)
@@ -211,7 +250,26 @@ do i = 1,nthicken
             endif
         endif
     enddo
+
+    if (thickenHorizons) then
+        do ihor = 1,nhorizons
+            if (depth_node(ihor).le.crust_dat(i,2)) then
+                delta_depth = (depth_node(ihor)-total_shift(ihor))*dble(nthick)*dz/thicken_dat(i,5)
+                rate = delta_depth/nduration
+                ct = 0
+                do j = jbeg,jend
+                    arg = dble(j-nstart)*rate - dble(ct)
+                    if (arg.gt.1.0d0) then
+                        horizon_shift(ihor,j) = 1
+                        total_shift(ihor) = total_shift(ihor) + 1
+                        ct = ct + 1
+                    endif
+                enddo
+            endif
+        enddo
+    endif
 enddo
+! call error_exit(1)
 
 
 
@@ -578,7 +636,7 @@ use tqtec, only: nnodes, &
 implicit none
 
 ! Local variables
-integer :: i
+! integer :: i
 ! integer :: top_crust
 ! integer :: crust_thick
 ! integer :: bot_crust
@@ -602,9 +660,6 @@ temp(crust_bot+1:nnodes) = temp(crust_bot:nnodes-1)
 
 ! Count the duplicated node at the bottom of the crust
 crust_bot = crust_bot + 1
-write(*,*)
-write(*,*) 'THICKENED'
-write(*,*) 'crust_bot:',crust_bot
 
 
 return

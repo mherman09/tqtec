@@ -115,7 +115,7 @@ integer, allocatable :: crust_dat(:,:)            ! crust_dat(:,1): top of crust
 integer:: crust_top
 integer:: crust_bot
 logical :: thickenHorizons                        ! T: move tracked horizon depths with thickening
-
+integer, allocatable :: horizon_shift(:,:)
 
 ! Results array
 double precision, allocatable :: results(:,:,:)   ! temperature and depth for each timstep/depth    r1
@@ -207,14 +207,14 @@ allocate(results(nt_total,2,nhorizons))               ! Temperature and depth at
 
 
 
+! Initialize the temperature, heat flow, and heat production at each node (formerly INIT)
+call initialize_thermal_parameters()                  ! tqtec.f90
+
+
+
 ! Set up tectonic action timing arrays (formerly HIST)
 call setup_action_arrays()                            ! tqtec_actions.f90
 call check_actions()                                  ! tqtec_actions.f90
-
-
-
-! Initialize the temperature, heat flow, and heat production at each node (formerly INIT)
-call initialize_thermal_parameters()                  ! tqtec.f90
 
 
 
@@ -310,21 +310,14 @@ do while (istep.lt.nt_total)
     elseif (action(istep).eq.4) then
         ! Check to see if this is a new crustal thickening/thinning event
         do i = 1,nthicken
-            ! write(0,*) 
-            ! write(0,*) 'istep:              ',thicken_start(i)
-            ! write(0,*) 'thicken_start:      ',thicken_start(i)
             if (thicken_start(i).eq.istep) then
                 ! Reset initial crustal top and bottom nodes
                 crust_top = crust_dat(i,1)
                 crust_bot = crust_dat(i,2)
-                write(0,*) 'crust_top:',crust_top
-                write(0,*) 'crust_bot:',crust_bot
                 exit
             endif
         enddo
         call thicken()
-        write(*,*) 'temp(crust_bot):',temp(crust_bot)
-        write(*,*) 'temp(nnodes):   ',temp(nnodes)
 
     elseif (action(istep).ne.0) then
         write(0,*) ''
@@ -332,6 +325,12 @@ do while (istep.lt.nt_total)
         write(0,*) 'No action flag number',action(istep)
         call error_exit(1)
 
+    endif
+
+
+    ! Check if horizons should be shifted
+    if (thickenHorizons) then
+        depth_node = depth_node + horizon_shift(:,istep)
     endif
 
 

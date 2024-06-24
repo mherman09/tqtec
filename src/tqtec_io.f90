@@ -1027,6 +1027,15 @@ do while (iend.eq.0)
             enddo
             isTectonicActionDefined = .true.
         endif
+    elseif (var.eq.'THICKENHORIZONS'.or.var.eq.'thickenhorizons'.or.var.eq.'thickenHorizons') then
+        if (value.eq.'0'.or.value.eq.'N'.or.value.eq.'n'.or.value.eq.'F') then
+            thickenHorizons = .false.
+        elseif (value.eq.'1'.or.value.eq.'Y'.or.value.eq.'y'.or.value.eq.'T') then
+            thickenHorizons = .true.
+        else
+            write(0,*) 'tqtec: thickenHorizons must be set to T or F'
+            call error_exit(1)
+        endif
 
     elseif (var.eq.'NNODES'.or.var.eq.'nnodes') then
         read(value,*) nnodes
@@ -1166,6 +1175,7 @@ write(0,*) ':'
 write(0,*) ' NTHICKEN=nthicken'
 write(0,*) '  <thicken_1_start_ma> <thicken_1_duration_ma> <thicken_1_amount_km> <thicken_1_top_km> <thicken_1_thick0_km>'
 write(0,*) ' :'
+write(0,*) 'thickenHorizons=[T|F]'
 write(0,*)
 write(0,*)
 write(0,*) 'Example of the same model in the different formats:'
@@ -1366,11 +1376,14 @@ if (nthicken.gt.0) then
     do i = 1,nthicken
         write(*,'(5X,2F14.3,2X,3F14.3)') (thicken_dat(i,j),j=1,5)
     enddo
+    write(*,*) 'Moving horizons during thickening?',thickenHorizons
 endif
 
 
 2001 format(5X,A18,F10.3,X,A)
 2002 format(5X,A18,I10,X,A)
+
+write(*,*)
 
 ! write(0,*) 'istep:         ',istep
 ! write(0,*) 'r1:            ',r1
