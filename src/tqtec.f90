@@ -101,8 +101,19 @@ double precision, allocatable :: thrust_dat(:,:)  ! thrust_dat(:,1): start (Ma) 
 integer :: nhfvars !------------------------------! number of surface heat flow variations          QSTEP
 double precision, allocatable :: hfvar(:,:)       ! (1) start (2) new heat flow                     QVTIME
 double precision, allocatable :: bas_grad(:)      ! temperature gradient at the base of the model   BASGRAD
-integer, allocatable :: action(:)                 ! burial (1), erosion (2), or thrust (>=3)        P
-double precision, allocatable :: bcond(:)         ! boundary condition magnitude                    BCOND
+
+integer :: nthicken !-----------------------------! number of thickening/thinning events
+double precision, allocatable :: thicken_dat(:,:) ! thicken_dat(:,1): start (Ma)                    AN(1)
+                                                  ! thicken_dat(:,2): duration (Ma)                 AN(2)
+                                                  ! thicken_dat(:,3): total thickening amount (km)  AN(4)
+                                                  ! thicken_dat(:,4): top of crust (km)
+                                                  ! thicken_dat(:,5): initial crustal thickness (km)
+integer, allocatable :: thicken_start(:)          ! thicken_start(:): timestep thickening event starts
+integer, allocatable :: crust_dat(:,:)            ! crust_dat(:,1): top of crust (node)
+                                                  ! crust_dat(:,2): bottom of crust (node)
+integer:: crust_top
+integer:: crust_bot
+logical :: thickenHorizons                        ! T: move tracked horizon depths with thickening
 
 
 ! Results array
@@ -139,6 +150,7 @@ implicit none
 
 ! Local variables
 integer :: i
+integer :: j
 integer :: np
 integer :: ierr
 integer :: iplate
@@ -293,6 +305,31 @@ do while (istep.lt.nt_total)
             ! Track horizons in the footwall (lower plate) of the thrust sheet
             call thrust_lowerplate() ! (Formerly: THSTLP)
         endif
+
+    elseif (action(istep).eq.4) then
+        ! Check to see if this is a new crustal thickening/thinning event
+        do i = 1,nthicken
+            ! write(0,*) 
+            ! write(0,*) 'istep:              ',thicken_start(i)
+            ! write(0,*) 'thicken_start:      ',thicken_start(i)
+            if (thicken_start(i).eq.istep) then
+                ! Reset initial crustal top and bottom nodes
+                crust_top = crust_dat(i,1)
+                crust_bot = crust_dat(i,2)
+                write(0,*) 'crust_top:',crust_top
+                write(0,*) 'crust_bot:',crust_bot
+                exit
+            endif
+        enddo
+        call thicken()
+        write(*,*) 'temp(crust_bot):',temp(crust_bot)
+        write(*,*) 'temp(nnodes):   ',temp(nnodes)
+
+    elseif (action(istep).ne.0) then
+        write(0,*) ''
+        write(0,*) 'tqtec: error defining action flag'
+        write(0,*) 'No action flag number',action(istep)
+        call error_exit(1)
 
     endif
 

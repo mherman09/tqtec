@@ -7,7 +7,7 @@
 
 subroutine setup_action_arrays()
 !----
-! Define arrays to control tectonic action events
+! Construct arrays to control tectonic action events
 !----
 
 use tqtec, only: timing_file, &
@@ -32,7 +32,10 @@ use tqtec, only: timing_file, &
                  action, &
                  burial_cond, &
                  nthicken, &
-                 thicken_dat
+                 thicken_dat, &
+                 thicken_start, &
+                 crust_dat, &
+                 thickenHorizons
 
 implicit none
 
@@ -40,7 +43,9 @@ implicit none
 ! Local variables
 integer :: i, ct
 integer :: j, jbeg, jend
-integer :: nstart, nduration, nthick, top_crust, crust_thick, bot_crust
+integer :: itop
+integer :: ithick
+integer :: nstart, nduration, nthick !, top_crust, crust_thick, bot_crust
 double precision :: rate, arg
 double precision :: hf_surf_var(nt_total)
 integer :: intqt(nhfvars)
@@ -169,6 +174,58 @@ enddo
 
 
 
+! Crustal thickening/thinning
+! PREVIOUSLY IN CHRIS GUZOFSKI'S SUBROUTINE INPUT
+if (allocated(thicken_dat)) then
+    deallocate(thicken_dat)
+endif
+if (allocated(crust_dat)) then
+    deallocate(crust_dat)
+endif
+if (allocated(thicken_start)) then
+    deallocate(thicken_start)
+endif
+nthicken = 1
+allocate(thicken_dat(nthicken,5))
+allocate(crust_dat(nthicken,2))
+allocate(thicken_start(nthicken))
+thicken_dat(1,1) = 10.0d0
+thicken_dat(1,2) = 5.0d0
+thicken_dat(1,3) = 1.0d0
+thicken_dat(1,4) = 0.0d0
+thicken_dat(1,5) = 10.0d0
+crust_dat = 0
+thicken_start = 0
+thickenHorizons = .false.
+! PREVIOUSLY IN CHRIS GUZOFSKI'S SUBROUTINE HIST
+do i = 1,nthicken
+    nstart = int(thicken_dat(i,1)/dt)             ! Starting timestep                           NN(1)
+    nduration = int(thicken_dat(i,2)/dt)          ! Duration in timesteps                       NN(2)
+    nthick = int(thicken_dat(i,3)/dz)             ! Amount to thicken crust in nodes            NN(4)
+    rate = dble(nthick)/dble(nduration)           ! Rate in nodes/timestep
+    jbeg = nstart + 1                             ! First timestep of thickening
+    jend = nstart + nduration                     ! Last timestep of thickening
+    ct = 0                                        ! Initialize counter for thickening steps
+    do j = jbeg,jend
+        arg = dble(j-nstart)*rate - dble(ct)      ! Test for eroding at this timestep
+        if (arg.ge.1.0d0) then
+            action(j) = 4                         ! Set thickening action code = 4
+            ct = ct + 1
+
+            ! Save some parameters at beginning of thickening event for bookkeeping
+            if (thicken_start(i).eq.0) then
+                thicken_start(i) = j                  ! Timestep to start thickening event
+                itop = int(thicken_dat(i,4)/dz) + 1   ! Top node of crust
+                ithick = int(thicken_dat(i,5)/dz)     ! Initial crustal thickness in nodes
+                crust_dat(i,1) = itop                 ! Initial bottom node of crust
+                crust_dat(i,2) = itop + ithick        ! Initial bottom node of crust
+            endif
+        endif
+    enddo
+enddo
+
+
+
 ! Print timing of tectonic actions to file
 if (timing_file.ne.'') then
     open(unit=13,file=timing_file,status='unknown')
@@ -181,13 +238,18 @@ if (timing_file.ne.'') then
     do i = 1,nthrust
         write(13,*) 'thrust',i,thrust_dat(i,1)
     enddo
+    do i = 1,nthicken
+        write(13,*) 'thicken',i,thicken_dat(i,1),thicken_dat(i,1)+thicken_dat(i,2)
+    enddo
     close(13)
 endif
+
 
 
 if (verbosity.ge.2) then
     write(*,*) 'setup_action_arrays: finished'
 endif
+
 
 return
 end subroutine
@@ -512,6 +574,52 @@ enddo
 return
 end subroutine
 
+
+
+!--------------------------------------------------------------------------------------------------!
+
+subroutine thicken()
+
+use tqtec, only: nnodes, &
+                 conductivity, &
+                 temp, &
+                 crust_top, &
+                 crust_bot
+
+implicit none
+
+! Local variables
+integer :: i
+! integer :: top_crust
+! integer :: crust_thick
+! integer :: bot_crust
+
+
+! Duplicate conductivity at new crust node and shift conductivities down one node
+conductivity(crust_bot+1:nnodes) = conductivity(crust_bot:nnodes-1)
+
+! Duplicate temperature at new crust node and shift temperatures down one node
+temp(crust_bot+1:nnodes) = temp(crust_bot:nnodes-1)
+
+
+! ! Redistribute temperatures linearly throughout thickened crust
+! crust_thick = crust_bot - crust_top
+! ratio = dble(crust_thick) / dble(crust_thick+1)
+! do i = 0,crust_thick+1
+!     j = i + crust_top
+!     temp(j) = temp(j) * (1 + (ratio-1)/(crust_thick+1)*i)
+! enddo
+
+
+! Count the duplicated node at the bottom of the crust
+crust_bot = crust_bot + 1
+write(*,*)
+write(*,*) 'THICKENED'
+write(*,*) 'crust_bot:',crust_bot
+
+
+return
+end subroutine
 
 
 !--------------------------------------------------------------------------------------------------!
