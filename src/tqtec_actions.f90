@@ -636,10 +636,10 @@ use tqtec, only: nnodes, &
 implicit none
 
 ! Local variables
-! integer :: i
-! integer :: top_crust
-! integer :: crust_thick
-! integer :: bot_crust
+integer :: i
+integer :: j
+integer :: crust_thick
+double precision :: ratio
 
 
 ! Duplicate conductivity at new crust node and shift conductivities down one node
@@ -649,13 +649,13 @@ conductivity(crust_bot+1:nnodes) = conductivity(crust_bot:nnodes-1)
 temp(crust_bot+1:nnodes) = temp(crust_bot:nnodes-1)
 
 
-! ! Redistribute temperatures linearly throughout thickened crust
-! crust_thick = crust_bot - crust_top
-! ratio = dble(crust_thick) / dble(crust_thick+1)
-! do i = 0,crust_thick+1
-!     j = i + crust_top
-!     temp(j) = temp(j) * (1 + (ratio-1)/(crust_thick+1)*i)
-! enddo
+! Redistribute temperatures throughout thickened crust
+crust_thick = crust_bot - crust_top
+ratio = dble(crust_thick)/dble(crust_thick+1)
+do i = 0,crust_thick
+    j = i + crust_top
+    temp(j) = temp(j) * (1 + dble(i)*(ratio-1.0d0)/dble(crust_thick+1))
+enddo
 
 
 ! Count the duplicated node at the bottom of the crust
