@@ -126,7 +126,7 @@ function plot_tectonic_timing () {
     YMIN=$(echo $LIMS | sed -e "s/-R//" | awk -F/ '{print $3}')
     YMAX=$(echo $LIMS | sed -e "s/-R//" | awk -F/ '{print $4}')
     awk 'BEGIN{print ">"}{
-        if ($1=="burial" || $1=="uplift") {
+        if ($1=="burial" || $1=="uplift" || $1=="thicken") {
             print ">"
             print '$tMIN'+$3,'$YMIN'
             print '$tMIN'+$4,'$YMIN'
