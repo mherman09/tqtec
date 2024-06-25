@@ -296,6 +296,13 @@ awk '{
 }' $HFFILE |
     awk '{print '$tMIN'+(NR-1)*'$dt',$1}' |\
     gmt psxy $PROJ $LIMS -W1p,green -K -O >> $PSFILE
+echo $LIMS | sed -e "s/-R//" |\
+    awk -F/ '{print $2,$3}' |\
+    gmt psxy $PROJ $LIMS -S-0.5i -W1p,green -D-1.5i/0.3i -K -O >> $PSFILE
+echo $LIMS | sed -e "s/-R//" |\
+    awk -F/ '{print $2,$3,"'$NPTAVG'-pt avg"}' |\
+    gmt pstext $PROJ $LIMS -F+f12,0+jLM -D-1.20i/0.3i -K -O >> $PSFILE
+
 
 
 
