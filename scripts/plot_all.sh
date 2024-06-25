@@ -235,7 +235,16 @@ echo 0 0 | gmt psxy $PROJ $LIMS -Y4.5i -K -O >> $PSFILE
 
 if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
-gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time Before Present (Ma)" -Bya20g20+l"Temperature (\260C)" -BWeS -K -O >> $PSFILE
+TEMP_TIKS=`echo $LIMS | sed -e "s/-R//" |\
+      awk -F/ '{
+          dtemp = $2-$1
+          if (dtemp<200) {
+              print 20
+          } else {
+              print 50
+          }
+      }'`
+gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time Before Present (Ma)" -Bya${TEMP_TIKS}g${TEMP_TIKS}+l"Temperature (\260C)" -BWeS -K -O >> $PSFILE
 gmt psbasemap $PROJ $LIMS_MODEL -Bxa10+l"Model Time (Ma)" -BN -K -O >> $PSFILE
 
 for COL in $(seq 1 $NCOL)
@@ -313,7 +322,7 @@ PROJ="-JX5i/5i"
 
 echo 0 0 | gmt psxy $PROJ $LIMS -X5.5i -Y-4i -K -O >> $PSFILE
 
-gmt psbasemap $PROJ $LIMS -Bxa20g20+l"Temperature (\260C)" -Bya10g5+l"Depth (km)" -BWeSn -K -O >> $PSFILE
+gmt psbasemap $PROJ $LIMS -Bxa${TEMP_TIKS}g${TEMP_TIKS}+l"Temperature (\260C)" -Bya10g5+l"Depth (km)" -BWeSn -K -O >> $PSFILE
 
 if [ "$GEOTHERM_FILE" != "" ]
 then
