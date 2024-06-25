@@ -1,5 +1,7 @@
 #!/bin/bash
 
+
+
 #####
 #	PARSE COMMAND LINE
 #####
@@ -11,6 +13,8 @@ function usage () {
     echo "-o BASENAME                 Basename for output file (default: dep_vs_time)" 1>&2
     exit 1
 }
+
+
 
 # Required depth vs. time file
 DEPFILE="$1"
@@ -55,7 +59,7 @@ function plot_tectonic_timing () {
     YMIN=$(echo $LIMS | sed -e "s/-R//" | awk -F/ '{print $3}')
     YMAX=$(echo $LIMS | sed -e "s/-R//" | awk -F/ '{print $4}')
     awk 'BEGIN{print ">"}{
-        if ($1=="burial" || $1=="uplift") {
+        if ($1=="burial" || $1=="uplift" || $1=="thicken") {
             print ">"
             print '$tMIN'+$3,'$YMIN'
             print '$tMIN'+$4,'$YMIN'
@@ -177,7 +181,7 @@ gmt psxy $PROJ $LIMS -W1p,105,12_4:0 -K -O >> $PSFILE << EOF
 EOF
 
 # Date and time
-echo 12,0 LB $(date) | gmt pstext $PROJ $LIMS -F+f+j+cBL -D0.05i -K -O >> $PSFILE
+echo 12,2 LB $(date) | gmt pstext $PROJ $LIMS -F+f+j+cBL -D0.05i -K -O >> $PSFILE
 
 # Finalize
 gmt psxy -T -O >> $PSFILE
