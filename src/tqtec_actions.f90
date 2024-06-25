@@ -1,6 +1,6 @@
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!----------------------------------- TECTONIC ACTIONS ---------------------------------------------!
+!--------------------------------- PREPARE ACTION ARRAYS ------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
@@ -46,6 +46,7 @@ implicit none
 ! Local variables
 integer :: i, ct
 integer :: ihor
+integer :: ndep
 integer :: j, jbeg, jend
 integer :: itop
 integer :: ithick
@@ -55,6 +56,7 @@ double precision :: hf_surf_var(nt_total)
 double precision :: delta_depth
 integer :: intqt(nhfvars)
 integer, allocatable :: total_shift(:)
+double precision :: thickening_ratio
 
 
 
@@ -63,84 +65,28 @@ if (verbosity.ge.2) then
 endif
 
 
-! Free memory from tectonic action arrays - these should not be allocated, but ¯\_(ツ)_/¯
-if (allocated(action)) then
-    deallocate(action)
-endif
-if (allocated(burial_cond)) then
-    deallocate(burial_cond)
-endif
-if (allocated(bas_grad)) then
-    deallocate(bas_grad)
-endif
-if (allocated(thrust_step)) then
-    deallocate(thrust_step)
-endif
-if (allocated(crust_dat)) then
-    deallocate(crust_dat)
-endif
-if (allocated(thicken_start)) then
-    deallocate(thicken_start)
-endif
-if (allocated(horizon_shift)) then
-    deallocate(horizon_shift)
-endif
+
+! Initialize global tectonic action arrays
+call init_action_arrays()
+
+
+
+! Initialize local tectonic action arrays
 if (allocated(total_shift)) then
     deallocate(total_shift)
 endif
-
-
-! Allocate memory to tectonic action arrays
-! DO NOT NEED TO STORE CONDUCTIVITY AND BASE TEMP GRADIENT FOR ALL TIMESTEPS.
-! THOSE ARRAYS ARE MOSTLY ZEROS!
-allocate(action(nt_total))         ! action code at each timestep: 0=no action, >0=action
-
-if (nburial.gt.0) then
-    allocate(burial_cond(nt_total))! conductivity of material added to model during burial step
-endif
-
-allocate(bas_grad(nt_total))       ! temperature gradient at the base of the model
-
-if (nthrust.gt.0) then
-    allocate(thrust_step(nthrust)) ! timestep for each thrust action
-endif
-
-if (nthicken.gt.0) then
-    allocate(crust_dat(nthicken,2))
-    allocate(thicken_start(nthicken))
-endif
-
 if (nthicken.gt.0.and.thickenHorizons) then
-    allocate(horizon_shift(nhorizons,nt_total))
     allocate(total_shift(nhorizons))
 endif
-
-
-! Initialize arrays
-action = 0
-
-if (nburial.gt.0) then
-burial_cond = 0.0d0
-endif
-
-bas_grad = 0.0d0
-
-if (nthrust.gt.0) then
-    thrust_step = 0
-endif
-
-if (nthicken.gt.0) then
-    crust_dat = 0
-    thicken_start = 0
-endif
-
 if (nthicken.gt.0.and.thickenHorizons) then
-    horizon_shift = 0
     total_shift = 0
 endif
 
 
 
+
+
+!**************************************************************************************************!
 ! *** Burial Events ***
 do i = 1,nburial
     nstart = int(burial_dat(i,1)/dt)              ! Starting timestep
@@ -149,7 +95,7 @@ do i = 1,nburial
     rate = dble(nthick)/dble(nduration)           ! Rate in nodes/timestep
     jbeg = nstart + 1                             ! First timestep
     jend = nstart + nduration                     ! Last timestep
-    ct = 0                                        ! Initialize counter for number of burial increments
+    ct = 0                                        ! Initialize counter for burial increments
     do j = jbeg,jend
         arg = dble(j-nstart)*rate - dble(ct)      ! Test for burying at this timestep
         if (arg.ge.1.0d0) then
@@ -162,7 +108,8 @@ enddo
 
 
 
-! *** Uplift/Erosion Events ***
+!**************************************************************************************************!
+! *** Uplift/Erosion Events ***********************************************************************!
 do i = 1,nuplift
     nstart = int(uplift_dat(i,1)/dt)              ! Starting timestep
     nduration = int(uplift_dat(i,2)/dt)           ! Duration in timesteps
@@ -170,7 +117,7 @@ do i = 1,nuplift
     rate = dble(nthick)/dble(nduration)           ! Rate in nodes/timestep
     jbeg = nstart + 1                             ! First timestep
     jend = nstart + nduration                     ! Last timestep
-    ct = 0                                        ! Initialize counter for number of uplift increments
+    ct = 0                                        ! Initialize counter for uplift increments
     do j = jbeg,jend
         arg = dble(j-nstart)*rate - dble(ct)      ! Test for eroding at this timestep
         if (arg.ge.1.0d0) then
@@ -182,7 +129,8 @@ enddo
 
 
 
-! *** Thrust Events ***
+!**************************************************************************************************!
+! *** Thrust Events *******************************************************************************!
 do i = 1,nthrust
     nstart = int(thrust_dat(i,1)/dt) + 1          ! Timestep of thrust faulting
     action(nstart) = 3                            ! Set thrust action code = 3
@@ -191,9 +139,9 @@ do i = 1,nthrust
 enddo
 
 
-
-! *** Surface Heat Flow Changes ***
-hf_surf_var = hf_surf                             ! Initialize surface heat flow to be initial value
+!**************************************************************************************************!
+! *** Surface Heat Flow Changes *******************************************************************!
+hf_surf_var = hf_surf                             ! Initialize surface heat flow at initial value
 do i = 1,nhfvars
     intqt(i) = int(hfvar(i,1)/dt)                 ! Timestep of heat flow change
 enddo
@@ -215,7 +163,7 @@ endif
 ! Check that heat production is never greater than surface heat flow
 if (hp_surf*hp_dep.ge.maxval(hf_surf_var)) then
     write(0,*) 'tqtec: total heat production ',hp_surf*hp_dep,' is greater than surface heat flow'
-    stop 1
+    call error_exit(1)
 endif
 
 ! Propagate surface heat flow down to base and calculate temperature gradient
@@ -225,17 +173,19 @@ enddo
 
 
 
-! *** Bulk Crustal Thickening ***
+
+!**************************************************************************************************!
+! *** Bulk Crustal Thickening *********************************************************************!
 do i = 1,nthicken
-    nstart = int(thicken_dat(i,1)/dt)             ! Starting timestep                           NN(1)
-    nduration = int(thicken_dat(i,2)/dt)          ! Duration in timesteps                       NN(2)
-    nthick = int(thicken_dat(i,3)/dz)             ! Amount to thicken crust in nodes            NN(4)
+    nstart = int(thicken_dat(i,1)/dt)             ! Starting timestep                          NN(1)
+    nduration = int(thicken_dat(i,2)/dt)          ! Duration in timesteps                      NN(2)
+    nthick = int(thicken_dat(i,3)/dz)             ! Amount to thicken crust in nodes           NN(4)
     rate = dble(nthick)/dble(nduration)           ! Rate in nodes/timestep
     jbeg = nstart + 1                             ! First timestep of thickening
     jend = nstart + nduration                     ! Last timestep of thickening
     ct = 0                                        ! Initialize counter for thickening steps
     do j = jbeg,jend
-        arg = dble(j-nstart)*rate - dble(ct)      ! Test for eroding at this timestep
+        arg = dble(j-nstart)*rate - dble(ct)      ! Test for thickening at this timestep
         if (arg.ge.1.0d0) then
             action(j) = 4                         ! Set thickening action code = 4
             ct = ct + 1
@@ -245,31 +195,41 @@ do i = 1,nthicken
                 thicken_start(i) = j                  ! Timestep to start thickening event
                 itop = int(thicken_dat(i,4)/dz) + 1   ! Top node of crust
                 ithick = int(thicken_dat(i,5)/dz)     ! Initial crustal thickness in nodes
-                crust_dat(i,1) = itop                 ! Initial bottom node of crust
-                crust_dat(i,2) = itop + ithick        ! Initial bottom node of crust
+                crust_dat(i,1) = itop                 ! Save top node of crust
+                crust_dat(i,2) = itop + ithick        ! Save initial bottom node of crust
             endif
         endif
     enddo
 
+    ! Check whether tracked horizons should move during thickening
     if (thickenHorizons) then
         do ihor = 1,nhorizons
-            if (depth_node(ihor).le.crust_dat(i,2)) then
-                delta_depth = (depth_node(ihor)-total_shift(ihor))*dble(nthick)*dz/thicken_dat(i,5)
-                rate = delta_depth/nduration
-                ct = 0
-                do j = jbeg,jend
-                    arg = dble(j-nstart)*rate - dble(ct)
-                    if (arg.gt.1.0d0) then
-                        horizon_shift(ihor,j) = 1
-                        total_shift(ihor) = total_shift(ihor) + 1
-                        ct = ct + 1
-                    endif
-                enddo
+            ndep = depth_node(ihor)   ! horizon node
+
+            ! How fast each horizon changes depth
+            if (crust_dat(i,1).le.ndep .and. ndep.le.crust_dat(i,2)) then
+                thickening_ratio = dble(nthick)*dz/thicken_dat(i,5)
+                delta_depth = dble(ndep-itop-total_shift(ihor))*thickening_ratio
+                rate = delta_depth/dble(nduration)
+            elseif (crust_dat(i,2).lt.ndep) then
+                rate = dble(nthick)/dble(nduration)
+            else
+                rate = 0.0d0
             endif
+
+            ct = 0
+            do j = jbeg,jend
+                arg = dble(j-nstart)*rate - dble(ct)  ! Test for horizon moving
+
+                if (arg.gt.1.0d0) then
+                    horizon_shift(ihor,j) = 1         ! Move horizon down by one node
+                    total_shift(ihor) = total_shift(ihor) + 1
+                    ct = ct + 1
+                endif
+            enddo
         enddo
     endif
 enddo
-! call error_exit(1)
 
 
 
@@ -302,6 +262,105 @@ return
 end subroutine
 
 
+
+!--------------------------------------------------------------------------------------------------!
+
+
+
+subroutine init_action_arrays()
+!----
+! Allocate memory to tectonic action arrays and initialize their values
+!----
+
+use tqtec, only: nt_total, &
+                 nhorizons, &
+                 action, &
+                 nburial, &
+                 burial_cond, &
+                 bas_grad, &
+                 nthrust, &
+                 thrust_step, &
+                 crust_dat, &
+                 nthicken, &
+                 thicken_start, &
+                 thickenHorizons, &
+                 horizon_shift
+
+
+implicit none
+
+
+! Free memory from tectonic action arrays - these should not be allocated, but ¯\_(ツ)_/¯
+if (allocated(action)) then
+    deallocate(action)
+endif
+if (allocated(burial_cond)) then
+    deallocate(burial_cond)
+endif
+if (allocated(bas_grad)) then
+    deallocate(bas_grad)
+endif
+if (allocated(thrust_step)) then
+    deallocate(thrust_step)
+endif
+if (allocated(crust_dat)) then
+    deallocate(crust_dat)
+endif
+if (allocated(thicken_start)) then
+    deallocate(thicken_start)
+endif
+if (allocated(horizon_shift)) then
+    deallocate(horizon_shift)
+endif
+
+
+! Allocate memory to tectonic action arrays
+! DO NOT NEED TO STORE CONDUCTIVITY AND BASE TEMP GRADIENT FOR ALL TIMESTEPS.
+! THOSE ARRAYS ARE MOSTLY ZEROS!
+allocate(action(nt_total))         ! action code at each timestep: 0=no action, >0=action
+if (nburial.gt.0) then
+    allocate(burial_cond(nt_total))! conductivity of material added to model during burial step
+endif
+allocate(bas_grad(nt_total))       ! temperature gradient at the base of the model
+if (nthrust.gt.0) then
+    allocate(thrust_step(nthrust)) ! timestep for each thrust action
+endif
+if (nthicken.gt.0) then
+    allocate(crust_dat(nthicken,2))
+    allocate(thicken_start(nthicken))
+endif
+if (nthicken.gt.0.and.thickenHorizons) then
+    allocate(horizon_shift(nhorizons,nt_total))
+endif
+
+
+! Initialize arrays
+action = 0
+if (nburial.gt.0) then
+    burial_cond = 0.0d0
+endif
+bas_grad = 0.0d0
+if (nthrust.gt.0) then
+    thrust_step = 0
+endif
+if (nthicken.gt.0) then
+    crust_dat = 0
+    thicken_start = 0
+endif
+if (nthicken.gt.0.and.thickenHorizons) then
+    horizon_shift = 0
+endif
+
+
+end subroutine
+
+
+
+
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!----------------------------------- TECTONIC ACTIONS ---------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
 
@@ -631,7 +690,8 @@ use tqtec, only: nnodes, &
                  conductivity, &
                  temp, &
                  crust_top, &
-                 crust_bot
+                 crust_bot, &
+                 verbosity
 
 implicit none
 
@@ -640,6 +700,11 @@ integer :: i
 integer :: j
 integer :: crust_thick
 double precision :: ratio
+
+
+if (verbosity.ge.3) then
+    write(*,*) '    thickening...'
+endif
 
 
 ! Duplicate conductivity at new crust node and shift conductivities down one node
