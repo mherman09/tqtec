@@ -1,5 +1,9 @@
 #!/bin/bash
 
+
+EPOCHTIME=`date +%s`
+
+
 #####
 #	PARSE COMMAND LINE ARGUMENTS
 #####
@@ -154,7 +158,7 @@ gmt set MAP_GRID_PEN 0.5p,225,4_4:0
 # Colors for horizons
 NCOL=$(sed -ne "2p" $DEPFILE | awk '{print NF}')
 NCOL2=$(echo $NCOL 1.1 | awk '{print $1*$2}')
-gmt makecpt -Cmagma -T0/$NCOL2/1 | awk '{if(NF==5){print $2}}' > color_list.tmp
+gmt makecpt -Cmagma -T0/$NCOL2/1 | awk '{if(NF==5){print $2}}' > color_list_${EPOCHTIME}.tmp
 
 
 # Depth vs. time
@@ -175,7 +179,7 @@ gmt psbasemap $PROJ $LIMS_MODEL -Bxa10+l"Model Time (Ma)" -BN -K -O >> $PSFILE
 
 for COL in $(seq 1 $NCOL)
 do
-    COLOR=$(sed -ne "${COL}p" color_list.tmp)
+    COLOR=$(sed -ne "${COL}p" color_list_${EPOCHTIME}.tmp)
     if [ $COL -eq 1 ]
     then
         awk 'BEGIN{g=1}{
@@ -236,7 +240,7 @@ gmt psbasemap $PROJ $LIMS_MODEL -Bxa10+l"Model Time (Ma)" -BN -K -O >> $PSFILE
 
 for COL in $(seq 1 $NCOL)
 do
-    COLOR=$(sed -ne "${COL}p" color_list.tmp)
+    COLOR=$(sed -ne "${COL}p" color_list_${EPOCHTIME}.tmp)
     if [ $COL -eq 1 ]
     then
         awk '{if (NR > 1) print '$tMIN'+(NR-1)*'$dt',$'$COL'}' $TEMPFILE |\
@@ -323,16 +327,16 @@ then
             } else if (p==1) {
                 print $1,-$2
             }
-        }' $GEOTHERM_FILE > geotherm_$T.tmp
-        WC_GEOTHERM=$(wc geotherm_$T.tmp | awk '{print $1}')
+        }' $GEOTHERM_FILE > geotherm_${T}_${EPOCHTIME}.tmp
+        WC_GEOTHERM=$(wc geotherm_${T}_${EPOCHTIME}.tmp | awk '{print $1}')
         if [ $WC_GEOTHERM -le 0 ]
         then
             echo "    Could not find a geotherm output at the specified time ($T Ma)!"
             echo "    Geotherms are available at the following times:"
             grep ">" $GEOTHERM_FILE | awk '{print "    " $4,"Ma"}'
         else
-            gmt psxy geotherm_$T.tmp $PROJ $LIMS -K -O >> $PSFILE
-            awk '{if(NR>1&&($2<='$ZMIN'||$1>='$TMAX')){print $1,$2,"8,2 LM '$T2' Ma";exit}}' geotherm_$T.tmp |\
+            gmt psxy geotherm_${T}_${EPOCHTIME}.tmp $PROJ $LIMS -K -O >> $PSFILE
+            awk '{if(NR>1&&($2<='$ZMIN'||$1>='$TMAX')){print $1,$2,"8,2 LM '$T2' Ma";exit}}' geotherm_${T}_${EPOCHTIME}.tmp |\
                 gmt pstext $PROJ $LIMS -F+f+j -D0.025i/0 -Gwhite -N -K -O >> $PSFILE
         fi
     done
@@ -340,7 +344,7 @@ fi
 
 for i in $(seq 1 $NCOL)
 do
-    COLOR=$(sed -ne "${i}p" color_list.tmp | awk '{print $1}')
+    COLOR=$(sed -ne "${i}p" color_list_${EPOCHTIME}.tmp | awk '{print $1}')
     # Plot curves
     paste $TEMPFILE $DEPFILE |\
         awk '{if (NR > 1) print $'$i',$('$i'+10)}' |\
@@ -442,9 +446,9 @@ then
                 print '$tMIN'+$1,$2
             }
         }
-    }' $CLOSURE_FILE > closure.tmp
-    gmt psxy closure.tmp $PROJ $LIMS -W1p -K -O >> $PSFILE
-    gmt psxy closure.tmp $PROJ $LIMS -Sc2p -W1p -G155 -K -O >> $PSFILE
+    }' $CLOSURE_FILE > closure_${EPOCHTIME}.tmp
+    gmt psxy closure_${EPOCHTIME}.tmp $PROJ $LIMS -W1p -K -O >> $PSFILE
+    gmt psxy closure_${EPOCHTIME}.tmp $PROJ $LIMS -Sc2p -W1p -G155 -K -O >> $PSFILE
 
     awk 'BEGIN{p=0}{
         if ($1~/>/) {
@@ -461,8 +465,8 @@ then
                 print '$tMIN'+$1,$2
             }
         }
-    }' $CLOSURE_FILE > closure.tmp
-    gmt psxy closure.tmp $PROJ $LIMS -G255/235/230 -K -O >> $PSFILE
+    }' $CLOSURE_FILE > closure_${EPOCHTIME}.tmp
+    gmt psxy closure_${EPOCHTIME}.tmp $PROJ $LIMS -G255/235/230 -K -O >> $PSFILE
 
     # Label curves
     awk 'BEGIN{p=0}{
@@ -492,4 +496,6 @@ echo "Created file $(basename $PSFILE .ps).pdf"
 
 rm $PSFILE
 rm gmt.*
-rm color_list.tmp
+rm color_list_${EPOCHTIME}.tmp
+rm closure_${EPOCHTIME}.tmp
+rm geotherm_${T}_${EPOCHTIME}.tmp
