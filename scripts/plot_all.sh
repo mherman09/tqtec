@@ -332,7 +332,7 @@ then
     for T in $GEOTHERM_PLOT_TIME
     do
         T2=$(echo $T $tMIN | awk '{print $1+$2}')
-        echo "Plotting geotherm at $T Ma since start of model, $T2 Ma until end of model"
+        echo "    plotting geotherm at $T Ma since start of model, $T2 Ma until end of model"
         awk '{
             if (/>/) {
                 p = 0
@@ -384,6 +384,7 @@ echo $LIMS | sed -e "s/-R//" |\
 echo $LIMS | sed -e "s/-R//" |\
     awk -F/ '{print $2,$4,"Tracked horizons plotted every '$HORIZON_TIME' Ma"}' |\
     gmt pstext $PROJ $LIMS -F+f12,0+jLM -D-3.0i/-0.2i -K -O >> $PSFILE
+echo "    plotting horizon temperature/depth every $HORIZON_TIME Ma"
 
 
 
@@ -423,8 +424,17 @@ echo 0 0 | gmt psxy $PROJ $LIMS -K -O -X5i >> $PSFILE
 if [ "$CLOSURE_FILE" != "" ]
 then
     echo "$0: plotting closure temperature timing"
-    ZMIN2=$(awk '{if(!/>/ && !/not closed/){print $2}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $1}')
-    ZMAX2=$(awk '{if(!/>/ && !/not closed/){print $2}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $2}')
+    awk '{if(!/>/ && !/not closed/){print $2}}' $CLOSURE_FILE > closure_temp_dep_${EPOCHTIME}.tmp
+    if [ -s closure_temp_dep_${EPOCHTIME}.tmp ]
+    then
+        ZMIN2=$(gmt gmtinfo -C closure_temp_dep_${EPOCHTIME}.tmp | awk '{print $1}')
+        ZMAX2=$(gmt gmtinfo -C closure_temp_dep_${EPOCHTIME}.tmp | awk '{print $2}')
+        ZMIN2=$(echo $ZMIN2 $ZMAX2 | awk '{if($1==$2){print $2-1}else{print $1}}')
+    else
+        echo "$0: no horizons are below closure temperatures"
+        ZMIN2=-1
+        ZMAX2=0
+    fi
     # tMIN2=$(awk '{if(!/>/){print '$tMIN'+$1}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $1}')
     # tMAX2=$(awk '{if(!/>/){print '$tMIN'+$1}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $2}')
     if [ "$CLOSURE_LIMS" == "" ]
@@ -458,6 +468,7 @@ then
               }'`
     gmt psbasemap $PROJ $LIMS -Bxa${AGE_TIKS}g${AGE_TIKS}+l"Age (Ma)" -Bya${DEP_TIKS}g${DEP_TIKS}+l"Depth (km)" -BWeSn -K -O >> $PSFILE
 
+    # Plot closure temperature curves
     awk 'BEGIN{p=0}{
         if ($1~/>/) {
             if (!/Partial/) {
@@ -477,6 +488,7 @@ then
     gmt psxy closure_${EPOCHTIME}.tmp $PROJ $LIMS -W1p -K -O >> $PSFILE
     gmt psxy closure_${EPOCHTIME}.tmp $PROJ $LIMS -Sc2p -W1p -G155 -K -O >> $PSFILE
 
+    # Look for "Partial" label and plot it
     awk 'BEGIN{p=0}{
         if ($1~/>/) {
             if (/Partial/) {
@@ -509,7 +521,7 @@ then
     }' $CLOSURE_FILE |\
         gmt pstext $PROJ $LIMS -Gwhite -F+f+j -N -K -O >> $PSFILE
 
-    awk '{if(/>/){print $0}else{print '$tMIN'+$1,$2}}' MWX_test6.3.trange | gmt psxy $PROJ $LIMS -W2p,blue -K -O >> $PSFILE
+    # awk '{if(/>/){print $0}else{print '$tMIN'+$1,$2}}' MWX_test6.3.trange | gmt psxy $PROJ $LIMS -W2p,blue -K -O >> $PSFILE
 
 fi
 
@@ -525,4 +537,5 @@ rm $PSFILE
 rm gmt.*
 rm color_list_${EPOCHTIME}.tmp
 test -f closure_${EPOCHTIME}.tmp && rm closure_${EPOCHTIME}.tmp
+test -f closure_temp_dep_${EPOCHTIME}.tmp && rm closure_temp_dep_${EPOCHTIME}.tmp
 test -f geotherm_0_${EPOCHTIME}.tmp && rm geotherm_*_${EPOCHTIME}.tmp
