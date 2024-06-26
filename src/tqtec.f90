@@ -329,7 +329,7 @@ do while (istep.lt.nt_total)
 
 
     ! Check if horizons should be shifted
-    if (thickenHorizons) then
+    if (nthicken.gt.0.and.thickenHorizons) then
         depth_node = depth_node + horizon_shift(:,istep)
     endif
 
