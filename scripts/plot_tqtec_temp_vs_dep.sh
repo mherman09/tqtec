@@ -79,7 +79,7 @@ gmt set PS_MEDIA 17ix17i
 gmt set MAP_GRID_PEN 0.5p,225,4_4:0
 
 
-LIMS="-R$TMIN/$TMAX/$ZMIN/$ZMAX"
+LIMS="-R$TMIN/$TMAX/$ZMIN/$ZMAX0"
 PROJ="-JX6i/6i -P"
 
 DEP_TIKS=`echo $LIMS | sed -e "s/-R//" | awk -F"/" '{print $3,$4}' |\
