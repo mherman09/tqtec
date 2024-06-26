@@ -890,6 +890,7 @@ character(len=32) :: var, value
 character(len=512) :: input_line
 double precision :: max_depth
 logical :: isMaxDepthDefined
+logical :: isLineBlank
 
 
 
@@ -900,21 +901,11 @@ endif
 
 
 
+! Initialize variables
 ios = 0
 iend = 0
 isMaxDepthDefined = .false.
 isTectonicActionDefined = .false.
-
-
-! Open the input file for reading in free format
-open(unit=8,file=input_file,iostat=ios)
-if (ios.ne.0) then
-    write(0,*) 'tqtec: something went wrong trying to open input file "',trim(input_file),'"'
-    call error_exit(1)
-endif
-
-
-! Initialize required variables so they can later be checked
 t_total = -1.0d99
 t_geotherm_output = -1.0d99
 temp_surf = -1.0d99
@@ -925,16 +916,26 @@ hp_dep = 0.0d0
 nhorizons = 0
 
 
+
+! Open the input file for reading in free format
+open(unit=8,file=input_file,iostat=ios)
+if (ios.ne.0) then
+    write(0,*) 'tqtec: something went wrong trying to open input file "',trim(input_file),'"'
+    call error_exit(1)
+endif
+
+
+
 ! Read the file in flexible format
 do while (iend.eq.0)
-    read(8,'(A)',end=3451,iostat=iend) input_line
 
-    ! Anything after "#" is a comment; ignore blank lines
-    i = index(input_line,"#")
-    if (i.gt.0) then
-        input_line(i:len(input_line)) = ' '
-    endif
-    if (input_line.eq.' ') then
+    ! Read the line
+    read(8,'(A)',end=3451,iostat=iend) input_line
+    write(0,*) trim(input_line)
+
+
+    ! Anything after "#" is a comment; ignore blank lines (function isLineBlank is below)
+    if (isLineBlank(input_line)) then
         cycle
     endif
 
@@ -964,6 +965,18 @@ do while (iend.eq.0)
         read(value,*) hp_surf
     elseif (var.eq.'HP_DEP'.or.var.eq.'hp_dep') then
         read(value,*) hp_dep
+    elseif (var.eq.'NNODES'.or.var.eq.'nnodes') then
+        read(value,*) nnodes
+    elseif (var.eq.'DZ'.or.var.eq.'dz') then
+        read(value,*) dz
+        if (isMaxDepthDefined) then
+            nnodes = int(max_depth/dz)
+        endif
+    elseif (var.eq.'MAX_DEPTH'.or.var.eq.'max_depth'.or.var.eq.'DEPTH_MAX'.or.var.eq.'depth_max') then
+        read(value,*) max_depth
+        nnodes = int(max_depth/dz)
+        isMaxDepthDefined = .true.
+
 
     elseif (var.eq.'NLAYERS'.or.var.eq.'nlayers') then
         read(value,*) nlayers
@@ -977,26 +990,67 @@ do while (iend.eq.0)
             enddo
         endif
 
+
+    !--- Tracked Horizons ---!
     elseif (var.eq.'NHORIZONS'.or.var.eq.'nhorizons') then
+
         read(value,*) nhorizons
+
         if (nhorizons.gt.0) then
+
+            ! Initialize horizon depth array
             if (allocated(depth)) then
                 deallocate(depth)
             endif
             allocate(depth(nhorizons))
-            read(8,*) (depth(i),i=1,nhorizons)              ! depth
+            depth = 0.0d0
+
+            ! Skip blank or commented lines
+            read(8,'(A)') input_line
+            do while (isLineBlank(input_line))
+                read(8,'(A)') input_line
+            enddo
+
+            read(input_line,*,iostat=ios) (depth(i),i=1,nhorizons)
+                                                 ! depth
+
+            ! Check for errors during horizon data read
+            if (ios.ne.0) then
+                write(0,*) 'tqtec: error reading horizon parameters '
+                write(0,*) 'Looking for: dep1(km) dep2(km) ... depN(km)'
+                write(0,*) 'Read:        ',trim(input_line)
+                call error_exit(1)
+            endif
         endif
 
+
+    !--- Burial Events ---!
     elseif (var.eq.'NBURIAL'.or.var.eq.'nburial') then
+
         read(value,*) nburial
+
         if (nburial.gt.0) then
+
+            ! Initialize burial array
             if (allocated(burial_dat)) then
                 deallocate(burial_dat)
             endif
             allocate(burial_dat(nburial,4))
+            burial_dat = 0.0d0
+
+            ! Read burial data
             do i = 1,nburial
+
+                ! Skip blank or commented lines
                 read(8,'(A)') input_line
-                read(input_line,*,iostat=ios) (burial_dat(i,j),j=1,4) ! start duration thickness conductivity
+                do while (isLineBlank(input_line))
+                    read(8,'(A)') input_line
+                enddo
+
+                read(input_line,*,iostat=ios) (burial_dat(i,j),j=1,4) 
+                                                 ! start duration thickness conductivity
+
+                ! Check for errors during burial data read
                 if (ios.ne.0) then
                     write(0,*) 'tqtec: error reading burial parameters for burial event',i
                     write(0,*) 'Looking for: start(Ma) duration(Ma) thick(km) cond(W/mK)'
@@ -1004,60 +1058,177 @@ do while (iend.eq.0)
                     call error_exit(1)
                 endif
             enddo
+
+            ! We have something to do!
             isTectonicActionDefined = .true.
         endif
 
+
+    !--- Uplift/Erosion Events ---!
     elseif (var.eq.'NUPLIFT'.or.var.eq.'nuplift') then
+
         read(value,*) nuplift
+
         if (nuplift.gt.0) then
+
+            ! Initialize uplift array
             if (allocated(uplift_dat)) then
                 deallocate(uplift_dat)
             endif
             allocate(uplift_dat(nuplift,3))
+            uplift_dat = 0.0d0
+
+            ! Read uplift data
             do i = 1,nuplift
-                read(8,*) (uplift_dat(i,j),j=1,3)           ! start duration thickness
+
+                ! Skip blank or commented lines
+                read(8,'(A)') input_line
+                do while (isLineBlank(input_line))
+                    read(8,'(A)') input_line
+                enddo
+
+                read(input_line,*,iostat=ios) (uplift_dat(i,j),j=1,3)
+                                                 ! start duration thickness
+
+                ! Check for errors during uplift data read
+                if (ios.ne.0) then
+                    write(0,*) 'tqtec: error reading uplift parameters for uplift event',i
+                    write(0,*) 'Looking for: start(Ma) duration(Ma) thick(km)'
+                    write(0,*) 'Read:        ',trim(input_line)
+                    call error_exit(1)
+                endif
+
             enddo
+
+            ! We have something to do!
             isTectonicActionDefined = .true.
         endif
 
+
+    !--- Thrusting Events ---!
     elseif (var.eq.'NTHRUST'.or.var.eq.'nthrust') then
+
         read(value,*) nthrust
+
         if (nthrust.gt.0) then
+
+            ! Initialize thrust array
             if (allocated(thrust_dat)) then
                 deallocate(thrust_dat)
             endif
             allocate(thrust_dat(nthrust,5))
+            thrust_dat = 0.0d0
+
+            ! Read thrusting data
             do i = 1,nthrust
-                read(8,*) (thrust_dat(i,j),j=1,5)           ! start upper/lower thick_init depth thick_final
+
+                ! Skip blank or commented lines
+                read(8,'(A)') input_line
+                do while (isLineBlank(input_line))
+                    read(8,'(A)') input_line
+                enddo
+
+                read(input_line,*,iostat=ios) (thrust_dat(i,j),j=1,5)
+                                                 ! start upper/lower thick_init depth thick_final
+
+                ! Check for errors during thrust data read
+                if (ios.ne.0) then
+                    write(0,*) 'tqtec: error reading thrust parameters for thrust event',i
+                    write(0,*) 'Looking for: start(Ma) 1(upper)|2(lower) thick_init(km) depth(km) thick_final(km)'
+                    write(0,*) 'Read:        ',trim(input_line)
+                    call error_exit(1)
+                endif
+
             enddo
+
+            ! We have something to do!
             isTectonicActionDefined = .true.
         endif
 
+
+    !--- Surface Heat Flow Changes ---!
     elseif (var.eq.'NHFVARS'.or.var.eq.'nhfvars') then
+
         read(value,*) nhfvars
+
         if (nhfvars.gt.0) then
+
+            ! Initialize heat flow variation array
             if (allocated(hfvar)) then
                 deallocate(hfvar)
             endif
             allocate(hfvar(nhfvars,2))
+            hfvar = 0.0d0
+
+            ! Read heat flow variation data
             do i = 1,nhfvars
-                read(8,*) (hfvar(i,j),j=1,2)                ! start heat_flow
+                write(0,*) i
+
+                ! Skip blank or commented lines
+                read(8,'(A)') input_line
+                do while (isLineBlank(input_line))
+                    read(8,'(A)') input_line
+                enddo
+                write(0,*) trim(input_line)
+
+                read(input_line,*,iostat=ios) (hfvar(i,j),j=1,2)
+                                                 ! start heat_flow
+
+                ! Check for errors during heat flow variation data read
+                if (ios.ne.0) then
+                    write(0,*) 'tqtec: error reading heat flow variation parameters for event',i
+                    write(0,*) 'Looking for: start(Ma) heatflow(mW/m2)'
+                    write(0,*) 'Read:        ',trim(input_line)
+                    call error_exit(1)
+                endif
+
             enddo
+
+            ! We have something to do!
             isTectonicActionDefined = .true.
         endif
 
+
+    !--- Bulk Thickening Events ---!
     elseif (var.eq.'NTHICKEN'.or.var.eq.'nthicken') then
+
         read(value,*) nthicken
+
         if (nthicken.gt.0) then
+
+            ! Initialize thickening variation array
             if (allocated(thicken_dat)) then
                 deallocate(thicken_dat)
             endif
             allocate(thicken_dat(nthicken,5))
+            thicken_dat = 0.0d0
+
             do i = 1,nthicken
-                read(8,*) (thicken_dat(i,j),j=1,5)          ! start duration thickening top thick0
+
+                ! Skip blank or commented lines
+                read(8,'(A)') input_line
+                do while (isLineBlank(input_line))
+                    read(8,'(A)') input_line
+                enddo
+                write(0,*) trim(input_line)
+
+                read(input_line,*,iostat=ios) (thicken_dat(i,j),j=1,5)
+                                                 ! start duration thickening top thick0
+
+                ! Check for errors during thickening data read
+                if (ios.ne.0) then
+                    write(0,*) 'tqtec: error reading thickening event parameters for thickening event',i
+                    write(0,*) 'Looking for: start(Ma) duration(Ma) thicken(km) crusttop(km) thick0(km)'
+                    write(0,*) 'Read:        ',trim(input_line)
+                    call error_exit(1)
+                endif
+
             enddo
+            ! We have something to do!
+            isTectonicActionDefined = .true.
             isTectonicActionDefined = .true.
         endif
+
     elseif (var.eq.'THICKENHORIZONS'.or.var.eq.'thickenhorizons'.or.var.eq.'thickenHorizons') then
         if (value.eq.'0'.or.value.eq.'N'.or.value.eq.'n'.or.value.eq.'F') then
             thickenHorizons = .false.
@@ -1068,21 +1239,12 @@ do while (iend.eq.0)
             call error_exit(1)
         endif
 
-    elseif (var.eq.'NNODES'.or.var.eq.'nnodes') then
-        read(value,*) nnodes
-    elseif (var.eq.'DZ'.or.var.eq.'dz') then
-        read(value,*) dz
-        if (isMaxDepthDefined) then
-            nnodes = int(max_depth/dz)
-        endif
-    elseif (var.eq.'MAX_DEPTH'.or.var.eq.'max_depth'.or.var.eq.'DEPTH_MAX'.or.var.eq.'depth_max') then
-        read(value,*) max_depth
-        nnodes = int(max_depth/dz)
-        isMaxDepthDefined = .true.
+
     else
         write(0,*) 'tqtec: no variable option named "',trim(var),'"'
         call error_exit(1)
     endif
+
 
     ! Reached the end of the file, exit
     3451 if (iend.ne.0) then
@@ -1131,10 +1293,33 @@ if (verbosity.ge.3) then
 endif
 
 
-call error_exit(1)
 
 return
 end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+function isLineBlank(input_line)
+!----
+! Check whether input_line is blank or not - includes checking whether entire line is a comment
+!----
+implicit none
+logical :: isLineBlank
+character(len=*) :: input_line
+integer :: i
+i = index(input_line,"#")
+if (i.gt.0) then
+    input_line(i:len(input_line)) = ' '
+endif
+if (input_line.eq.' ') then
+    isLineBlank = .true.
+else
+    isLineBlank = .false.
+endif
+return
+end function
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -1408,6 +1593,13 @@ if (nthrust.gt.0) then
                                  'thick_end(km)'
     do i = 1,nthrust
         write(*,'(5X,2F14.3,2X,3F14.3)') (thrust_dat(i,j),j=1,5)
+    enddo
+endif
+write(*,2002) 'nhfvars:          ',nhfvars
+if (nhfvars.gt.0) then
+    write(*,'(5X,2A14)') 'start(Ma)', 'hf(mW/m2)'
+    do i = 1,nhfvars
+        write(*,'(5X,2F14.3)') (hfvar(i,j),j=1,2)
     enddo
 endif
 write(*,2002) 'nthicken:         ',nthicken
