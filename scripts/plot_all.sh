@@ -423,8 +423,8 @@ echo 0 0 | gmt psxy $PROJ $LIMS -K -O -X5i >> $PSFILE
 if [ "$CLOSURE_FILE" != "" ]
 then
     echo "$0: plotting closure temperature timing"
-    ZMIN2=$(awk '{if(!/>/){print $2}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $1}')
-    ZMAX2=$(awk '{if(!/>/){print $2}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $2}')
+    ZMIN2=$(awk '{if(!/>/ && !/not closed/){print $2}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $1}')
+    ZMAX2=$(awk '{if(!/>/ && !/not closed/){print $2}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $2}')
     # tMIN2=$(awk '{if(!/>/){print '$tMIN'+$1}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $1}')
     # tMAX2=$(awk '{if(!/>/){print '$tMIN'+$1}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $2}')
     if [ "$CLOSURE_LIMS" == "" ]
