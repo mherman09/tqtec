@@ -1,5 +1,10 @@
 #!/bin/bash
 
+
+EPOCHTIME=`date +%s`
+
+
+
 #####
 #	PARSE COMMAND LINE
 #####
@@ -55,8 +60,17 @@ ZMIN=`awk '{if (NR>1) print $0}' $DEPFILE | gmt gmtinfo -C |\
 ZMAX=`awk '{if (NR>1) print $0}' $DEPFILE | gmt gmtinfo -C |\
       awk '{for(i=1;i<=NF;i++){printf("%f\n"),$i}}' | gmt gmtinfo -C |\
       awk '{print $2-$2%10+10}'`
-ZMIN2=$(awk '{if(!/>/){print $2}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $1}')
-ZMAX2=$(awk '{if(!/>/){print $2}}' $CLOSURE_FILE | gmt gmtinfo -C | awk '{print $2}')
+awk '{if(!/>/ && !/not closed/){print $2}}' $CLOSURE_FILE > closure_temp_dep_${EPOCHTIME}.tmp
+if [ -s closure_temp_dep_${EPOCHTIME}.tmp ]
+then
+    ZMIN2=$(gmt gmtinfo -C closure_temp_dep_${EPOCHTIME}.tmp | awk '{print $1}')
+    ZMAX2=$(gmt gmtinfo -C closure_temp_dep_${EPOCHTIME}.tmp | awk '{print $2}')
+    ZMIN2=$(echo $ZMIN2 $ZMAX2 | awk '{if($1==$2){print $2-1}else{print $1}}')
+else
+    echo "$0: no horizons are below closure temperatures"
+    ZMIN2=-1
+    ZMAX2=0
+fi
 
 # Time
 tMIN=`head -1 $DEPFILE | awk '{print $1}'`
@@ -68,7 +82,7 @@ function plot_tectonic_timing () {
     YMIN=$(echo $LIMS | sed -e "s/-R//" | awk -F/ '{print $3}')
     YMAX=$(echo $LIMS | sed -e "s/-R//" | awk -F/ '{print $4}')
     awk 'BEGIN{print ">"}{
-        if ($1=="burial" || $1=="uplift") {
+        if ($1=="burial" || $1=="uplift" || $1=="thicken") {
             print ">"
             print '$tMIN'+$3,'$YMIN'
             print '$tMIN'+$4,'$YMIN'
@@ -153,9 +167,9 @@ awk 'BEGIN{p=0}{
             print '$tMIN'+$1,$2
         }
     }
-}' $CLOSURE_FILE > closure.tmp
-gmt psxy closure.tmp $PROJ $LIMS -W1p -K -O >> $PSFILE
-gmt psxy closure.tmp $PROJ $LIMS -Sc2p -W1p -G155 -K -O >> $PSFILE
+}' $CLOSURE_FILE > closure_${EPOCHTIME}.tmp
+gmt psxy closure_${EPOCHTIME}.tmp $PROJ $LIMS -W1p -K -O >> $PSFILE
+gmt psxy closure_${EPOCHTIME}.tmp $PROJ $LIMS -Sc2p -W1p -G155 -K -O >> $PSFILE
 
 # # Partial closure temperatures specified in readtqtec
 # awk 'BEGIN{p=0}{
@@ -173,8 +187,8 @@ gmt psxy closure.tmp $PROJ $LIMS -Sc2p -W1p -G155 -K -O >> $PSFILE
 #             print '$tMIN'+$1,$2
 #         }
 #     }
-# }' $CLOSURE_FILE > closure.tmp
-# gmt psxy closure.tmp $PROJ $LIMS -G255/235/230 -K -O >> $PSFILE
+# }' $CLOSURE_FILE > closure_${EPOCHTIME}.tmp
+# gmt psxy closure_${EPOCHTIME}.tmp $PROJ $LIMS -G255/235/230 -K -O >> $PSFILE
 
 # Curve labels
 awk 'BEGIN{p=0}{
@@ -198,7 +212,7 @@ then
 fi
 
 # Date and time
-echo 12,0 LB $(date) | gmt pstext $PROJ $LIMS -F+f+j+cBL -D0.05i -K -O >> $PSFILE
+echo 12,2 LB $(date) | gmt pstext $PROJ $LIMS -F+f+j+cBL -D0.05i -K -O >> $PSFILE
 
 # Finalize
 gmt psxy -T -O >> $PSFILE
@@ -208,3 +222,6 @@ echo "Created file $(basename $PSFILE .ps).pdf"
 
 rm $PSFILE
 rm gmt.*
+test -f closure_${EPOCHTIME}.tmp && rm closure_${EPOCHTIME}.tmp
+test -f closure_temp_dep_${EPOCHTIME}.tmp && rm closure_temp_dep_${EPOCHTIME}.tmp
+
