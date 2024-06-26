@@ -516,7 +516,8 @@ subroutine read_input_file()
 ! Determine whether to read fixed format (original) or free format (new) input file
 !----
 
-use tqtec, only: input_file
+use tqtec, only: input_file, &
+                 verbosity
 
 implicit none
 
@@ -524,6 +525,13 @@ implicit none
 integer :: ios
 character(len=512) :: input_line
 logical :: ex
+double precision :: dp
+
+
+
+if (verbosity.ge.3) then
+    write(*,*) '    read_input_file: determining whether to read old or new format'
+endif
 
 
 
@@ -534,20 +542,28 @@ if (.not.ex) then
     call error_exit(1)
 endif
 
-! Check the input file format
-! Old version is fixed format
-! New version has format "VAR=VALUE"
+
+! Check input file can be opened
 open(unit=8,file=input_file,iostat=ios)
 if (ios.ne.0) then
     write(0,*) 'tqtec: something went wrong trying to open input file "',trim(input_file),'"'
     call error_exit(1)
 endif
+
+
+! Check the input file format
+! Old version is fixed format: 1st line: model title; 2nd line: model params
+! New version has format "VAR=VALUE" and allows blank lines/# commented lines
+! 2nd line differentiates two formats: old format only allows numbers in this line
+! whereas modern format will have characters (or be blank)
+read(8,'(A)') input_line
 read(8,'(A)') input_line
 close(8)
-if (index(input_line,'=').ne.0.or.input_line(1:1).eq.'#') then
-    call read_input_file_new()
-else
+read(input_line,*,iostat=ios) dp ! Check whether entry is a number
+if (ios.eq.0) then
     call read_input_file_old()
+else
+    call read_input_file_new()
 endif
 
 
@@ -877,6 +893,13 @@ logical :: isMaxDepthDefined
 
 
 
+
+if (verbosity.ge.3) then
+    write(*,*) '    read_input_file_new: starting'
+endif
+
+
+
 ios = 0
 iend = 0
 isMaxDepthDefined = .false.
@@ -906,10 +929,15 @@ nhorizons = 0
 do while (iend.eq.0)
     read(8,'(A)',end=3451,iostat=iend) input_line
 
-    ! Lines that start with # are comments
-    if (input_line(1:1).eq.'#') then
+    ! Anything after "#" is a comment; ignore blank lines
+    i = index(input_line,"#")
+    if (i.gt.0) then
+        input_line(i:len(input_line)) = ' '
+    endif
+    if (input_line.eq.' ') then
         cycle
     endif
+
 
     ! All variables are in the format VAR=VALUE
     i = index(input_line,'=')
@@ -919,6 +947,7 @@ do while (iend.eq.0)
         write(0,*) 'tqtec: something went wrong trying to read "',trim(input_line),'"'
         call error_exit(1)
     endif
+
 
     ! Big if statement to handle all cases of VAR definitions
     if (var.eq.'T_TOTAL'.or.var.eq.'t_total') then
@@ -935,6 +964,7 @@ do while (iend.eq.0)
         read(value,*) hp_surf
     elseif (var.eq.'HP_DEP'.or.var.eq.'hp_dep') then
         read(value,*) hp_dep
+
     elseif (var.eq.'NLAYERS'.or.var.eq.'nlayers') then
         read(value,*) nlayers
         if (nlayers.gt.0) then
@@ -946,6 +976,7 @@ do while (iend.eq.0)
                 read(8,*) (layer(i,j),j=1,3)                ! top thickness conductivity
             enddo
         endif
+
     elseif (var.eq.'NHORIZONS'.or.var.eq.'nhorizons') then
         read(value,*) nhorizons
         if (nhorizons.gt.0) then
@@ -1091,6 +1122,16 @@ if (.not.isTectonicActionDefined) then
 endif
 
 close(8)
+
+
+
+
+if (verbosity.ge.3) then
+    write(*,*) '    read_input_file_new: finished'
+endif
+
+
+call error_exit(1)
 
 return
 end subroutine
