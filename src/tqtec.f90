@@ -1,16 +1,18 @@
-!----
-! TQTec (Temperature, Heat Flow, Tectonics)
-!
-! Authors:
-!     - Kevin Furlong (original Fortran 77 program)
-!     - Matt Herman (Modern Fortran version, i.e., what you are looking at right now!)
-!     - Chris Guzofski, Matt Legg, Rachel Piotraschke (PSU MS theses)
-!
-! C     CALCULATES THE ONE-DIMENSIONAL TRANSIENT THERMAL FIELD WITHIN
-! C     AN AREA THAT UNDERGOES EPISODES OF:  BURIAL, EROSION, AND
-! C     THRUSTING.  THIS PROGRAM CAN BE USED TO MONITOR POINTS THAT
-! C     MOVE FROM THE UPPER TO LOWER (or v.v) PLATES.
-!----
+!--------------------------------------------------------------------------------------------------!
+! TQTec                                                                                            !
+!                                                                                                  !
+! Authors:                                                                                         !
+!     - Kevin Furlong (original Fortran 77 program)                                                !
+!     - Matt Herman (Modern Fortran version, i.e., what you are looking at right now!)             !
+!     - Chris Guzofski, Matt Legg, Rachel Piotraschke (PSU MS theses)                              !
+!                                                                                                  !
+! TQTec (Temperature, Heat Flow, Tectonics) calculates the one-dimensional transient thermal field !
+! within an area that experiences geologic/tectonic events. Processes that can be modeled include: !
+!     - Burial                                                                                     !
+!     - Uplift/Erosion                                                                             !
+!     - Thrust Faulting (monitoring points in either hanging wall or footwall)                     !
+!     - Bulk Thickening                                                                            !
+!--------------------------------------------------------------------------------------------------!
 
 
 module tqtec
@@ -372,14 +374,17 @@ do while (istep.lt.nt_total)
 enddo   ! end of timestep loop
 
 
+
 ! Close the geotherm file if needed
 if (geotherm_file.ne.'') then
     close(12)
 endif
 
 
+
 ! Print the results to the defined output file
 call output()                                         ! tqtec_io.f90
+
 
 
 if (verbosity.ge.1) then

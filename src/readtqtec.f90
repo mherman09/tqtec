@@ -1,13 +1,21 @@
-!----
-! readTQTec
-!
-! Authors:
-!     - Kevin Furlong (original Fortran 77 program)
-!     - Matt Herman (Modern Fortran version, i.e., what you are looking at right now!)
-!     - Chris Guzofski, Matt Legg, Rachel Piotraschke (PSU MS theses)
-!
-! C     READS THE OUTPUT FROM THE PROGRAM TQTEC
-!----
+!--------------------------------------------------------------------------------------------------!
+! readTQTec                                                                                        !
+!                                                                                                  !
+! Authors:                                                                                         !
+!     - Kevin Furlong (original Fortran 77 program)                                                !
+!     - Matt Herman (Modern Fortran version, i.e., what you are looking at right now!)             !
+!     - Chris Guzofski, Matt Legg, Rachel Piotraschke (PSU MS theses)                              !
+!                                                                                                  !
+! readTQTec takes the output from a TQTec model run and generates time series files for tracked    !
+! horizons in the model, including options to output:                                              !
+!     - Temperature                                                                                !
+!     - Depth                                                                                      !
+!     - Timing                                                                                     !
+!     - Surface Heat Flow                                                                          !
+!     - Time-Temperature Index of Maturity (TTI)                                                   !
+!     - Vitrinite Reflectance                                                                      !
+!     - Closure Temperature Depth and Timing                                                       !
+!--------------------------------------------------------------------------------------------------!
 
 
 module readtqtec
