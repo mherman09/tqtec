@@ -4,7 +4,7 @@
 ! Authors:
 !     - Kevin Furlong (original Fortran 77 program)
 !     - Matt Herman (Modern Fortran version, i.e., what you are looking at right now!)
-!     - Chris Guzofski, Matt Legg, Rachel Piotraschke (as part of their PSU MS theses)
+!     - Chris Guzofski, Matt Legg, Rachel Piotraschke (PSU MS theses)
 !
 ! C     READS THE OUTPUT FROM THE PROGRAM TQTEC
 !----
@@ -14,15 +14,16 @@ module readtqtec
 
 
 ! Input file
-character(len=512) :: tqtec_output_file            ! tqtec output with temp/dep/time data           INFILE
+character(len=512) :: tqtec_output_file            ! tqtec output with temp/dep/time data
 
 ! Outputs
-character(len=512) :: temp_file                    ! temperature-timestep file     OUTFILE
-character(len=512) :: dep_file                     ! depth-timestep file           OUTFILE
-character(len=512) :: time_file                    ! time-timestep file            OUTFILE
-character(len=512) :: hf_file                      ! heat flow-timestep file       OUTFILE
-character(len=512) :: tti_file                     ! tti-timestep file             OUTFILE
-character(len=512) :: closure_file                 ! closure temp-depth file       OUTFILE
+character(len=512) :: temp_file                    ! temperature-timestep file
+character(len=512) :: dep_file                     ! depth-timestep file
+character(len=512) :: time_file                    ! time-timestep file
+character(len=512) :: hf_file                      ! heat flow-timestep file
+character(len=512) :: tti_file                     ! tti-timestep file
+character(len=512) :: vr_file                      ! vitrinite reflectance-timestep file
+character(len=512) :: closure_file                 ! closure temp-depth file
 integer :: nclosure                                ! number of closure temperatures to track
 double precision, allocatable :: closure_temps(:)  ! closure temperatures to track
 logical, allocatable :: isPartialAnnealTemp(:)     ! flags for specifying partial annealing zone
@@ -76,6 +77,7 @@ logical :: ex, isClosed, isInRange
 double precision :: xmin, closure_time, final_depth, temp1
 double precision, allocatable :: tti_exp(:)
 double precision, allocatable :: tti(:)
+double precision, allocatable :: vr0(:)
 
 
 
@@ -333,6 +335,45 @@ if (tti_file.ne.'') then
     close(9)
 endif
 
+
+
+! Vitrinite reflectance history
+if (vr_file.ne.'') then
+
+    if (allocated(tti)) then
+        deallocate(tti)
+    endif
+    allocate(tti(nhorizons))
+    if (allocated(tti_exp)) then
+        deallocate(tti_exp)
+    endif
+    allocate(tti_exp(nhorizons))
+    if (allocated(vr0)) then
+        deallocate(vr0)
+    endif
+    allocate(vr0(nhorizons))
+
+    open(unit=9,file=vr_file,status='unknown')
+
+    ! Header: time_before_present(Ma)  sample_rate(Ma)  number_of_points
+    write(9,'(2F10.3,I6)') -xmin,2.0d0*dt,nt_total
+            ! sample_rate = 2*dt because every 2 pts are saved in tqtec_io.f90 subroutine output()
+
+    ! Calculate TTI and VR0 and print VR0 for each horizon at each timestep
+    write(fmt_string,'("("I6,"E14.6)")') nhorizons
+    do l = 1,nt_total
+        tti_exp = 0.1d0*(results(l,1,:)-105.0d0)
+        if (l.eq.1) then
+            tti = 2.0d0*dt * 2**tti_exp
+        else
+            tti = tti + 2.0d0*dt * 2**tti_exp
+        endif
+        vr0 = (tti/41.0d0) ** 0.22d0
+        write(9,fmt_string) (vr0(i),i=1,nhorizons)
+    enddo
+
+    close(9)
+endif
 
 
 ! C
@@ -594,6 +635,7 @@ use readtqtec, only: tqtec_output_file, &
                      time_file, &
                      hf_file, &
                      tti_file, &
+                     vr_file, &
                      closure_file, &
                      nclosure, &
                      closure_temps, &
@@ -621,6 +663,7 @@ dep_file = ''
 time_file = ''
 hf_file = ''
 tti_file = ''
+vr_file = ''
 closure_file = ''
 temp_range_file = ''
 nclosure = 0
@@ -662,6 +705,9 @@ do while (i.le.narg)
     elseif (arg.eq.'-tti') then
         i = i + 1
         call get_command_argument(i,tti_file)
+    elseif (arg.eq.'-vr') then
+        i = i + 1
+        call get_command_argument(i,vr_file)
 
 
     elseif (arg.eq.'-closure') then

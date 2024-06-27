@@ -4,14 +4,12 @@
 ! Authors:
 !     - Kevin Furlong (original Fortran 77 program)
 !     - Matt Herman (Modern Fortran version, i.e., what you are looking at right now!)
+!     - Chris Guzofski, Matt Legg, Rachel Piotraschke (PSU MS theses)
 !
 ! C     CALCULATES THE ONE-DIMENSIONAL TRANSIENT THERMAL FIELD WITHIN
 ! C     AN AREA THAT UNDERGOES EPISODES OF:  BURIAL, EROSION, AND
 ! C     THRUSTING.  THIS PROGRAM CAN BE USED TO MONITOR POINTS THAT
 ! C     MOVE FROM THE UPPER TO LOWER (or v.v) PLATES.
-!
-! Incorporates (or will eventually incorporate) bulk thickening and thinning capabilities
-! done by Chris Guzofski as part of his Master's thesis
 !----
 
 
@@ -328,7 +326,9 @@ do while (istep.lt.nt_total)
     endif
 
 
-    ! Check if horizons should be shifted
+    ! Check if horizons should be shifted at this timestep
+    ! NOTE: I wanted to move this to thicken(), but when nodes move is different from when a node is
+    ! added to the crust during a thickening event
     if (nthicken.gt.0.and.thickenHorizons) then
         depth_node = depth_node + horizon_shift(:,istep)
     endif
