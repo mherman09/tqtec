@@ -1,14 +1,44 @@
+!--------------------------------------------------------------------------------------------------!
+! MinAge                                                                                           !
+!                                                                                                  !
+! Authors:                                                                                         !
+!     - Matt Herman (current Modern Fortran version, i.e., what you are looking at right now!)     !
+!     - Matt Legg, Rachel Piotraschke (PSU MS theses)                                              !
+!                                                                                                  !
+! MinAge (Mineral Age) calculates geochronological observables for a temperature-(depth-)time      !
+! history. Currently, minage supports calculating:                                                 !
+!     - Apatite Fission Track Ages/Distributions                                                   !
+!     - Apatite (Uranium-Thorium)/Helium                                                           !
+!                                                                                                  !
+! minage is designed to work with TQTec and readTQTec output files, but will work with any         !
+! temperature history in the format:                                                               !
+!                                                                                                  !
+!     total_time(Ma) timestep(Ma) nsteps                                                           !
+!     temp_1                                                                                       !
+!     temp_2                                                                                       !
+!     temp_3                                                                                       !
+!       :                                                                                          !
+!     temp_nsteps                                                                                  !
+!--------------------------------------------------------------------------------------------------!
+
+
 module minage
 
+
+! Input files
 character(len=512) :: readtqtec_temp_file
 character(len=512) :: readtqtec_dep_file
+
+! Output files
 character(len=512) :: aft_file
 character(len=512) :: ahe_file
 logical :: isOutputDefined
 
+! Number of horizons to track
 integer :: nhorizons
 integer, parameter :: nhorizons_max = 100
 
+! Temperature-depth time series variables
 double precision :: time_ma
 double precision :: dt_ma
 integer :: ntimes
@@ -21,6 +51,8 @@ double precision :: ahe_dt_var
 integer :: ahe_nnodes
 double precision :: ahe_taumax
 
+
+
 end module
 
 
@@ -29,54 +61,27 @@ end module
 
 program main
 
+
 use minage, only: readtqtec_temp_file, &
                   readtqtec_dep_file, &
                   aft_file, &
                   ahe_file, &
-                  isOutputDefined !, &
-                !   nhorizons, &
-                !   time_ma, &
-                !   dt_ma, &
-                !   ntimes, &
-                !   temp_celsius_array
-
-! use apatite_helium, only: calc_apatite_he_age
-! use radiogenic_helium, only: atomic_mass_th232, &
-!                              atomic_mass_u235, &
-!                              atomic_mass_u238, &
-!                              decay_th232, &
-!                              decay_u235, &
-!                              decay_u238, &
-!                              calc_he_production_rate, calc_u_th_he_age
+                  isOutputDefined
 
 
 implicit none
 
-! double precision :: time_ma
-! double precision :: dt_ma
-! double precision, allocatable :: temp_array(:,:)
-! integer :: i
-! integer :: ios
-! integer :: n
-! double precision, allocatable :: ages_ft_length(:)
-! double precision, allocatable :: ages_ft_count(:)
-! double precision, allocatable :: temp_ft_retention_age_corr(:)
-! integer, allocatable :: hists_ft(:,:)
-! double precision :: radius_microns
-
-! double precision :: volume_sphere, mass_u238, mass_u235, mass_th232, production_rate, mol_he4, duration, age
-! double precision :: mol_u238, mol_u235, mol_th232, t, dt
 
 
-!----
+
 ! Parse command line arguments
-!----
 call gcmdln()
 
 
-!----
-! Input error checks
-!----
+
+
+! Input/output error checks
+
 ! Is input temperature history defined?
 if (readtqtec_temp_file.eq.'') then
     call usage('minage: no readtqtec output temperature file defined')
@@ -93,16 +98,17 @@ if (.not.isOutputDefined) then
 endif
 
 
-!----
+
+
 ! Read temperature history
-!----
 call read_temp_history()
 
 
-!----
+
 ! Read depth history
-!----
 call read_dep_history()
+
+
 
 
 
@@ -114,6 +120,7 @@ call read_dep_history()
 if (aft_file.ne.'') then
     call calc_aft_ages()
 endif
+
 
 ! Apatite (U-Th)/He (variables and descriptions in apatite_helium_module.f90)
 if (ahe_file.ne.'') then
@@ -128,6 +135,10 @@ end program
 
 
 
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!---------------------------------- INPUT SUBROUTINES ---------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
 
@@ -160,12 +171,14 @@ real :: dum(nhorizons_max)
 ! Open file for reading
 open(unit=21,file=readtqtec_temp_file,status='old')
 
+
 ! First line: total time [Ma], sample rate [Ma], and number of temperature-time points
 read(21,*,iostat=ios) time_ma, dt_ma, ntimes
 if (ios.ne.0) then
     write(0,*) 'minage: error reading first line of tqtec output temperature file'
     call error_exit(1)
 endif
+
 
 ! Extract number of horizons tracked in the thermal model from first line of temperatures
 nhorizons = 1
@@ -182,12 +195,15 @@ do i = 1,nhorizons_max
     endif
 enddo
 
+
 ! Step back one line in temp file to read all temperatures
 backspace(21)
+
 
 ! Allocate and initialize the temperature array
 allocate(temp_celsius_array(nhorizons,ntimes))
 temp_celsius_array = 0.0d0
+
 
 ! Fill the temperature array
 do i = 1,ntimes
@@ -197,6 +213,7 @@ do i = 1,ntimes
         call error_exit(1)
     endif
 enddo
+
 
 ! Close the temperature file
 close(21)
@@ -239,12 +256,14 @@ real :: dum(nhorizons_max)
 ! Open file for reading
 open(unit=20,file=readtqtec_dep_file,status='old')
 
+
 ! First line: total time [Ma], sample rate [Ma], and number of depth-time points
 read(20,*,iostat=ios) time_ma, dt_ma, ntimes
 if (ios.ne.0) then
     write(0,*) 'minage: error reading first line of tqtec output depth file'
     call error_exit(1)
 endif
+
 
 ! Extract number of horizons tracked in the thermal model from first line of temperatures
 nhorizons = 1
@@ -261,12 +280,15 @@ do i = 1,nhorizons_max
     endif
 enddo
 
+
 ! Step back one line in depth file to read all depths
 backspace(20)
+
 
 ! Allocate and initialize the depth array
 allocate(dep_km_array(nhorizons,ntimes))
 dep_km_array = 0.0d0
+
 
 ! Fill the depth array
 do i = 1,ntimes
@@ -277,6 +299,7 @@ do i = 1,ntimes
     endif
 enddo
 
+
 ! Close the depth file
 close(20)
 
@@ -286,6 +309,10 @@ end subroutine
 
 
 
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!----------------------------- AGE CALCULATION SUBROUTINES ----------------------------------------!
+!--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
 
