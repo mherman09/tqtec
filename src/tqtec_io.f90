@@ -931,7 +931,6 @@ do while (iend.eq.0)
 
     ! Read the line
     read(8,'(A)',end=3451,iostat=iend) input_line
-    write(0,*) trim(input_line)
 
 
     ! Anything after "#" is a comment; ignore blank lines (function isLineBlank is below)
@@ -1162,14 +1161,12 @@ do while (iend.eq.0)
 
             ! Read heat flow variation data
             do i = 1,nhfvars
-                write(0,*) i
 
                 ! Skip blank or commented lines
                 read(8,'(A)') input_line
                 do while (isLineBlank(input_line))
                     read(8,'(A)') input_line
                 enddo
-                write(0,*) trim(input_line)
 
                 read(input_line,*,iostat=ios) (hfvar(i,j),j=1,2)
                                                  ! start heat_flow
@@ -1210,7 +1207,6 @@ do while (iend.eq.0)
                 do while (isLineBlank(input_line))
                     read(8,'(A)') input_line
                 enddo
-                write(0,*) trim(input_line)
 
                 read(input_line,*,iostat=ios) (thicken_dat(i,j),j=1,5)
                                                  ! start duration thickening top thick0
