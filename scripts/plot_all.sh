@@ -164,6 +164,8 @@ NCOL2=$(echo $NCOL 1.1 | awk '{print $1*$2}')
 gmt makecpt -Cmagma -T0/$NCOL2/1 | awk '{if(NF==5){print $2}}' > color_list_${EPOCHTIME}.tmp
 
 
+
+
 # Depth vs. time
 echo "$0: plotting depth vs. time"
 
@@ -228,6 +230,8 @@ echo 0.05 0.05 10,2 LB $(date) | gmt pstext -JX1i -R0/1/0/1 -F+f+j -N -K -O >> $
 
 
 
+
+
 # Temperature vs. time
 echo "$0: plotting temperature vs. time"
 
@@ -271,6 +275,8 @@ fi
 
 
 
+
+
 # Surface heat flow vs. time
 echo "$0: plotting surface heat flow vs. time"
 
@@ -280,7 +286,8 @@ echo 0 0 | gmt psxy $PROJ $LIMS -Y4.5i -K -O >> $PSFILE
 
 if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
-gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya5g5+l"Surface Heat Flow (mW/m@+2@+)" -BWeSn -K -O >> $PSFILE
+gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya5g5+l"Surface Heat Flow (mW/m@+2@+)" -BWeS -K -O >> $PSFILE
+gmt psbasemap $PROJ $LIMS_MODEL -Bxa10+l"Model Time (Ma)" -BN -K -O >> $PSFILE
 
 awk '{if (NR > 1) print '$tMIN'+(NR-1)*'$dt',$1}' $HFFILE |\
     gmt psxy $PROJ $LIMS -W1p -K -O >> $PSFILE
@@ -314,6 +321,7 @@ echo $LIMS | sed -e "s/-R//" |\
 echo $LIMS | sed -e "s/-R//" |\
     awk -F/ '{print $2,$3,"'$NPTAVG'-pt avg"}' |\
     gmt pstext $PROJ $LIMS -F+f12,0+jLM -D-1.20i/0.3i -K -O >> $PSFILE
+
 
 
 
@@ -388,8 +396,11 @@ echo "    plotting horizon temperature/depth every $HORIZON_TIME Ma"
 
 
 
+
+
+
 # Temperature-depth contours over time
-echo 0 0 | gmt psxy $PROJ $LIMS -K -O -Y-4i >> $PSFILE
+echo 0 0 | gmt psxy $PROJ $LIMS -K -O -Y-5i >> $PSFILE
 if [ "$GEOTHERM_FILE" != "" ]
 then
     echo "$0: plotting temperature contours over time"
@@ -398,8 +409,54 @@ then
 
     if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
-    gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya10g5+l"Depth (km)" -BWeSn -K -O >> $PSFILE
+    gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya10g5+l"Depth (km)" -BWeS -K -O >> $PSFILE
+    gmt psbasemap $PROJ $LIMS_MODEL -Bxa10+l"Model Time (Ma)" -BN -K -O >> $PSFILE
 
+    # Depth versus time
+    DEP_DASH="2_1:0"
+    for COL in $(seq 1 $NCOL)
+    do
+        COLOR=$(sed -ne "${COL}p" color_list_${EPOCHTIME}.tmp)
+        if [ $COL -eq 1 ]
+        then
+            awk 'BEGIN{
+                    g = 1   # test for being above/below ground
+                }{
+                if (NR == 1) {print "> -W1.0p,'$COLOR','$DEP_DASH'"}
+                if (NR > 1) {
+                    if (g==1 && $'$COL'>0) {
+                        g = 0
+                        print "> -W1.0p,'$COLOR'@90,'$DEP_DASH'"
+                    }
+                    if (g==0 && $'$COL'<=0) {
+                        g = 1
+                        print "> -W1.0p,'$COLOR'@35,'$DEP_DASH'"
+                    }
+                    print '$tMIN'+(NR-1)*'$dt',$'$COL'
+                }
+            }' $DEPFILE |\
+                gmt psxy $PROJ $LIMS -K -O >> $PSFILE
+        else
+            awk 'BEGIN{g=1}{
+                if (NR == 1) {print "> -W1p,'$COLOR','$DEP_DASH'"}
+                if (NR > 1) {
+                    if (g==1 && $'$COL'>0) {
+                        g = 0
+                        print "> -W0.5p,'$COLOR'@90,'$DEP_DASH'"
+                    }
+                    if (g==0 && $'$COL'<=0) {
+                        g = 1
+                        print "> -W0.5p,'$COLOR'@35,'$DEP_DASH'"
+                    }
+                    print '$tMIN'+(NR-1)*'$dt',$'$COL'
+                }
+            }' $DEPFILE |\
+                gmt psxy $PROJ $LIMS -K -O >> $PSFILE
+        fi
+    done
+
+
+    # Temperature contours
     t1=$(echo $tMIN $tMAX | awk '{print $1+($2-$1)/20}')
     t2=$(echo $tMIN $tMAX | awk '{print $1+($2-$1)/20}')
     t3=$(echo $tMIN $tMAX | awk '{print $2-($2-$1)/20}')
@@ -417,6 +474,9 @@ then
 
     echo $tMIN $tMAX | awk '{print $1,0;print $2,0}' | gmt psxy $PROJ $LIMS -W1p,105,12_4:0 -K -O >> $PSFILE
 fi
+
+
+
 
 
 # Closure temperature timing depth vs. time
