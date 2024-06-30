@@ -8,6 +8,7 @@ add_library(tqteclib
             src/error_exit.c
             src/fission_track_module.f90
             src/apatite_helium_module.f90
+            src/physical_constants_module.f90
             src/radiogenic_helium_module.f90
 )
 
