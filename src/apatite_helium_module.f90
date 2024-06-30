@@ -294,13 +294,15 @@ he_total = 0.0d0
 ! approximation to the diffusion equation. The degree of implicitness is beta.
 do itime = istart,nresamp
 
-    if (mod(itime,nresamp/100).eq.1) then
-        write(*,1000,advance='no') 'calc_apatite_he_age:',itime*100/nresamp,char(13)
-    endif
-    if (itime.eq.nresamp) then
-        write(*,1000) 'calc_apatite_he_age:',itime*100/nresamp,''
-    endif
-    1000 format (1X,A,' progress: [',I3,'% complete]',A)
+    ! if (printProgress) then
+    !     if (mod(itime,nresamp/100).eq.1) then
+    !         write(*,1000,advance='no') 'calc_apatite_he_age:',itime*100/nresamp,char(13)
+    !     endif
+    !     if (itime.eq.nresamp) then
+    !         write(*,1000) 'calc_apatite_he_age:',itime*100/nresamp,''
+    !     endif
+    !     1000 format (1X,A,' progress: [',I3,'% complete]',A)
+    ! endif
 
 
     !********************!
@@ -419,7 +421,7 @@ enddo
 !----
 ! Calculate (U-Th)/He age of grain
 !----
-write(*,*) 'calc_apatite_he_age: calculating (U-Th)/He age'
+! write(*,*) 'calc_apatite_he_age: calculating (U-Th)/He age'
 ! print *,'mol_th232',mol_th232
 ! print *,'mol_u235',mol_u235
 ! print *,'mol_u238',mol_u238

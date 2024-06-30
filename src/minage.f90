@@ -68,9 +68,7 @@ use minage, only: readtqtec_temp_file, &
                   ahe_file, &
                   isOutputDefined
 
-
 implicit none
-
 
 
 
@@ -89,7 +87,7 @@ endif
 
 ! Is input depth history defined?
 if (readtqtec_dep_file.eq.'') then
-    call usage('minage: no readtqtec output depth file defined')
+    write(0,*) 'minage: no readtqtec output depth file defined - setting all depths to 0 km'
 endif
 
 ! Is an output defined?
@@ -248,25 +246,40 @@ implicit none
 ! Local variables
 integer :: i
 integer :: ihorizon
+integer :: nhorizons_dep
+integer :: ntimes_dep
 integer :: ios
 character(len=512) :: line
 real :: dum(nhorizons_max)
 
+
+! If no depth file provided, keep things simple
+if (readtqtec_dep_file.eq.'') then
+    allocate(dep_km_array(nhorizons,ntimes))
+    dep_km_array = 0.0d0
+    return
+endif
+
+
+! Otherwise...
 
 ! Open file for reading
 open(unit=20,file=readtqtec_dep_file,status='old')
 
 
 ! First line: total time [Ma], sample rate [Ma], and number of depth-time points
-read(20,*,iostat=ios) time_ma, dt_ma, ntimes
+read(20,*,iostat=ios) time_ma, dt_ma, ntimes_dep
 if (ios.ne.0) then
     write(0,*) 'minage: error reading first line of tqtec output depth file'
     call error_exit(1)
 endif
+if (ntimes_dep.ne.ntimes) then
+    call usage('minage: number of timesteps differs between temp and dep files')
+endif
 
 
 ! Extract number of horizons tracked in the thermal model from first line of temperatures
-nhorizons = 1
+nhorizons_dep = 1
 read(20,'(A)',iostat=ios) line
 if (ios.ne.0) then
     write(0,*) 'minage: error reading second line of tqtec output depth file'
@@ -275,10 +288,13 @@ endif
 do i = 1,nhorizons_max
     read(line,*,iostat=ios) dum(1:i)
     if (ios.ne.0) then
-        nhorizons = i-1
+        nhorizons_dep = i-1
         exit
     endif
 enddo
+if (nhorizons_dep.ne.nhorizons) then
+    call usage('minage: number of tracked horizons differs between temp and dep files')
+endif
 
 
 ! Step back one line in depth file to read all depths
@@ -337,6 +353,7 @@ use fission_track, only: calc_fission_track_distribution, &
 
 implicit none
 
+! Local variables
 integer :: ihorizon
 integer :: itemp
 integer :: ibin
@@ -383,7 +400,11 @@ do ihorizon = 1,nhorizons
     if (.not.allocated(temp_ft_retention_age_corr)) then
         allocate(temp_ft_retention_age_corr(nhorizons))
     endif
-    itemp = nint(-time_ma/dt_ma - ft_retention_age_corr/dt_ma)
+    if (time_ma.lt.0.0d0) then
+        itemp = nint(-time_ma/dt_ma - ft_retention_age_corr/dt_ma)
+    else
+        itemp = nint(time_ma/dt_ma - ft_retention_age_corr/dt_ma)
+    endif
     if (itemp.lt.1) then
         itemp = 1
     elseif (itemp.gt.ntimes) then
@@ -456,13 +477,13 @@ character(len=32) :: fmt_string
 
 
 ! Apatite grain radii to calculate diffusion
-grain_radius_array(1) = 10.0d0
-grain_radius_array(2) = 20.0d0
-grain_radius_array(3) = 50.0d0
-grain_radius_array(4) = 100.0d0
-grain_radius_array(5) = 200.0d0
-grain_radius_array(6) = 500.0d0
-grain_radius_array(7) = 1000.0d0
+grain_radius_array(1) = 20.0d0
+grain_radius_array(2) = 40.0d0
+grain_radius_array(3) = 60.0d0
+grain_radius_array(4) = 80.0d0
+grain_radius_array(5) = 100.0d0
+grain_radius_array(6) = 120.0d0
+grain_radius_array(7) = 140.0d0
 ! grain_radius_array(1) = 100.0d0
 
 write(*,*) 'minage: calculating apatite (U-Th)/He ages'
@@ -482,9 +503,11 @@ do ihorizon = 1,nhorizons
     ! For each grain radius...
     do iradius = 1,nradius
 
-        write(*,2301) 'minage: working on horizon',ihorizon,'of',nhorizons, &
-                      ': grain size',iradius,'of',nradius
-        2301 format(X,2(A,I6,X,A,I6))
+        ! if (printProgress) then
+        !     write(*,2301) 'minage: working on horizon',ihorizon,'of',nhorizons, &
+        !                 ': grain size',iradius,'of',nradius
+        !     2301 format(X,2(A,I6,X,A,I6))
+        ! endif
 
         ! Calculate (U-Th)/He age
         radius_microns = grain_radius_array(iradius)
@@ -507,8 +530,9 @@ enddo
 
 
 ! Print results to AFT file
-write(23,*) 'Apatite (U-Th)/He ages (Ma)'
-write(fmt_string,'("(F6.1,"I6,"F8.3)")') nhorizons
+write(23,*) '# Apatite (U-Th)/He ages (Ma)'
+write(23,*) '# Radius(microns) Age(Ma)'
+write(fmt_string,'("(F12.1,"I6,"F12.3)")') nhorizons
 do iradius = 1,nradius
     write(23,fmt_string) grain_radius_array(iradius), &
                          (horizon_ahe_age(ihorizon,iradius),ihorizon=1,nhorizons)
@@ -662,19 +686,45 @@ if (str.ne.'') then
     write(0,*) trim(str)
     write(0,*)
 endif
-write(0,*) 'Usage: minage -temp TQTEC_TEMP_FILE -dep TQTEC_DEP_FILE [...options...]'
+write(0,*) 'Usage: minage -temp READTQTEC_TEMP_FILE [-dep READTQTEC_DEP_FILE] [...options...]'
 write(0,*)
-write(0,*) '-temp TQTEC_TEMP_FILE  Temperature history output from readtqtec'
-write(0,*) '-dep TQTEC_DEP_FILE    Depth history output from readtqtec'
-write(0,*) '-aft AFT_FILE          Apatite fission track age'
-write(0,*) '-ahe AHE_FILE          Apatite (U-Th)/He age'
+write(0,*) '-temp READTQTEC_TEMP_FILE  Temperature history output from readtqtec'
+write(0,*) '-dep READTQTEC_DEP_FILE    Depth history (default: track age from beginning of model)'
+write(0,*) '-aft AFT_FILE              Apatite fission track age'
+write(0,*) '-ahe AHE_FILE              Apatite (U-Th)/He age'
+write(0,*) '-advanced                  See all advanced options'
 write(0,*)
-write(0,*) 'Apatite (U-Th)/He options:'
-write(0,*) '-ahe:beta BETA         Finite difference implicitness coefficient (0.85)'
-write(0,*) '-ahe:nnodes NNODES     Number of spatial nodes + 2 BC nodes (102)'
-write(0,*) '-ahe:taumax TAUMAX     Maximum dimensionless time to retain He for 1 Ma (0.40)'
-write(0,*) '-ahe:dtma DTMA         Resampled timestep size in Ma (0.10*dt_input)'
-write(0,*) '-ahe:dtfactor FACTOR   Timestep resampling factor (0.10)'
+write(0,*) 'Apatite (U-Th)/He Options:'
+write(0,*) '-ahe:radius R1,R2,...  Apatite grain radii to calculate ages (20,40,...,120,140)'
+write(0,*) '-ahe:param             Print finite difference parameter values'
+write(0,*)
+write(0,*)
+write(0,*) '******************** ADVANCED OPTIONS *******************'
+write(0,*)
+write(0,*) 'FINITE DIFFERENCE'
+write(0,*) 'The default finite difference parameters were selected to produce (1) an accurate'
+write(0,*) 'solution to the diffusion-production equation over a wide range of geological scenarios'
+write(0,*) 'that (2) remains stable, and (3) completes relatively quickly. Increasing the number of'
+write(0,*) 'nodes improves accuracy, at the expense of stability and runtime. Stability depends on'
+write(0,*) 'the node spacing relative to the rate of helium diffusion; we provide several options'
+write(0,*) 'below to adjust the calculation. This can be done by modifying the details of the finite'
+write(0,*) 'difference setup:'
+write(0,*) '    1. Decrease the timestep size'
+write(0,*) '    2. Decrease the number of nodes'
+write(0,*) '    3. Increase the weighting of the implicitness in the calculation'
+write(0,*) 'Alternatively, the assumptions for diffusion in the geological system can be modified:'
+write(0,*) '    4. Define a threshold temperature for complete escape of the diffusion product'
+write(0,*)
+write(0,*) 'Default Parameter Values'
+write(0,*) '  Number of spatial nodes:  102 (including 2 boundary condition nodes)'
+write(0,*) '  Resampled timestep size:  0.5*(node_spacing)^2/max_diffusivity (minval=0.1*dt_input)'
+write(0,*) '  Implicitness coefficient: 0.85'
+write(0,*) '  Retention threshold:      diffusivity*(1 Ma)/grain_radius'
+write(0,*)
+write(0,*) '-ahe:nnodes NNODES     Number of spatial nodes + 2 BC nodes'
+write(0,*) '-ahe:dtma DTMA         Resampled timestep size, in Ma'
+write(0,*) '-ahe:beta BETA         Finite difference implicitness coefficient'
+write(0,*) '-ahe:temp TEMP         Maximum temperature to retain He'
 write(0,*)
 call error_exit(1)
 stop
