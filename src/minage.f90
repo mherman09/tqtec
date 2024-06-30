@@ -68,7 +68,9 @@ use minage, only: readtqtec_temp_file, &
                   ahe_file, &
                   isOutputDefined
 
+
 implicit none
+
 
 
 
@@ -253,6 +255,7 @@ character(len=512) :: line
 real :: dum(nhorizons_max)
 
 
+
 ! If no depth file provided, keep things simple
 if (readtqtec_dep_file.eq.'') then
     allocate(dep_km_array(nhorizons,ntimes))
@@ -325,6 +328,9 @@ end subroutine
 
 
 
+
+
+
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !----------------------------- AGE CALCULATION SUBROUTINES ----------------------------------------!
@@ -332,7 +338,14 @@ end subroutine
 !--------------------------------------------------------------------------------------------------!
 
 
+
+
 subroutine calc_aft_ages()
+!----
+! Calculate apatite fission track ages from temperature-depth history. Subroutines and variables
+! for fission track calculations can be found in fission_track_module.f90
+!----
+
 
 use minage, only: aft_file, &
                   nhorizons, &
@@ -341,6 +354,7 @@ use minage, only: aft_file, &
                   ntimes, &
                   temp_celsius_array, &
                   dep_km_array
+
 
 use fission_track, only: calc_fission_track_distribution, &
                          calc_fission_track_ages, &
@@ -351,40 +365,53 @@ use fission_track, only: calc_fission_track_distribution, &
                          ft_retention_age_corr
 
 
+
 implicit none
 
+
 ! Local variables
-integer :: ihorizon
-integer :: itemp
-integer :: ibin
-integer, allocatable :: horizon_ft_hist_corr(:,:)
-double precision, allocatable :: horizon_ft_length_age(:)
-double precision, allocatable :: horizon_ft_count_age(:)
-double precision, allocatable :: temp_ft_retention_age_corr(:)
-character(len=32) :: fmt_string
+integer :: ihorizon                                              ! Horizon index
+integer :: itemp                                                 ! Temperature index
+integer :: ibin                                                  ! Fission track bin index
+character(len=32) :: fmt_string                                  !
+integer, allocatable :: horizon_ft_hist_corr(:,:)                ! Corrected FT length histogram
+double precision, allocatable :: horizon_ft_length_age(:)        ! FT-length-based age
+double precision, allocatable :: horizon_ft_count_age(:)         ! FT-count-based age
+double precision, allocatable :: temp_ft_retention_age_corr(:)   ! 
+
 
 
 write(*,*) 'minage: calculating apatite fission track ages'
+
+
+! Open fission track output file
 open(unit=22,file=aft_file,status='unknown')
+
 
 
 ! For each horizon...
 do ihorizon = 1,nhorizons
 
-    ! Calculate fission track distribution
+
+    ! Calculate the fission track distribution at the end of the temperature-depth history
     call calc_fission_track_distribution(temp_celsius_array(ihorizon,:), &
                                          dep_km_array(ihorizon,:), &
                                          ntimes, &
                                          dt_ma)
 
-    ! Save corrected fission track distribution for this horizon
+
+    ! Save corrected fission track distribution for this tracked horizon
+    ! See fission_track_module.f90 for correction details
     if (.not.allocated(horizon_ft_hist_corr)) then
         allocate(horizon_ft_hist_corr(nhorizons,ft_nbins))
     endif
     horizon_ft_hist_corr(ihorizon,1:ft_nbins) = ft_hist_corr(1:ft_nbins)
 
-    ! Calculate fission track ages
+
+    ! Calculate a series of fission track ages:
+    ! See subroutines in fission_track_module.f90 for different age calculations
     call calc_fission_track_ages(ntimes,dt_ma)
+
 
     ! Save length-based and count-based ages for this horizon
     if (.not.allocated(horizon_ft_length_age)) then
@@ -393,10 +420,11 @@ do ihorizon = 1,nhorizons
     if (.not.allocated(horizon_ft_count_age)) then
         allocate(horizon_ft_count_age(nhorizons))
     endif
-    horizon_ft_length_age(ihorizon) = ft_age_corr
-    horizon_ft_count_age(ihorizon) = ft_retention_age_corr
+    horizon_ft_length_age(ihorizon) = ft_age_corr                ! Length-distribution-based age
+    horizon_ft_count_age(ihorizon) = ft_retention_age_corr       ! Track-count-based age
 
-    ! Save temperature at time of count-based (retention) age
+
+    ! Save temperature at time of track-count-based (retention) age
     if (.not.allocated(temp_ft_retention_age_corr)) then
         allocate(temp_ft_retention_age_corr(nhorizons))
     endif
@@ -411,7 +439,9 @@ do ihorizon = 1,nhorizons
         itemp = ntimes
     endif
     temp_ft_retention_age_corr(ihorizon) = temp_celsius_array(ihorizon,itemp)
-enddo
+
+
+enddo   ! end of loop over horizons
 
 
 ! Print results to AFT file
@@ -420,14 +450,17 @@ write(fmt_string,'("(6X,"I6,"F8.3)")') nhorizons
 write(22,fmt_string) (horizon_ft_length_age(ihorizon),ihorizon=1,nhorizons)
 write(22,*)
 
+
 write(22,*) 'Corrected track-count-based apatite fission track ages (Ma)'
 write(22,fmt_string) (horizon_ft_count_age(ihorizon),ihorizon=1,nhorizons)
 write(22,*)
+
 
 write(22,*) 'Temperatures (C) at time of track-count-based (retention) ages'
 write(fmt_string,'("(6X,"I6,"F8.2)")') nhorizons
 write(22,fmt_string) (temp_ft_retention_age_corr(ihorizon),ihorizon=1,nhorizons)
 write(22,*)
+
 
 write(22,*) 'Fission track length histograms (corrected for segmentation & etching/user bias)'
 write(fmt_string,'("(F6.1,"I6,"I8)")') nhorizons
@@ -435,6 +468,8 @@ do ibin = 1,ft_nbins
     write(22,fmt_string) ibin*ft_hist_dlen, &
                          (horizon_ft_hist_corr(ihorizon,ibin),ihorizon=1,nhorizons)
 enddo
+
+
 
 
 ! Close file
@@ -446,10 +481,19 @@ return
 end subroutine
 
 
+
+
 !--------------------------------------------------------------------------------------------------!
 
 
+
+
 subroutine calc_ahe_ages()
+!----
+! Calculate apatite (U-Th)/He ages from a temperature-depth history. Subroutines and variables
+! for apatite-helium calculations can be found in apatite_helium_module.f90
+!----
+
 
 use minage, only: ahe_file, &
                   nhorizons, &
@@ -464,19 +508,30 @@ use minage, only: ahe_file, &
 
 use apatite_helium, only: calc_apatite_he_age
 
+
 implicit none
 
-integer :: ihorizon
-integer :: iradius
-integer, parameter :: nradius = 7
-double precision :: grain_radius_array(nradius)
-double precision :: radius_microns
-double precision :: he_age
-double precision, allocatable :: horizon_ahe_age(:,:)
-character(len=32) :: fmt_string
+
+integer :: ihorizon                                              !
+integer :: iradius                                               !
+integer, parameter :: nradius = 7                                !
+double precision :: grain_radius_array(nradius)                  !
+double precision :: radius_microns                               !
+double precision :: he_age                                       !
+double precision, allocatable :: horizon_ahe_age(:,:)            !
+character(len=32) :: fmt_string                                  !
 
 
-! Apatite grain radii to calculate diffusion
+
+write(*,*) 'minage: calculating apatite (U-Th)/He ages'
+
+
+! Open apatite-helium output file
+open(unit=23,file=ahe_file,status='unknown')
+
+
+
+! Apatite grain radii
 grain_radius_array(1) = 20.0d0
 grain_radius_array(2) = 40.0d0
 grain_radius_array(3) = 60.0d0
@@ -484,13 +539,10 @@ grain_radius_array(4) = 80.0d0
 grain_radius_array(5) = 100.0d0
 grain_radius_array(6) = 120.0d0
 grain_radius_array(7) = 140.0d0
-! grain_radius_array(1) = 100.0d0
-
-write(*,*) 'minage: calculating apatite (U-Th)/He ages'
-open(unit=23,file=ahe_file,status='unknown')
 
 
-! Allocate array to save grain-size-based ages for this horizon
+
+! Array for grain-size-based ages in each tracked horizon
 if (.not.allocated(horizon_ahe_age)) then
     allocate(horizon_ahe_age(nhorizons,nradius))
 endif
@@ -500,8 +552,10 @@ horizon_ahe_age = 0.0d0
 ! For each horizon...
 do ihorizon = 1,nhorizons
 
+
     ! For each grain radius...
     do iradius = 1,nradius
+
 
         ! if (printProgress) then
         !     write(*,2301) 'minage: working on horizon',ihorizon,'of',nhorizons, &
@@ -509,7 +563,9 @@ do ihorizon = 1,nhorizons
         !     2301 format(X,2(A,I6,X,A,I6))
         ! endif
 
-        ! Calculate (U-Th)/He age
+
+        ! Calculate (U-Th)/He age for this temperature-depth-time history and grain radius
+        ! See apatite_helium_module.f90 for correction details
         radius_microns = grain_radius_array(iradius)
         call calc_apatite_he_age(temp_celsius_array(ihorizon,:), &
                                  dep_km_array(ihorizon,:), &
@@ -522,14 +578,16 @@ do ihorizon = 1,nhorizons
                                  ahe_taumax, &
                                  he_age)
 
+
         ! Save grain-size-based ages for this horizon
         horizon_ahe_age(ihorizon,iradius) = he_age
+
     enddo
 
 enddo
 
 
-! Print results to AFT file
+! Print results to apatite helium file
 write(23,*) '# Apatite (U-Th)/He ages (Ma)'
 write(23,*) '# Radius(microns) Age(Ma)'
 write(fmt_string,'("(F12.1,"I6,"F12.3)")') nhorizons
@@ -537,19 +595,6 @@ do iradius = 1,nradius
     write(23,fmt_string) grain_radius_array(iradius), &
                          (horizon_ahe_age(ihorizon,iradius),ihorizon=1,nhorizons)
 enddo
-! write(22,fmt_string) (horizon_ft_length_age(ihorizon),ihorizon=1,nhorizons)
-! write(22,*)
-
-! write(22,*) 'Corrected track-count-based apatite fission track ages (Ma)'
-! write(22,fmt_string) (horizon_ft_count_age(ihorizon),ihorizon=1,nhorizons)
-! write(22,*)
-
-! write(22,*) 'Temperatures (C) at time of track-count-based (retention) ages'
-! write(fmt_string,'("(6X,"I6,"F8.2)")') nhorizons
-! write(22,fmt_string) (temp_ft_retention_age_corr(ihorizon),ihorizon=1,nhorizons)
-! write(22,*)
-
-! write(22,*) 'Fission track length histograms (corrected for segmentation & etching/user bias)'
 
 
 ! Close file
@@ -560,7 +605,14 @@ return
 
 end subroutine
 
+
+
 !--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!------------------------------------ INPUT/OUTPUT SUBROUTINES ------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+
 
 
 subroutine gcmdln()
@@ -592,6 +644,7 @@ readtqtec_dep_file = ''
 aft_file = ''
 ahe_file = ''
 isOutputDefined = .false.
+
 
 ! Apatite (U-Th)/He variables
 ahe_beta = 0.85d0
