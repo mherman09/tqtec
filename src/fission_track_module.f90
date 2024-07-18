@@ -227,23 +227,28 @@ contains !----------------------------------------------------------------------
 
 
 
-    subroutine calc_fission_track_distribution(temp_celsius, dep_km, n, dt_ma)
+    subroutine segment_ft_distribution(nbins, binwid, len_min, hist, hist_corr)
+
     !----
-    ! Determine fission track length distribution for a temperature-time history
+    ! Add effects of fission track segmentation to a track length distribution. Segmentation occurs
+    ! due to radial shortening of tracks ~12 microns and shorter (Carlson, 1990). Each track splits
+    ! into two shorter tracks of random length. Figure 8 from Carlson (1990) shows the number of
+    ! segmented tracks as a function of axial length, with fit given by:
+    !
+    !     f = s * (len_sg - len_as)
+    !
+    !     len_sg:    segmentation initiation length (empirically 12 microns)
+    !     len_as:    mean annealed length from axial shortening alone
+    !     s:         empirically derived slope from fraction segmented vs. length plot (Fig. 8)
     !
     ! Inputs:
-    !   temp_celsius:     n-point double precision array of temperatures (Celsius)
-    !   dep_km:           n-point double precision array of depths, positive up (km)
-    !   n:                number of time steps
-    !   dt_ma:            time step size (Ma)
+    !   nbins:      number of histogram bins
+    !   binwid:     histogram bin width
+    !   len_min:    minimum length in histogram
+    !   hist:       input histogram array
     !
-    ! Outputs (fission_track module variables)
-    !   ft_len_final_all: array of fission track lengths
-    !   ft_hist_len_max:  maximum length included in fission track length histogram
-    !   ft_hist_dlen:     fission track length histogram bin width
-    !   ft_nbins:         number of bins in fission track length histogram
-    !   ft_hist:          fission track length histogram
-    !   ft_hist_corr:     corrected fission track length histogram
+    ! Outputs:
+    !   hist_corr:  histogram with segmented tracks
     !----
 
 
@@ -251,109 +256,108 @@ contains !----------------------------------------------------------------------
 
 
     ! Arguments
-    integer :: n
-    double precision :: temp_celsius(n)
-    double precision :: dep_km(n)
-    double precision :: dt_ma
+    integer, intent(in) :: nbins
+    double precision, intent(in) :: binwid
+    double precision, intent(in) :: len_min
+    integer, intent(in) :: hist(nbins)
+    integer, intent(out) :: hist_corr(nbins)
 
 
     ! Local variables
-    double precision :: len_init(ft_ninit)
+    integer :: i
+    integer :: j
+    integer :: ct
     double precision :: len
-    double precision :: ratio
+    double precision :: fraction_segmented
+    double precision :: arg
+    double precision :: ran
+    double precision, parameter :: s = 0.10d0
+    integer, allocatable :: seed(:)
+    integer :: time(3)
+    character(len=8) :: string
+    double precision :: x
     integer :: ibin
-    integer :: i, j
-    logical :: keepTracks
 
 
 
-    ! Set initial fission track distribution from a spontaneous fission event (Green et al., 1986)
-    len_init(1:5) = 15.0d0
-    len_init(6:12) = 16.0d0
-    len_init(13:19) = 17.0d0
-    len_init(20) = 18.0d0
-
-
-
-    ! For each length in the initial fission track length distribution, generate a fission track of
-    ! that length at each timestep and calculate its final length at the end of the input
-    ! temperature history. All done in subroutine calc_fission_track_length().
-    if (.not.allocated(ft_len_final_all)) then
-        allocate(ft_len_final_all(ft_ninit,n))
+    ! Initialize a random number generator (for determining lengths of segmented tracks)
+    if (.not.allocated(seed)) then
+        allocate(seed(1))
+        call itime(time)                                          ! itime() returns hr, mn, sc to int array
+        write(string,'(I0.2I0.2I0.2)') time(1), time(2), time(3)  ! combine to single integer
+        read(string,*) seed(1)
+        call random_seed(PUT=seed)
     endif
-    do i = 1,ft_ninit
-        call calc_fission_track_length(len_init(i), temp_celsius, n, dt_ma, ft_len_final_all(i,:))
-    enddo
 
 
 
-    ! Remove tracks from time period before mineral actually formed
-    keepTracks = .false. ! At start of run, assume mineral has not formed and do not keep tracks
-    do i = 1,n           ! For each time...
-        if (.not.keepTracks) then
-            if (dep_km(i).le.0.0d0) then
-                keepTracks = .true.           ! Horizon below surface, mineral exists, keep tracks from here on
-            else
-                ft_len_final_all(:,i) = 0.0d0 ! Horizon above surface, remove tracks corresponding to this time
-            endif
+    ! For each length bin...
+    do i = 1,nbins
+
+        ! Fission track length in the bin
+        len = dble(i-1)*binwid + len_min
+
+
+        ! Calculate fraction of tracks that are segmented at this length (Carlson, 1990)
+        if (len.le.12.0d0) then
+            fraction_segmented = s * (12.0d0 - len)
+        else
+            fraction_segmented = 0.0d0
+            hist_corr(i) = hist(i)
+            cycle
         endif
-    enddo
 
 
+        ! For each track in this bin, determine whether it is segmented or not
+        ct = 0
+        do j = 1,hist(i)
 
-    !********** FISSION TRACKS GENERATED **********!
-
-
-
-    ! Initialize histogram dimensions and bins
-    ft_hist_len_max = 20.0d0                                            ! max length in histogram (microns)
-    ft_hist_dlen = 1.0d0                                                ! histogram bin width (microns)
-    ft_nbins = int((ft_hist_len_max+0.5d0*ft_hist_dlen)/ft_hist_dlen)   ! number of bins
+            arg = dble(j)*fraction_segmented - dble(ct)   ! test for segmenting this track
 
 
-    ! Allocate memory to histogram arrays and initialize bin counts to 0
-    ! print *,'calc_fission_track_distribution: allocating memory to histogram arrays'
-    if (.not.allocated(ft_hist)) then
-        allocate(ft_hist(ft_nbins))
-    endif
-    if (.not.allocated(ft_hist_raw)) then
-        allocate(ft_hist_raw(ft_nbins))
-    endif
-    if (.not.allocated(ft_hist_corr)) then
-        allocate(ft_hist_corr(ft_nbins))
-    endif
-    ft_hist = 0
-    ft_hist_raw = 0
-    ft_hist_corr = 0
+            if (arg.ge.1.0d0) then
 
+                !***** SEGMENT TRACK *****!
 
-    ! Load track lengths calculated by subroutine calc_fission_track_length() into histogram array
-    ! print *,'calc_fission_track_distribution: loading raw track lengths into histogram array'
-    do i = 1,ft_ninit
+                call random_number(ran) !-----------------!---- WHERE TO SEGMENT?
 
-        do j = 1,n
+                x = len*ran !-----------------------------!---- SEGMENT 1
+                ibin = int((x+0.5d0*binwid)/binwid)       ! which bin is segmented track 1 in?
+                if (ibin.lt.1) then                       !
+                    ibin = 1                              !
+                elseif (ibin.gt.nbins) then               !
+                    ibin = nbins                          !
+                endif                                     !
+                hist_corr(ibin) = hist_corr(ibin) + 1     ! add segmented track 1 to bin
 
-            ! Bin array index (centered on bin limits)
-            ibin = int((ft_len_final_all(i,j)+0.5d0*ft_hist_dlen)/ft_hist_dlen)
+                x = len - x !-----------------------------!---- SEGMENT 2
+                ibin = int((x+0.5d0*binwid)/binwid)       ! which bin is segmented track 1 in?
+                if (ibin.lt.1) then                       !
+                    ibin = 1                              !
+                elseif (ibin.gt.nbins) then               !
+                    ibin = nbins                          !
+                endif                                     !
+                hist_corr(ibin) = hist_corr(ibin) + 1     ! add segmented track 1 to bin
 
-            ! Update count in bin
-            if (0.lt.ibin .and. ibin.le.ft_nbins) then
-                ft_hist(ibin) = ft_hist(ibin) + 1
+                hist_corr(i) = hist_corr(i) - 1 !---------!---- REMOVE INITIAL TRACK
             endif
+
+            ct = ct + 1
 
         enddo
 
+
+        ! Set negative counts to zero
+        if (hist_corr(i).lt.0) then
+            hist_corr(i) = 0
+        endif
+
+
     enddo
 
+    return
 
-    ! Save the track length histogram before any corrections as the "raw" track length histogram
-    ft_hist_raw = ft_hist
-
-
-
-    ! Fission track distribution corrections
-    ! print *,'calc_fission_track_distribution: performing segmentation and etching/bias corrections'
-    do i = 1,ft_nbins
+    end subroutine segment_ft_distribution
 
 
         ! Track length for the bin
