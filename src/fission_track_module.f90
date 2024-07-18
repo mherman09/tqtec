@@ -81,23 +81,21 @@ contains !----------------------------------------------------------------------
 
 
 
-    subroutine calc_fission_track_length(len_init, temp_celsius, n, dt_ma, len_final)
+    subroutine generate_ft_len_temp_history(nft_init, &
+                                            len_init, &
+                                            nt, &
+                                            temp_celsius, &
+                                            dep_km, &
+                                            dt_ma, &
+                                            ft_len)
+
     !----
-    ! Calculate fission track lengths over a temperature-time history. A fission track of length
-    ! len_init is generated every timestep, and Equation 4 from Carlson (1990) is used to determine
-    ! the final length of each track.
+    ! Calculate fission track lengths due to axial shortening of tracks produced over a
+    ! temperature-time history. Fission tracks of length <len_init> are generated every timestep,
+    ! and Equation 4 from Carlson (1990) is used to determine the final length of each track.
     !
-    ! Inputs:
-    !   len_init:     initial track length (microns)
-    !   temp_celsius: n-point double precision array of temperatures (Celsius)
-    !   n:            number of time steps
-    !   dt_ma:        time step size (Ma)
-    !
-    ! Outputs:
-    !   len_final:    n-point double precision array of track lengths at each time (microns)
-    !
-    !
-    ! Carlson (1990) Equation 4 describes length of a fission track from a given thermal history:
+    ! Carlson (1990) Equation 4 describes length of a fission track from a given thermal history
+    ! as it undergoes axial shortening:
     !
     !                            n                                        n
     !                      ( k )      [ St (           (  -Q    )      )]
@@ -115,6 +113,17 @@ contains !----------------------------------------------------------------------
     !         Q: Activation energy for atomic motions that eliminate defects
     !         R: Universal gas constant
     !         y: Dummy time variable for integration
+    !
+    ! Inputs:
+    !   nft_init:     number of fission tracks generated each fission event
+    !   len_init:     nft_init-point double precision initial fission track length array (microns)
+    !   nt:           number of time steps
+    !   temp_celsius: n-point double precision temperature history array (Celsius)
+    !   dep_km:       n-point double precision depth history array (km)
+    !   dt_ma:        double precision timestep size (Ma)
+    !
+    ! Outputs:
+    !   ft_len:       (nft_init x nt) double precision fission track length array (microns)
     !----
 
 
@@ -127,34 +136,38 @@ contains !----------------------------------------------------------------------
 
 
     ! Arguments
-    double precision :: len_init
-    integer :: n
-    double precision :: temp_celsius(n)
+    integer :: nft_init
+    double precision :: len_init(nft_init)
+    integer :: nt
+    double precision :: temp_celsius(nt)
+    double precision :: dep_km(nt)
     double precision :: dt_ma
-    double precision :: len_final(n)
+    double precision :: ft_len(nft_init,nt)
 
 
     ! Local variables
-    double precision :: temp_kelvin(n)
+    integer :: i
+    integer :: j
     double precision :: dt_seconds
-    double precision :: annealing(n)
-    double precision :: annealing_sum(n)
+    double precision :: temp_kelvin(nt)
+    double precision :: annealing(nt)
+    double precision :: annealing_sum(nt)
     double precision :: arg
     double precision :: sum
     double precision :: const
-    integer :: i
+    logical :: keepTracks
 
 
 
     ! Convert time and temperature units
     temp_kelvin = temp_celsius + 273.0d0
-    dt_seconds = dt_ma*1d6*365d0*24.0d0*60.0d0*60.0d0 ! SHOULD THIS BE 365.25?
+    dt_seconds = dt_ma * 1d6 * 365d0 * 24.0d0 * 60.0d0 * 60.0d0 ! SHOULD YEAR BE 365.25?
 
 
 
     ! Annealing for each time step (integrand function)
-    do i = 1,n
-        arg = -defect_activation_energy/(universal_gas_constant*temp_kelvin(i))
+    do i = 1,nt
+        arg = -defect_activation_energy / (universal_gas_constant * temp_kelvin(i))
         annealing(i) = temp_kelvin(i) * dt_seconds * exp(arg)
     enddo
 
@@ -163,9 +176,9 @@ contains !----------------------------------------------------------------------
     ! Calculate cumulative sum of annealing terms from n to 1 (estimating integral from 0 to t)
     ! Going in reverse order simulates a fission track produced every timestep that goes through
     ! temperature history from that time until end of temperature history.
-    sum = annealing(n)
-    annealing_sum(n) = sum
-    do i = n-1,1,-1
+    sum = annealing(nt)
+    annealing_sum(nt) = sum
+    do i = nt-1,1,-1
         sum = annealing_sum(i+1) + annealing(i)
         annealing_sum(i) = sum
     enddo
@@ -174,22 +187,39 @@ contains !----------------------------------------------------------------------
 
     ! Calculate the present-day lengths of fission tracks generated at each timestep
     const = axial_shortening_constant * (boltzmann_constant/planck_constant)**defect_power_law_constant
-    do i = 1,n
+    do j = 1,nft_init
+        do i = 1,nt
 
         ! Finish Carlson (1990) Equation 4
-        len_final(i) = len_init - const * annealing_sum(i)**defect_power_law_constant
+            ft_len(j,i) = len_init(j) - const * annealing_sum(i)**defect_power_law_constant
 
         ! Set negative lengths to zero
-        if (len_final(i).lt.0.0d0) then
-            len_final(i) = 0.0d0
-        endif
+            if (ft_len(j,i).lt.0.0d0) then
+                ft_len(j,i) = 0.0d0
+            endif
 
+        enddo
+    enddo
+
+
+
+    ! Remove tracks from time period before mineral actually formed
+    keepTracks = .false. ! At start of run, assume mineral has not formed and do not keep tracks
+    do i = 1,nt          ! For each time...
+        if (.not.keepTracks) then
+            if (dep_km(i).le.0.0d0) then
+                keepTracks = .true.     ! Horizon below surface, mineral exists, keep tracks from here on
+            else
+                ft_len(:,i) = 0.0d0     ! Horizon above surface, remove tracks corresponding to this time
+            endif
+        endif
     enddo
 
 
 
     return
-    end subroutine
+
+    end subroutine generate_ft_len_temp_history
 
 
 
