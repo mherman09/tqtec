@@ -35,28 +35,6 @@
 module fission_track
 
 
-    ! Carlson (1990) Table 2 Green et al. (1986) Parameters
-    ! Exponent in power-law for initial radial defect distribution
-    double precision, parameter :: defect_power_law_constant = 0.206d0
-
-
-    ! Activation energy to eliminate defect
-    double precision, parameter :: defect_activation_energy = 40.6d0    ! [kcal/mol]
-
-
-    ! Rate constant for axial shortening
-    double precision, parameter :: axial_shortening_constant = 1.81d0   ! [micron]
-
-
-    ! Carlson (1990) Table 2 Donelick (1988) Parameters
-    ! double precision, parameter :: defect_power_law_constant = 0.111d0
-    ! double precision, parameter :: defect_activation_energy = 49.0d0    ! [kcal/mol]
-    ! double precision, parameter :: axial_shortening_constant = 5.85d0   ! [micron]
-
-    ! Carlson (1990) Table 2 Composite Parameters
-    ! double precision, parameter :: defect_power_law_constant = 0.141d0
-    ! double precision, parameter :: defect_activation_energy = 46.5d0    ! [kcal/mol]
-    ! double precision, parameter :: axial_shortening_constant = 4.66d0   ! [micron]
 
 
     ! ! Average initial fission track length
@@ -95,7 +73,8 @@ contains
                                             temp_celsius, &
                                             dep_km, &
                                             dt_ma, &
-                                            ft_len)
+                                            ft_len, &
+                                            kinetic_par)
 
     !----
     ! Calculate fission track lengths due to axial shortening of tracks produced over a
@@ -129,6 +108,7 @@ contains
     !   temp_celsius: n-point double precision temperature history array (Celsius)
     !   dep_km:       n-point double precision depth history array (km)
     !   dt_ma:        double precision timestep size (Ma)
+    !   kinetic_par:  string indicating kinetic parameters
     !
     ! Outputs:
     !   ft_len:       (nft_init x nt) double precision fission track length array (microns)
@@ -136,8 +116,8 @@ contains
 
 
     use physical_constants, only: boltzmann_constant, &
-                                planck_constant, &
-                                universal_gas_constant
+                                  planck_constant, &
+                                  universal_gas_constant
 
 
     implicit none
@@ -151,6 +131,7 @@ contains
     double precision :: dep_km(nt)
     double precision :: dt_ma
     double precision :: ft_len(nft_init,nt)
+    character(len=256) :: kinetic_par
 
 
     ! Local variables
@@ -158,6 +139,9 @@ contains
     integer :: j
     double precision :: dt_seconds
     double precision :: temp_kelvin(nt)
+    double precision :: defect_power_law_constant
+    double precision :: defect_activation_energy
+    double precision :: axial_shortening_constant
     double precision :: annealing(nt)
     double precision :: annealing_sum(nt)
     double precision :: arg
@@ -165,6 +149,30 @@ contains
     double precision :: const
     logical :: keepTracks
 
+
+
+    ! Define kinetic parameters for annealing (Carlson, 1990, Table 2)
+    if (kinetic_par.eq.'green-et-al-1986') then
+        defect_power_law_constant = 0.206d0
+        defect_activation_energy = 40.6d0   ! [kcal/mol]
+        axial_shortening_constant = 1.81d0  ! [micron]
+    elseif (kinetic_par.eq.'donelick-1988') then
+        defect_power_law_constant = 0.111d0
+        defect_activation_energy = 49.0d0   ! [kcal/mol]
+        axial_shortening_constant = 5.85d0  ! [micron]
+    elseif (kinetic_par.eq.'carlson-1990-composite') then
+        defect_power_law_constant = 0.141d0
+        defect_activation_energy = 46.5d0   ! [kcal/mol]
+        axial_shortening_constant = 4.66d0  ! [micron]
+    else
+        write(0,*) 'generate_ft_len_temp_history: error setting kinetic parameters for annealing'
+        write(0,*) 'Read kinetic_par =',trim(kinetic_par)
+        write(0,*) 'Options are:'
+        write(0,*) '    "green-et-al-1986"'
+        write(0,*) '    "gdonelick-1988"'
+        write(0,*) '    "carlson-1990-composite"'
+        call error_exit(1)
+    endif
 
 
     ! Convert time and temperature units
