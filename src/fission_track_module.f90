@@ -464,30 +464,34 @@ contains !----------------------------------------------------------------------
 
 
 !--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!----------------------------------- FISSION TRACK AGE ROUTINES -----------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
 
 
 
-    subroutine calc_fission_track_ages(n,dt_ma)
+    subroutine calc_ft_retention_age(nbins, hist, nft_init, dt_ma, age_ma)
+
     !----
-    ! Determine fission track ages
+    ! Fission track retention age is based on the number of tracks counted, assumed to be
+    ! proportional to the total track density in the sample. The more fission tracks, the longer
+    ! the sample has been accumulating them at low enough temperatures to retain them.
     !
-    ! Inputs (arguments)
-    !   n:                       number of time steps
-    !   dt_ma:                   time step size (Ma)
+    !   # FTs = (Time Accumulating FTs) * (# FTs Produced Per Timestep) / (Timestep Duration)
     !
-    ! Inputs (fission_track module variables)
-    !   ft_len_final_all:        array of fission track lengths
-    !   ft_hist:                 fission track length histogram
-    !   ft_hist_corr:            corrected fission track length histogram
-    !   ft_nbins:                number of bins in fission track length histogram
-    !   ft_hist_dlen:            fission track length histogram bin width
+    !         ...rearranging...
     !
-    ! Outputs (fission_track module variables)
-    !   ft_retention_age_raw:    track-count age before any corrections
-    !   ft_retention_age:        track-count age after segmentation correction
-    !   ft_retention_age_corr:   track-count age after segmentation + etching/user bias corrections
-    !   ft_age:                  track-length age before any corrections
-    !   ft_age_corr:             time step size (Ma)
+    !   age_ma = ntracks * dt_ma / nft_init
+    !
+    ! Inputs:
+    !   nbins:      number of histogram bins
+    !   hist:       histogram of track lengths
+    !   nft_init:   number of fission tracks produced each timestep
+    !   dt_ma:      time step (Ma)
+    !
+    ! Outputs
+    !   age_ma:     retention age (Ma)
     !----
 
 
@@ -495,88 +499,112 @@ contains !----------------------------------------------------------------------
 
 
     ! Arguments
-    integer :: n
+    integer :: nbins
+    integer :: hist(nbins)
+    integer :: nft_init
     double precision :: dt_ma
+    double precision :: age_ma
 
 
     ! Local variables
-    integer :: ntracks_raw
+    integer :: i
     integer :: ntracks
-    integer :: ntracks_corr
-    double precision :: total_track_len
-    double precision :: total_track_len_hist
-    double precision :: total_track_len_hist_corr
-    double precision :: len
-    double precision :: ratio
-    integer :: i, j
+    
 
 
-
-    ! Check whether histograms have been calculated
-    if (.not.allocated(ft_hist).or..not.allocated(ft_hist_corr)) then
-        write(0,*) 'calc_fission_track_ages: fission track distributions must be calculated first'
-        write(0,*) 'with calc_fission_track_distribution()'
-        call error_exit(1)
-    endif
-
-
-    !********** RETENTION AGES **********!
-    ! Retention ages are based on the number of tracks counted:
-    !   - Total number of tracks produced over history: total_time / dt_ma * ft_ninit
-    !   - Number of tracks remaining at present: ntracks
-    !   - Apparent age: ntracks * dt_ma / ft_init    <-- RETENTION AGE
-
-    ! Calculate total number of tracks in uncorrected and corrected distributions
-    ntracks_raw = 0                                                         ! TOT0 (not considering segmentation)
-    ntracks = 0                                                             ! TOT1 (segmentation)
-    ntracks_corr = 0                                                        ! TOT2 (segmentation + etching/user bias)
-    do i = 1,ft_nbins
-        ntracks_raw  = ntracks_raw  + ft_hist_raw(i)
-        ntracks      = ntracks      + ft_hist(i)
-        ntracks_corr = ntracks_corr + ft_hist_corr(i)
+    ! Calculate total number of tracks in fission track length distribution
+    ntracks = 0
+    do i = 1,nbins
+        ntracks = ntracks + hist(i)
     enddo
 
 
-    ! Calculate retention ages (= #tracks * timestep / total #tracks generated)
-    ft_retention_age_raw  = ntracks_raw  * dt_ma/ft_ninit                   ! AGE0
-    ft_retention_age      = ntracks      * dt_ma/ft_ninit                   ! AGE1
-    ft_retention_age_corr = ntracks_corr * dt_ma/ft_ninit                   ! AGE2
+    ! Calculate retention age
+    age_ma = ntracks * dt_ma / nft_init
+
+    return
+
+    end subroutine calc_ft_retention_age
 
 
 
-    !********** LENGTH DISTRIBUTION AGES *********!
-    ! Length distribution ("fission track") ages are based on the track length distributions:
-    !   - Total length of tracks produced over history: total_time / dt_ma * ft_len_avg_init * ft_ninit
-    !   - Total length of tracks remaining at present: total_track_len
-    !   - Apparent age: total_track_len * dt_ma / ft_len_avg_init / ft_ninit    <-- FISSION TRACK AGE
+!--------------------------------------------------------------------------------------------------!
 
-    ! Calculate total sum of all track lengths produced in model
-    total_track_len = 0.0d0                                                 ! TOT3 (intermediate step)
-    do i = 1,ft_ninit
-        do j = 1,n
-            total_track_len = total_track_len + ft_len_final_all(i,j)
-        enddo
+
+
+    subroutine calc_ft_age(nbins, binwid, len_min, hist, nft_init, avg_len_microns, dt_ma, age_ma)
+
+    !----
+    ! Fission track ages incorporate the measured lengths of tracks in the sample in addition to
+    ! the number of tracks. The more fission tracks there are and the longer they are, the longer
+    ! the sample has been accumulating them at low temperatures. Shorter tracks indicate a degree
+    ! of annealing at moderate temperatures.
+    !
+    !  Total FT Length = (Time Accumulating FTs) * (Avg Initial FT Length)
+    !                            * (# FTs Produced Per Timestep) / (Timestep Duration)
+    !
+    !         ...rearranging...
+    !
+    !   age_ma = ntracks * avg_len * dt_ma / nft_init / ft_len_avg_init
+    !            |---------------|
+    !             total_track_len
+    !
+    ! Inputs:
+    !   nbins:             number of histogram bins
+    !   binwid:            histogram bin width (microns)
+    !   len_min:           minimum fission track bin length (microns)
+    !   hist:              histogram of track lengths
+    !   nft_init:          number of fission tracks produced each timestep
+    !   avg_len_microns:   initial average track length (microns)
+    !   dt_ma:             time step (Ma)
+    !
+    ! Outputs
+    !   age_ma:            fission track age (Ma)
+    !----
+
+
+    implicit none
+
+
+    ! Arguments
+    integer :: nbins
+    double precision :: binwid
+    double precision :: len_min
+    integer :: hist(nbins)
+    integer :: nft_init
+    double precision :: avg_len_microns
+    double precision :: dt_ma
+    double precision :: age_ma
+
+
+    ! Local variables
+    integer :: i
+    double precision :: total_length_microns
+    
+
+
+    ! Calculate total number of tracks in fission track length distribution
+    total_length_microns = 0
+    do i = 1,nbins
+        total_length_microns = total_length_microns + dble(hist(i))*(len_min+binwid*dble(i-1))
     enddo
 
 
-    ! Divide by average track length and number of tracks; multiply by time step duration
-    total_track_len = total_track_len*dt_ma/dble(ft_ninit)/ft_len_avg_init  ! TOT3 (final step)
-
+    ! Calculate fission track age
+    age_ma = total_length_microns * dt_ma / dble(nft_init) / avg_len_microns
 
     ! Calculate raw (no corrections) fission track age (Ketcham, 2005; Equation 14)
-    ft_age = total_track_len/PST                                            ! AGE3
+    ! ft_age = total_track_len/PST
 
 
-    ! Total track lengths for corrected fission track distributions
-    total_track_len_hist = 0.0d0                                            ! FTOT5 (segmentation only)
-    total_track_len_hist_corr = 0.0d0                                       ! FTOT2 (segmentation + etching/user bias)
+    return
+
+    end subroutine calc_ft_age
 
 
-    ! Calculate total fission track lengths for corrected distributions
-    do i = 1,ft_nbins
-        len = dble(i)*ft_hist_dlen
-        total_track_len_hist      = total_track_len_hist      + ft_hist(i)*len
-        total_track_len_hist_corr = total_track_len_hist_corr + ft_hist_corr(i)*len
+
+
+!--------------------------------------------------------------------------------------------------!
     enddo
 
 
