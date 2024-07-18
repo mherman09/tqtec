@@ -16,13 +16,16 @@
 !     track density apatites using 252Cf-derived fission fragment tracks: A model and experimental !
 !     observations. International Journal of Radiation Applications and Instrumentation. Part D.   !
 !     Nuclear Tracks and Radiation Measurements, 18, 3, 301-307.                                   !
+! Green, P.F. (1988). The relationship between track shortening and fission track age reduction in !
+!     apatite: Combined influences of inherent instability, annealing anisotropy, length bias and  !
+!     system calibration. Earth and Planetary Science Letters, 89(3–4), 335–352.                   !
 ! Green, P.F., Duddy, I.R., Gleadow, A.J.W., Tingate, P.R., Laslett, G.M. (1986). Thermal          !
 !     annealing of fission tracks in apatite: 1. A qualitative description. Chemical Geology:      !
 !     Isotope Geoscience Section, 59, 237-253.                                                     !
 ! Ketcham, R. A. (2005). Forward and Inverse Modeling of Low-Temperature Thermochronometry Data.   !
 !     Reviews in Mineralogy and Geochemistry, 58(1), 275–314.                                      !
-! Legg, M.J. (2010). The Tectonic and Thermal Evolution of Hawke's Bay Basin, New Zealand. Penn    !
-!     State MS Thesis. 72 pp.                                                                      !
+! Legg, M.J. (2010). The Tectonic and Thermal Evolution of Hawke's Bay Basin, New Zealand.         !
+!     Pennsylvania State University MS Thesis. 72 pp.                                              !
 ! Willett, S.D. (1997). Inverse modeling of annealing of fission tracks in apatite: 1. A           !
 !     controlled random search method. American Journal of Science, 297, 10, 939-969.              !
 !--------------------------------------------------------------------------------------------------!
@@ -32,6 +35,7 @@
 module fission_track
 
 
+    ! Carlson (1990) Table 2 Green et al. (1986) Parameters
     ! Exponent in power-law for initial radial defect distribution
     double precision, parameter :: defect_power_law_constant = 0.206d0
 
@@ -44,41 +48,45 @@ module fission_track
     double precision, parameter :: axial_shortening_constant = 1.81d0   ! [micron]
 
 
-    ! Average initial fission track length
-    double precision, parameter :: ft_len_avg_init = 16.2d0             ! [micron]
+    ! Carlson (1990) Table 2 Donelick (1988) Parameters
+    ! double precision, parameter :: defect_power_law_constant = 0.111d0
+    ! double precision, parameter :: defect_activation_energy = 49.0d0    ! [kcal/mol]
+    ! double precision, parameter :: axial_shortening_constant = 5.85d0   ! [micron]
+
+    ! Carlson (1990) Table 2 Composite Parameters
+    ! double precision, parameter :: defect_power_law_constant = 0.141d0
+    ! double precision, parameter :: defect_activation_energy = 46.5d0    ! [kcal/mol]
+    ! double precision, parameter :: axial_shortening_constant = 4.66d0   ! [micron]
+
+
+    ! ! Average initial fission track length
+    ! double precision, parameter :: ft_len_avg_init = 16.2d0             ! [micron]
 
 
     ! Ratio of present-day average length for spontaneous tracks in Durango apatite to the average
-    ! initial fission track length (Donelick and Miller, 1991)
+    ! induced fission track length (Donelick and Miller, 1991)
     double precision, parameter :: PST = 0.893d0
 
 
-
-    ! Fission track distribution parameters
-    integer, parameter :: ft_ninit = 20                                 ! number of FTs per timestep
-    double precision, allocatable :: ft_len_final_all(:,:)              ! FT lengths at each timestep
-    integer :: ft_nbins                                                 ! # FT bins in distribution
-    double precision :: ft_hist_len_max                                 ! max FT length in distribution
-    double precision :: ft_hist_dlen                                    ! bin width in distribution
-    integer, allocatable :: ft_hist(:)
-    integer, allocatable :: ft_hist_raw(:)
-    integer, allocatable :: ft_hist_corr(:)
-
-
-
-    ! Fission track ages (from calc_fission_track_ages)
-    double precision :: ft_age                         ! AGE3
-    double precision :: ft_age_corr                    ! FTAGE
-    double precision :: ft_retention_age_raw           ! AGE0
-    double precision :: ft_retention_age               ! AGE1
-    double precision :: ft_retention_age_corr          ! AGE2
+    ! Module subroutines
+    PUBLIC :: generate_ft_len_temp_history
+    PUBLIC :: segment_ft_distribution
+    PUBLIC :: correct_ft_distribution_etching_userbias
+    PUBLIC :: calc_ft_age
+    PUBLIC :: calc_ft_retention_age
 
 
 
 
-contains !-----------------------------------------------------------------------------------------!
+contains
 
 
+
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!-------------------------------- FISSION TRACK ANNEALING ROUTINES --------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
 
 
     subroutine generate_ft_len_temp_history(nft_init, &
@@ -605,21 +613,81 @@ contains !----------------------------------------------------------------------
 
 
 !--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------- HISTOGRAM ROUTINES ---------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+
+    subroutine get_histogram_parameters(n, array, binwid, xmin, xmax, nbin)
+    implicit none
+    integer, intent(in) :: n
+    double precision, intent(in) :: array(n)
+    double precision, intent(in) :: binwid
+    integer :: nbin
+    double precision :: xmin
+    double precision :: xmax
+    xmin = dble(floor(minval(array)) - 1)
+    xmax = dble(ceiling(maxval(array)) + 1)
+    nbin = nint((xmax-xmin+1.0d0)/binwid)
+    return
+    end subroutine
+
+!--------------------------------------------------------------------------------------------------!
+
+    subroutine load_histogram(n, array, binwid, xmin, nbin, hist)
+    implicit none
+    integer, intent(in) :: n
+    double precision, intent(in) :: array(n)
+    double precision, intent(in) :: binwid
+    integer, intent(in) :: nbin
+    double precision, intent(in) :: xmin
+    integer, intent(out) :: hist(nbin)
+    integer :: i
+    integer :: ibin
+    hist = 0
+    do i = 1,n
+        ibin = nint((array(i) - xmin + binwid)/binwid) ! bin value is at center
+        if (0.lt.ibin .and. ibin.le.nbin) then
+            hist(ibin) = hist(ibin) + 1
+        endif
     enddo
-
-
-    ! Ratio between segmentation + etching/user bias corrected and segmentation corrected total lengths
-    ratio = total_track_len_hist_corr/total_track_len_hist
-
-
-    ! Correct fission track age by multiplying raw age by ratio
-    ft_age_corr = ft_age * ratio                                            ! FTAGE
-
-
     return
     end subroutine
 
 
 
 
-end module
+
+    ! ! Calculate raw (no corrections) fission track age (Ketcham, 2005; Equation 14)
+    ! ! ft_age = total_track_len/PST                                            ! AGE3
+    ! ft_age = total_track_len                                            ! AGE3
+
+
+    ! ! Total track lengths for corrected fission track distributions
+    ! total_track_len_hist = 0.0d0                                            ! FTOT5 (segmentation only)
+    ! total_track_len_hist_corr = 0.0d0                                       ! FTOT2 (segmentation + etching/user bias)
+
+
+    ! ! Calculate total fission track lengths for corrected distributions
+    ! do i = 1,ft_nbins
+    !     len = dble(i)*ft_hist_dlen
+    !     total_track_len_hist      = total_track_len_hist      + ft_hist_uncorr(i)*len
+    !     ! total_track_len_hist_corr = total_track_len_hist_corr + ft_hist_corr(i)*len
+    ! enddo
+
+
+    ! ! Ratio between segmentation + etching/user bias corrected and segmentation corrected total lengths
+    ! ratio = total_track_len_hist_corr/total_track_len_hist
+
+
+    ! ! Correct fission track age by multiplying raw age by ratio
+    ! ft_age_corr = ft_age * ratio                                            ! FTAGE
+
+
+    ! return
+    ! end subroutine
+
+
+
+
+end module fission_track
