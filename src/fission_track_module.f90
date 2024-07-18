@@ -360,39 +360,106 @@ contains !----------------------------------------------------------------------
     end subroutine segment_ft_distribution
 
 
+
+!--------------------------------------------------------------------------------------------------!
+
+
+
+    subroutine correct_ft_distribution_etching_userbias(nbins, &
+                                                        binwid, &
+                                                        len_min, &
+                                                        hist, &
+                                                        len0, &
+                                                        hist_corr)
+
+    !----
+    ! Correct histogram for preferential etching and user bias counting of longer fission tracks.
+    ! Green (1988) and Willett (1997) showed that fission track density (on which the fission track
+    ! age is based) is not 1:1 linearly proportional to mean fission track length. Rather, density
+    ! of longer tracks is proportional to their lengths, but shorter tracks go to zero density.
+    ! Equation 4 of Willett (1997) relates the track density to the track lengths:
+    !
+    !             len/len0 <= 0.423:   p/p0 = 0
+    !     0.423 < len/len0 <= 0.650:   p/p0 = 2.862*len/len0 - 1.2104
+    !     0.650 < len/len0:            p/p0 = len/len0
+    !
+    !         len:  track length (microns)
+    !         len0: initial mean track length (microns)
+    !         p:    correected track density
+    !         p0:   control sample track density
+    !
+    ! Inputs:
+    !   nbins:      number of histogram bins
+    !   binwid:     histogram bin width (microns)
+    !   len_min:    minimum fission track length in the histogram (microns)
+    !   hist:       fission track length histogram
+    !   len0:       initial average fission track length (microns)
+    !
+    ! Outputs
+    !   hist_corr:  corrected fission track length histogram
+    !----
+
+
+    implicit none
+
+
+    ! Arguments
+    integer, intent(in) :: nbins
+    double precision, intent(in) :: binwid
+    double precision, intent(in) :: len_min
+    integer, intent(in) :: hist(nbins)
+    double precision, intent(in) :: len0
+    integer, intent(out) :: hist_corr(nbins)
+
+
+    ! Local variables
+    integer :: i
+    double precision :: len
+    double precision :: ratio
+    double precision :: a
+    double precision :: b
+
+
+
+    ! Domain of piecewise function
+    a = 0.423d0*len0
+    b = 0.650d0*len0
+
+
+   ! Correct count in each bin of the histogram
+    do i = 1,nbins
+
         ! Track length for the bin
-        len = dble(i)*ft_hist_dlen
-
-
-        ! Account for segmentation of fission tracks up to 11 microns long
-        ! Based on Carlson (1990) empirical fit to observations shown in Figure 8
-        if (len.le.11.0d0) then
-            ft_hist(i) = ft_hist(i) - int((-0.1d0*len + 1.2d0)*ft_hist(i))
-        endif
-        if (ft_hist(i).lt.0) then
-            ft_hist(i) = 0
-        endif
+        len = dble(i-1)*binwid + len_min
 
 
         ! Correct histogram for etching and user bias based on Willett (1997) Equation 4
-        if (len.le.6.0d0) then
-            ft_hist_corr(i) = 0
-        elseif (len.le.11.0d0) then
-            ratio = len/ft_len_avg_init   ! ratio of bin length to average initial length (16.2 microns)
-            ft_hist_corr(i) = int(dble(ft_hist(i)) * ((2.862d0*ratio)-1.2104d0))
+        if (len.le.a) then
+            ! No short tracks
+            hist_corr(i) = 0
+        elseif (len.le.b) then
+            ! Reduce number of medium length tracks
+            ratio = len/len0   ! ratio of bin length to average initial length
+            hist_corr(i) = int( dble(hist(i)) * ((2.862d0*ratio)-1.2104d0) )
         else
-            ft_hist_corr(i) = ft_hist(i)
-        endif
-        if (ft_hist_corr(i).lt.0) then
-            ft_hist_corr(i) = 0
+            ! Keep number of long tracks
+            hist_corr(i) = hist(i)
         endif
 
+
+        ! Set negative counts to zero
+        if (hist_corr(i).lt.0) then
+            hist_corr(i) = 0
+        endif
 
     enddo
 
 
     return
-    end subroutine
+
+    end subroutine correct_ft_distribution_etching_userbias
+
+
 
 
 
