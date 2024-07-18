@@ -35,17 +35,6 @@
 module fission_track
 
 
-
-
-    ! ! Average initial fission track length
-    ! double precision, parameter :: ft_len_avg_init = 16.2d0             ! [micron]
-
-
-    ! Ratio of present-day average length for spontaneous tracks in Durango apatite to the average
-    ! induced fission track length (Donelick and Miller, 1991)
-    double precision, parameter :: PST = 0.893d0
-
-
     ! Module subroutines
     PUBLIC :: generate_ft_len_temp_history
     PUBLIC :: segment_ft_distribution
@@ -73,8 +62,8 @@ contains
                                             temp_celsius, &
                                             dep_km, &
                                             dt_ma, &
-                                            ft_len, &
-                                            kinetic_par)
+                                            kinetic_par, &
+                                            ft_len)
 
     !----
     ! Calculate fission track lengths due to axial shortening of tracks produced over a
@@ -130,8 +119,8 @@ contains
     double precision :: temp_celsius(nt)
     double precision :: dep_km(nt)
     double precision :: dt_ma
+    character(len=*), intent(in) :: kinetic_par
     double precision :: ft_len(nft_init,nt)
-    character(len=256) :: kinetic_par
 
 
     ! Local variables
@@ -663,6 +652,36 @@ contains
     end subroutine
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    ! ! Ratio of present-day average length for spontaneous tracks in Durango apatite to the average
+    ! ! induced fission track length (Donelick and Miller, 1991)
+    ! double precision, parameter :: PST = 0.893d0
 
 
 
