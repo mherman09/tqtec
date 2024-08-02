@@ -356,13 +356,15 @@ use minage, only: aft_file, &
                   dep_km_array
 
 
-use fission_track, only: calc_fission_track_distribution, &
-                         calc_fission_track_ages, &
-                         ft_hist_dlen, &
-                         ft_nbins, &
-                         ft_hist_corr, &
-                         ft_age_corr, &
-                         ft_retention_age_corr
+use fission_track, only: generate_ft_len_temp_history, &
+                         load_histogram, &
+                         calc_ft_retention_age, &
+                         calc_ft_age
+!                          ft_hist_dlen, &
+!                          ft_nbins, &
+!                          ft_hist_corr, &
+!                          ft_age_corr, &
+!                          ft_retention_age_corr
 
 
 
@@ -370,14 +372,25 @@ implicit none
 
 
 ! Local variables
+integer :: i
 integer :: ihorizon                                              ! Horizon index
-integer :: itemp                                                 ! Temperature index
-integer :: ibin                                                  ! Fission track bin index
-character(len=32) :: fmt_string                                  !
-integer, allocatable :: horizon_ft_hist_corr(:,:)                ! Corrected FT length histogram
-double precision, allocatable :: horizon_ft_length_age(:)        ! FT-length-based age
-double precision, allocatable :: horizon_ft_count_age(:)         ! FT-count-based age
-double precision, allocatable :: temp_ft_retention_age_corr(:)   ! 
+integer :: nft0
+double precision, allocatable :: ftlen0(:)
+double precision :: len0
+double precision, allocatable :: ftlen(:,:)
+double precision :: xmin
+double precision :: binwid
+integer :: ibin
+integer :: nbins
+integer, allocatable :: fthist(:)
+double precision :: ft_age
+double precision :: ft_retention_age
+! integer :: itemp                                                 ! Temperature index
+character(len=32) :: fmt_string
+integer, allocatable :: fthist_all(:,:)
+! double precision, allocatable :: horizon_ft_length_age(:)        ! FT-length-based age
+! double precision, allocatable :: horizon_ft_count_age(:)         ! FT-count-based age
+! double precision, allocatable :: temp_ft_retention_age_corr(:)   ! 
 
 
 
@@ -389,84 +402,119 @@ open(unit=22,file=aft_file,status='unknown')
 
 
 
+
+! Lengths of fission tracks generated during a fission event
+nft0 = 20
+allocate(ftlen0(nft0))
+allocate(ftlen(nft0,ntimes))
+ftlen0(1:5) = 15.0d0
+ftlen0(6:12) = 16.0d0
+ftlen0(13:19) = 17.0d0
+ftlen0(20) = 18.0d0
+len0 = 0.0d0
+do i = 1,nft0
+    len0 = len0 + ftlen0(i)
+enddo
+len0 = len0/dble(nft0)
+write(0,*) 'len0 = ',len0
+
+! Histogram parameters
+xmin = 1.0d0
+binwid = 1.0d0
+nbins = 20
+allocate(fthist(nbins))
+
+
 ! For each horizon...
 do ihorizon = 1,nhorizons
 
 
-    ! Calculate the fission track distribution at the end of the temperature-depth history
-    call calc_fission_track_distribution(temp_celsius_array(ihorizon,:), &
-                                         dep_km_array(ihorizon,:), &
-                                         ntimes, &
-                                         dt_ma)
+    ! Calculate fission track lengths for the temperature history
+    call generate_ft_len_temp_history(nft0, &
+                                      ftlen0, &
+                                      ntimes, &
+                                      temp_celsius_array(ihorizon,:), &
+                                      dep_km_array(ihorizon,:), &
+                                      dt_ma, &
+                                      'green-et-al-1986', &
+                                      ftlen)
 
+    ! Load the fission track lengths into a histogram
+    call load_histogram(nft0*ntimes, ftlen, binwid, xmin, nbins, fthist)
 
-    ! Save corrected fission track distribution for this tracked horizon
-    ! See fission_track_module.f90 for correction details
-    if (.not.allocated(horizon_ft_hist_corr)) then
-        allocate(horizon_ft_hist_corr(nhorizons,ft_nbins))
+    ! Calculate fission track ages
+    call calc_ft_retention_age(nbins, fthist, nft0, dt_ma, ft_retention_age)
+    write(0,*) 'ft_retention_age = ',ft_retention_age
+    call calc_ft_age(nbins, binwid, xmin, fthist, nft0, len0, dt_ma, ft_age)
+    write(0,*) 'ft_age = ',ft_age
+    
+!     ! Save corrected fission track distribution for this tracked horizon
+!     ! See fission_track_module.f90 for correction details
+    if (.not.allocated(fthist_all)) then
+        allocate(fthist_all(nhorizons,nbins))
     endif
-    horizon_ft_hist_corr(ihorizon,1:ft_nbins) = ft_hist_corr(1:ft_nbins)
+    fthist_all(ihorizon,1:nbins) = fthist(1:nbins)
 
 
-    ! Calculate a series of fission track ages:
-    ! See subroutines in fission_track_module.f90 for different age calculations
-    call calc_fission_track_ages(ntimes,dt_ma)
+!     ! Calculate a series of fission track ages:
+!     ! See subroutines in fission_track_module.f90 for different age calculations
+!     call calc_fission_track_ages(ntimes,dt_ma)
 
 
-    ! Save length-based and count-based ages for this horizon
-    if (.not.allocated(horizon_ft_length_age)) then
-        allocate(horizon_ft_length_age(nhorizons))
-    endif
-    if (.not.allocated(horizon_ft_count_age)) then
-        allocate(horizon_ft_count_age(nhorizons))
-    endif
-    horizon_ft_length_age(ihorizon) = ft_age_corr                ! Length-distribution-based age
-    horizon_ft_count_age(ihorizon) = ft_retention_age_corr       ! Track-count-based age
+!     ! Save length-based and count-based ages for this horizon
+!     if (.not.allocated(horizon_ft_length_age)) then
+!         allocate(horizon_ft_length_age(nhorizons))
+!     endif
+!     if (.not.allocated(horizon_ft_count_age)) then
+!         allocate(horizon_ft_count_age(nhorizons))
+!     endif
+!     horizon_ft_length_age(ihorizon) = ft_age_corr                ! Length-distribution-based age
+!     horizon_ft_count_age(ihorizon) = ft_retention_age_corr       ! Track-count-based age
 
 
-    ! Save temperature at time of track-count-based (retention) age
-    if (.not.allocated(temp_ft_retention_age_corr)) then
-        allocate(temp_ft_retention_age_corr(nhorizons))
-    endif
-    if (time_ma.lt.0.0d0) then
-        itemp = nint(-time_ma/dt_ma - ft_retention_age_corr/dt_ma)
-    else
-        itemp = nint(time_ma/dt_ma - ft_retention_age_corr/dt_ma)
-    endif
-    if (itemp.lt.1) then
-        itemp = 1
-    elseif (itemp.gt.ntimes) then
-        itemp = ntimes
-    endif
-    temp_ft_retention_age_corr(ihorizon) = temp_celsius_array(ihorizon,itemp)
+!     ! Save temperature at time of track-count-based (retention) age
+!     if (.not.allocated(temp_ft_retention_age_corr)) then
+!         allocate(temp_ft_retention_age_corr(nhorizons))
+!     endif
+!     if (time_ma.lt.0.0d0) then
+!         itemp = nint(-time_ma/dt_ma - ft_retention_age_corr/dt_ma)
+!     else
+!         itemp = nint(time_ma/dt_ma - ft_retention_age_corr/dt_ma)
+!     endif
+!     if (itemp.lt.1) then
+!         itemp = 1
+!     elseif (itemp.gt.ntimes) then
+!         itemp = ntimes
+!     endif
+!     temp_ft_retention_age_corr(ihorizon) = temp_celsius_array(ihorizon,itemp)
 
 
 enddo   ! end of loop over horizons
 
 
-! Print results to AFT file
-write(22,*) 'Corrected track-length-based apatite fission track ages (Ma)'
-write(fmt_string,'("(6X,"I6,"F8.3)")') nhorizons
-write(22,fmt_string) (horizon_ft_length_age(ihorizon),ihorizon=1,nhorizons)
-write(22,*)
+! ! Print results to AFT file
+! write(22,*) 'Corrected track-length-based apatite fission track ages (Ma)'
+! write(fmt_string,'("(6X,"I6,"F8.3)")') nhorizons
+! write(22,fmt_string) (horizon_ft_length_age(ihorizon),ihorizon=1,nhorizons)
+! write(22,*)
 
 
-write(22,*) 'Corrected track-count-based apatite fission track ages (Ma)'
-write(22,fmt_string) (horizon_ft_count_age(ihorizon),ihorizon=1,nhorizons)
-write(22,*)
+! write(22,*) 'Corrected track-count-based apatite fission track ages (Ma)'
+! write(22,fmt_string) (horizon_ft_count_age(ihorizon),ihorizon=1,nhorizons)
+! write(22,*)
 
 
-write(22,*) 'Temperatures (C) at time of track-count-based (retention) ages'
-write(fmt_string,'("(6X,"I6,"F8.2)")') nhorizons
-write(22,fmt_string) (temp_ft_retention_age_corr(ihorizon),ihorizon=1,nhorizons)
-write(22,*)
+! write(22,*) 'Temperatures (C) at time of track-count-based (retention) ages'
+! write(fmt_string,'("(6X,"I6,"F8.2)")') nhorizons
+! write(22,fmt_string) (temp_ft_retention_age_corr(ihorizon),ihorizon=1,nhorizons)
+! write(22,*)
 
 
-write(22,*) 'Fission track length histograms (corrected for segmentation & etching/user bias)'
+write(22,*) 'Fission track length histograms'
 write(fmt_string,'("(F6.1,"I6,"I8)")') nhorizons
-do ibin = 1,ft_nbins
-    write(22,fmt_string) ibin*ft_hist_dlen, &
-                         (horizon_ft_hist_corr(ihorizon,ibin),ihorizon=1,nhorizons)
+do ibin = 1,nbins
+    write(22,fmt_string) xmin+dble(ibin-1)*binwid, &
+                         (fthist_all(ihorizon,ibin),ihorizon=1,nhorizons)
 enddo
 
 
