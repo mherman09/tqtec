@@ -38,7 +38,7 @@ module fission_track
     ! Module subroutines
     PUBLIC :: generate_fts_carlson_1990
     PUBLIC :: segment_fts_carlson_1990
-    PUBLIC :: correct_ft_distribution_etching_userbias
+    PUBLIC :: correct_fts_etching_userbias_willett_1997
     PUBLIC :: calc_ft_age
     PUBLIC :: calc_ft_retention_age
 
@@ -378,12 +378,14 @@ contains
 
 
 
-    subroutine correct_ft_distribution_etching_userbias(nbins, &
-                                                        binwid, &
-                                                        len_min, &
-                                                        hist, &
-                                                        len0, &
-                                                        hist_corr)
+    subroutine correct_fts_etching_userbias_willett_1997( &
+        nbins,                                            &
+        binwid,                                           &
+        len_min,                                          &
+        hist,                                             &
+        len0,                                             &
+        hist_corr                                         &
+    )
 
     !----
     ! Correct histogram for preferential etching and user bias counting of longer fission tracks.
@@ -470,7 +472,7 @@ contains
 
     return
 
-    end subroutine correct_ft_distribution_etching_userbias
+    end subroutine correct_fts_etching_userbias_willett_1997
 
 
 

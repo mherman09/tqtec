@@ -359,6 +359,7 @@ use minage, only: aft_file, &
 use fission_track, only:       &
     generate_fts_carlson_1990, &
     segment_fts_carlson_1990,  &
+    correct_fts_etching_userbias_willett_1997, &
                          load_histogram, &
                          calc_ft_retention_age, &
                          calc_ft_age
