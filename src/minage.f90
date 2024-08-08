@@ -356,7 +356,7 @@ use minage, only: aft_file, &
                   dep_km_array
 
 
-use fission_track, only: generate_ft_len_temp_history, &
+use fission_track, only: generate_fts_carlson_1990, &
                          load_histogram, &
                          calc_ft_retention_age, &
                          calc_ft_age
@@ -430,7 +430,7 @@ do ihorizon = 1,nhorizons
 
 
     ! Calculate fission track lengths for the temperature history
-    call generate_ft_len_temp_history(nft0, &
+    call generate_fts_carlson_1990(nft0, &
                                       ftlen0, &
                                       ntimes, &
                                       temp_celsius_array(ihorizon,:), &

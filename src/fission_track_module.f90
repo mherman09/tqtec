@@ -36,7 +36,7 @@ module fission_track
 
 
     ! Module subroutines
-    PUBLIC :: generate_ft_len_temp_history
+    PUBLIC :: generate_fts_carlson_1990
     PUBLIC :: segment_ft_distribution
     PUBLIC :: correct_ft_distribution_etching_userbias
     PUBLIC :: calc_ft_age
@@ -56,7 +56,7 @@ contains
 !--------------------------------------------------------------------------------------------------!
 
 
-    subroutine generate_ft_len_temp_history(nft_init, &
+    subroutine generate_fts_carlson_1990(nft_init, &
                                             len_init, &
                                             nt, &
                                             temp_celsius, &
@@ -158,7 +158,7 @@ contains
         write(0,*) 'Read kinetic_par =',trim(kinetic_par)
         write(0,*) 'Options are:'
         write(0,*) '    "green-et-al-1986"'
-        write(0,*) '    "gdonelick-1988"'
+        write(0,*) '    "donelick-1988"'
         write(0,*) '    "carlson-1990-composite"'
         call error_exit(1)
     endif
@@ -224,7 +224,7 @@ contains
 
     return
 
-    end subroutine generate_ft_len_temp_history
+    end subroutine generate_fts_carlson_1990
 
 
 
