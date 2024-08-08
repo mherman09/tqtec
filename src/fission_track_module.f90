@@ -37,7 +37,7 @@ module fission_track
 
     ! Module subroutines
     PUBLIC :: generate_fts_carlson_1990
-    PUBLIC :: segment_ft_distribution
+    PUBLIC :: segment_fts_carlson_1990
     PUBLIC :: correct_ft_distribution_etching_userbias
     PUBLIC :: calc_ft_age
     PUBLIC :: calc_ft_retention_age
@@ -56,14 +56,16 @@ contains
 !--------------------------------------------------------------------------------------------------!
 
 
-    subroutine generate_fts_carlson_1990(nft_init, &
-                                            len_init, &
-                                            nt, &
-                                            temp_celsius, &
-                                            dep_km, &
-                                            dt_ma, &
-                                            kinetic_par, &
-                                            ft_len)
+    subroutine generate_fts_carlson_1990( &
+        nft_init,                         &
+        len_init,                         &
+        nt,                               &
+        temp_celsius,                     &
+        dep_km,                           &
+        dt_ma,                            &
+        kinetic_par,                      &
+        ft_len                            &
+    )
 
     !----
     ! Calculate fission track lengths due to axial shortening of tracks produced over a
@@ -232,7 +234,13 @@ contains
 
 
 
-    subroutine segment_ft_distribution(nbins, binwid, len_min, hist, hist_corr)
+    subroutine segment_fts_carlson_1990( &
+        nbins,                           &
+        binwid,                          &
+        len_min,                         &
+        hist,                            &
+        hist_corr                        &
+    )
 
     !----
     ! Add effects of fission track segmentation to a track length distribution. Segmentation occurs
@@ -362,7 +370,7 @@ contains
 
     return
 
-    end subroutine segment_ft_distribution
+    end subroutine segment_fts_carlson_1990
 
 
 

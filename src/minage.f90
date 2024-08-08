@@ -356,7 +356,9 @@ use minage, only: aft_file, &
                   dep_km_array
 
 
-use fission_track, only: generate_fts_carlson_1990, &
+use fission_track, only:       &
+    generate_fts_carlson_1990, &
+    segment_fts_carlson_1990,  &
                          load_histogram, &
                          calc_ft_retention_age, &
                          calc_ft_age
