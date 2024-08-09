@@ -378,9 +378,8 @@ contains
         nbins,                                            &
         binwid,                                           &
         len_min,                                          &
-        hist,                                             &
         len0,                                             &
-        hist_corr                                         &
+        hist                                              &
     )
 
     !----
@@ -403,11 +402,10 @@ contains
     !   nbins:      number of histogram bins
     !   binwid:     histogram bin width (microns)
     !   len_min:    minimum fission track length in the histogram (microns)
-    !   hist:       fission track length histogram
     !   len0:       initial average fission track length (microns)
     !
     ! Outputs
-    !   hist_corr:  corrected fission track length histogram
+    !   hist:       input track histogram with bias effects added (overwrites input array)
     !----
 
 
@@ -418,9 +416,8 @@ contains
     integer, intent(in) :: nbins
     double precision, intent(in) :: binwid
     double precision, intent(in) :: len_min
-    integer, intent(in) :: hist(nbins)
     double precision, intent(in) :: len0
-    integer, intent(out) :: hist_corr(nbins)
+    integer, intent(inout) :: hist(nbins)
 
 
     ! Local variables
@@ -447,20 +444,20 @@ contains
         ! Correct histogram for etching and user bias based on Willett (1997) Equation 4
         if (len.le.a) then
             ! No short tracks
-            hist_corr(i) = 0
+            hist(i) = 0
         elseif (len.le.b) then
             ! Reduce number of medium length tracks
             ratio = len/len0   ! ratio of bin length to average initial length
-            hist_corr(i) = int( dble(hist(i)) * ((2.862d0*ratio)-1.2104d0) )
+            hist(i) = int( dble(hist(i)) * ((2.862d0*ratio)-1.2104d0) )
         else
             ! Keep number of long tracks
-            hist_corr(i) = hist(i)
+            hist(i) = hist(i)
         endif
 
 
         ! Set negative counts to zero
-        if (hist_corr(i).lt.0) then
-            hist_corr(i) = 0
+        if (hist(i).lt.0) then
+            hist(i) = 0
         endif
 
     enddo
