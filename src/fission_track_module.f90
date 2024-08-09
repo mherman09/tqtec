@@ -35,10 +35,12 @@
 module fission_track
 
 
-    ! Module subroutines
+    ! Fission track distribution subroutines
     PUBLIC :: generate_fts_carlson_1990
     PUBLIC :: segment_fts_carlson_1990
     PUBLIC :: correct_fts_etching_userbias_willett_1997
+
+    ! Fission track age subroutines
     PUBLIC :: calc_ft_age
     PUBLIC :: calc_ft_retention_age
 
@@ -479,7 +481,13 @@ contains
 
 
 
-    subroutine calc_ft_retention_age(nbins, hist, nft_init, dt_ma, age_ma)
+    subroutine calc_ft_retention_age( &
+        nbins,                        &
+        hist,                         &
+        nft_init,                     &
+        dt_ma,                        &
+        age_ma                        &
+    )
 
     !----
     ! Fission track retention age is based on the number of tracks counted, assumed to be
