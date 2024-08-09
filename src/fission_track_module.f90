@@ -56,6 +56,7 @@ contains
 !--------------------------------------------------------------------------------------------------!
 
 
+
     subroutine generate_fts_carlson_1990( &
         nft_init,                         &
         len_init,                         &
@@ -69,8 +70,9 @@ contains
 
     !----
     ! Calculate fission track lengths due to axial shortening of tracks produced over a
-    ! temperature-time history. Fission tracks of length <len_init> are generated every timestep,
-    ! and Equation 4 from Carlson (1990) is used to determine the final length of each track.
+    ! temperature-time history. <nft_init> fission tracks of length <len_init(nft_init)> are
+    ! generated every timestep, and Equation 4 from Carlson (1990) is used to determine the final
+    ! length of each track.
     !
     ! Carlson (1990) Equation 4 describes length of a fission track from a given thermal history
     ! as it undergoes axial shortening:
@@ -115,24 +117,24 @@ contains
 
 
     ! Arguments
-    integer :: nft_init
-    double precision :: len_init(nft_init)
-    integer :: nt
-    double precision :: temp_celsius(nt)
-    double precision :: dep_km(nt)
-    double precision :: dt_ma
+    integer, intent(in) :: nft_init
+    double precision, intent(in) :: len_init(nft_init)
+    integer, intent(in) :: nt
+    double precision, intent(in) :: temp_celsius(nt)
+    double precision, intent(in) :: dep_km(nt)
+    double precision, intent(in) :: dt_ma
     character(len=*), intent(in) :: kinetic_par
-    double precision :: ft_len(nft_init,nt)
+    double precision, intent(out) :: ft_len(nft_init,nt)
 
 
     ! Local variables
     integer :: i
     integer :: j
-    double precision :: dt_seconds
-    double precision :: temp_kelvin(nt)
     double precision :: defect_power_law_constant
     double precision :: defect_activation_energy
     double precision :: axial_shortening_constant
+    double precision :: dt_seconds
+    double precision :: temp_kelvin(nt)
     double precision :: annealing(nt)
     double precision :: annealing_sum(nt)
     double precision :: arg
@@ -198,7 +200,7 @@ contains
         do i = 1,nt
 
         ! Finish Carlson (1990) Equation 4
-            ft_len(j,i) = len_init(j) - const * annealing_sum(i)**defect_power_law_constant
+        ft_len(j,i) = len_init(j) - const * annealing_sum(i)**defect_power_law_constant
 
         ! Set negative lengths to zero
             if (ft_len(j,i).lt.0.0d0) then
@@ -212,12 +214,12 @@ contains
 
     ! Remove tracks from time period before mineral actually formed
     keepTracks = .false. ! At start of run, assume mineral has not formed and do not keep tracks
-    do i = 1,nt          ! For each time...
+    do i = 1,nt
         if (.not.keepTracks) then
             if (dep_km(i).le.0.0d0) then
-                keepTracks = .true.     ! Horizon below surface, mineral exists, keep tracks from here on
+                keepTracks = .true.     ! Below surface, mineral exists, keep tracks from here on
             else
-                ft_len(:,i) = 0.0d0     ! Horizon above surface, remove tracks corresponding to this time
+                ft_len(:,i) = 0.0d0     ! Above surface, remove tracks from this time
             endif
         endif
     enddo
@@ -238,8 +240,7 @@ contains
         nbins,                           &
         binwid,                          &
         len_min,                         &
-        hist,                            &
-        hist_corr                        &
+        hist                             &
     )
 
     !----
@@ -252,16 +253,15 @@ contains
     !
     !     len_sg:    segmentation initiation length (empirically 12 microns)
     !     len_as:    mean annealed length from axial shortening alone
-    !     s:         empirically derived slope from fraction segmented vs. length plot (Fig. 8)
+    !     s:         empirically derived slope from fraction segmented vs. length plot (Fig. 8b)
     !
     ! Inputs:
     !   nbins:      number of histogram bins
-    !   binwid:     histogram bin width
-    !   len_min:    minimum length in histogram
-    !   hist:       input histogram array
+    !   binwid:     histogram bin width (microns)
+    !   len_min:    minimum length in histogram (microns)
     !
     ! Outputs:
-    !   hist_corr:  histogram with segmented tracks
+    !   hist:       input track histogram with segmentation effects added (overwrites input array)
     !----
 
 
@@ -272,33 +272,32 @@ contains
     integer, intent(in) :: nbins
     double precision, intent(in) :: binwid
     double precision, intent(in) :: len_min
-    integer, intent(in) :: hist(nbins)
-    integer, intent(out) :: hist_corr(nbins)
+    integer, intent(inout) :: hist(nbins)
 
 
     ! Local variables
     integer :: i
     integer :: j
+    integer :: n
     integer :: ct
+    integer :: ibin
     double precision :: len
+    double precision, parameter :: s = 0.10d0 ! empirically determined (Carlson, 1990, Fig. 8b)
     double precision :: fraction_segmented
     double precision :: arg
-    double precision :: ran
-    double precision, parameter :: s = 0.10d0
-    integer, allocatable :: seed(:)
-    integer :: time(3)
-    character(len=8) :: string
     double precision :: x
-    integer :: ibin
+    integer, allocatable :: seed(:)           ! random number variables
+    integer :: epoch_time
+    double precision :: ran
 
 
 
-    ! Initialize a random number generator (for determining lengths of segmented tracks)
+    ! Initialize a random number generator (for determining track segmentation points)
     if (.not.allocated(seed)) then
-        allocate(seed(1))
-        call itime(time)                                          ! itime() returns hr, mn, sc to int array
-        write(string,'(I0.2I0.2I0.2)') time(1), time(2), time(3)  ! combine to single integer
-        read(string,*) seed(1)
+        epoch_time = time()
+        call random_seed(SIZE=n)
+        allocate(seed(n))
+        seed(1:n) = epoch_time
         call random_seed(PUT=seed)
     endif
 
@@ -312,16 +311,16 @@ contains
 
 
         ! Calculate fraction of tracks that are segmented at this length (Carlson, 1990)
-        if (len.le.12.0d0) then
+        if (len.lt.12.0d0) then
             fraction_segmented = s * (12.0d0 - len)
         else
             fraction_segmented = 0.0d0
-            hist_corr(i) = hist(i)
             cycle
         endif
 
 
         ! For each track in this bin, determine whether it is segmented or not
+        ! If the track is segmented, divide it into two random length tracks
         ct = 0
         do j = 1,hist(i)
 
@@ -332,37 +331,34 @@ contains
 
                 !***** SEGMENT TRACK *****!
 
-                call random_number(ran) !-----------------!---- WHERE TO SEGMENT?
+                call random_number(ran)                   !---- RANDOM SEGMENTATION SITE
 
-                x = len*ran !-----------------------------!---- SEGMENT 1
+                x = len*ran                               !---- SEGMENT 1
                 ibin = int((x+0.5d0*binwid)/binwid)       ! which bin is segmented track 1 in?
-                if (ibin.lt.1) then                       !
-                    ibin = 1                              !
-                elseif (ibin.gt.nbins) then               !
-                    ibin = nbins                          !
-                endif                                     !
-                hist_corr(ibin) = hist_corr(ibin) + 1     ! add segmented track 1 to bin
+                if (1.le.ibin.and.ibin.le.nbins) then
+                    hist(ibin) = hist(ibin) + 1           ! add segmented track 1 to bin
+                endif
 
-                x = len - x !-----------------------------!---- SEGMENT 2
-                ibin = int((x+0.5d0*binwid)/binwid)       ! which bin is segmented track 1 in?
-                if (ibin.lt.1) then                       !
-                    ibin = 1                              !
-                elseif (ibin.gt.nbins) then               !
-                    ibin = nbins                          !
-                endif                                     !
-                hist_corr(ibin) = hist_corr(ibin) + 1     ! add segmented track 1 to bin
+                x = len - x                               !---- SEGMENT 2
+                ibin = int((x+0.5d0*binwid)/binwid)       ! which bin is segmented track 2 in?
+                if (1.le.ibin.and.ibin.le.nbins) then
+                    hist(ibin) = hist(ibin) + 1           ! add segmented track 2 to bin
+                endif
 
-                hist_corr(i) = hist_corr(i) - 1 !---------!---- REMOVE INITIAL TRACK
+                hist(i) = hist(i) - 1                     !---- REMOVE INITIAL TRACK
+
+                ! Update test count
+                ct = ct + 1
+
             endif
 
-            ct = ct + 1
 
         enddo
 
 
         ! Set negative counts to zero
-        if (hist_corr(i).lt.0) then
-            hist_corr(i) = 0
+        if (hist(i).lt.0) then
+            hist(i) = 0
         endif
 
 
