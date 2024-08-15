@@ -490,9 +490,10 @@ contains
     )
 
     !----
-    ! Fission track retention age is based on the number of tracks counted, assumed to be
-    ! proportional to the total track density in the sample. The more fission tracks, the longer
-    ! the sample has been accumulating them at low enough temperatures to retain them.
+    ! Fission track "retention age" (Willett, 1997) is determined by counting the number of tracks.
+    ! "It is obtained from the annealing model by noting what time tracks first form and survive to
+    ! the present time." In other words, the more fission tracks, the longer the sample has been
+    ! accumulating them at low enough temperatures to retain them.
     !
     !   # FTs = (Time Accumulating FTs) * (# FTs Produced Per Timestep) / (Timestep Duration)
     !
@@ -515,11 +516,11 @@ contains
 
 
     ! Arguments
-    integer :: nbins
-    integer :: hist(nbins)
-    integer :: nft_init
-    double precision :: dt_ma
-    double precision :: age_ma
+    integer, intent(in) :: nbins
+    integer, intent(in) :: hist(nbins)
+    integer, intent(in) :: nft_init
+    double precision, intent(in) :: dt_ma
+    double precision, intent(out) :: age_ma
 
 
     ! Local variables
@@ -548,22 +549,58 @@ contains
 
 
 
-    subroutine calc_ft_age(nbins, binwid, len_min, hist, nft_init, avg_len_microns, dt_ma, age_ma)
+    subroutine calc_ft_age( &
+        nbins,              &
+        binwid,             &
+        len_min,            &
+        hist,               &
+        nft_init,           &
+        avg_len_init,       &
+        dt_ma,              &
+        age_ma              &
+    )
 
     !----
-    ! Fission track ages incorporate the measured lengths of tracks in the sample in addition to
-    ! the number of tracks. The more fission tracks there are and the longer they are, the longer
-    ! the sample has been accumulating them at low temperatures. Shorter tracks indicate a degree
-    ! of annealing at moderate temperatures.
+    ! The "fission track age" (Willett, 1997) is based on integrating the annealing process over
+    ! time, weighting the tracks generated at each time component by their final mean length. In
+    ! this age calculation, longer fission tracks (less annealed) contribute more to the age than
+    ! shorter fission tracks (more annealed).
     !
-    !  Total FT Length = (Time Accumulating FTs) * (Avg Initial FT Length)
-    !                            * (# FTs Produced Per Timestep) / (Timestep Duration)
+    ! Willett (1997) Equation 7 describes the fission track age for continuously generated fission
+    ! tracks in a model over time:
     !
-    !         ...rearranging...
+    !            1    __
+    !     age = --- * \  w_i * dt_i
+    !           rst   /_
+    !                  i
     !
-    !   age_ma = ntracks * avg_len * dt_ma / nft_init / ft_len_avg_init
-    !            |---------------|
-    !             total_track_len
+    !         age: fission track age
+    !         rst: factor for reducing age of standard in zeta dating method (0.893 or 1/0.893?)
+    !         w_i: weighting factor for timestep i, p_i/p_0 ~ l_i/l_0
+    !         dt_i: model timestep size
+    !
+    !         p_i: final track density from tracks produced at timestep i
+    !         p_0: initial, unannealed track density
+    !         l_i: final average track length from tracks produced at timestep i
+    !         l_0: initial, unannealed track length
+    !
+    ! Assuming constant timestep size, dt, the above equation becomes:
+    !
+    !            1         __
+    !     age = --- * dt * \  w_i
+    !           rst        /_
+    !                       i
+    !
+    ! The weighting factor is proportional to the reduced track density and therefore the track
+    ! lengths. Expanding that relation to include all tracks generated at each timestep:
+    !
+    !            l_i       total_track_length_i
+    !     w_i = ----- = ----------------------------
+    !            l_0     total_initial_track_length
+    !
+    ! The age formula thus becomes:
+    !
+    !     age = 1/rst * dt * total_track_length / total_initial_track_length
     !
     ! Inputs:
     !   nbins:             number of histogram bins
@@ -571,7 +608,7 @@ contains
     !   len_min:           minimum fission track bin length (microns)
     !   hist:              histogram of track lengths
     !   nft_init:          number of fission tracks produced each timestep
-    !   avg_len_microns:   initial average track length (microns)
+    !   avg_len_init:      initial average track length (microns)
     !   dt_ma:             time step (Ma)
     !
     ! Outputs
@@ -583,19 +620,21 @@ contains
 
 
     ! Arguments
-    integer :: nbins
-    double precision :: binwid
-    double precision :: len_min
-    integer :: hist(nbins)
-    integer :: nft_init
-    double precision :: avg_len_microns
-    double precision :: dt_ma
-    double precision :: age_ma
+    integer, intent(in) :: nbins
+    double precision, intent(in) :: binwid
+    double precision, intent(in) :: len_min
+    integer, intent(in) :: hist(nbins)
+    integer, intent(in) :: nft_init
+    double precision, intent(in) :: avg_len_init
+    double precision, intent(in) :: dt_ma
+    double precision, intent(out) :: age_ma
 
 
     ! Local variables
     integer :: i
     double precision :: total_length_microns
+    double precision, parameter :: rst = 0.893d0 ! Ratio between observed and induced FT length in
+                                                 ! Durango apatite standard
     
 
 
@@ -607,10 +646,7 @@ contains
 
 
     ! Calculate fission track age
-    age_ma = total_length_microns * dt_ma / dble(nft_init) / avg_len_microns
-
-    ! Calculate raw (no corrections) fission track age (Ketcham, 2005; Equation 14)
-    ! ft_age = total_track_len/PST
+    age_ma = total_length_microns * dt_ma / dble(nft_init) / avg_len_init / rst
 
 
     return
