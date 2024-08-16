@@ -526,7 +526,7 @@ contains
     ! Local variables
     integer :: i
     integer :: ntracks
-    
+
 
 
     ! Calculate total number of tracks in fission track length distribution
@@ -635,7 +635,7 @@ contains
     double precision :: total_length_microns
     double precision, parameter :: rst = 0.893d0 ! Ratio between observed and induced FT length in
                                                  ! Durango apatite standard
-    
+
 
 
     ! Calculate total number of tracks in fission track length distribution

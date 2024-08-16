@@ -813,7 +813,10 @@ do while (i.le.narg)
         i = i + 1
         call get_command_argument(i,tag,status=ios)
         if (ios.ne.0) then
-            call usage('minage: error reading argument for -aft:len0 LEN1,LEN2,...')
+            write(0,*) 'minage: error reading argument for -aft:len0 LEN1,LEN2,...'
+            write(0,*) 'Received error flag: ios=',ios
+            write(0,*) 'Did you remember to include the list of initial fission track lengths?'
+            call error_exit(1)
         endif
         aft_n0 = 1
         do
@@ -828,7 +831,9 @@ do while (i.le.narg)
         allocate(aft_len0(aft_n0))
         read(tag,*,iostat=ios) (aft_len0(j),j=1,aft_n0)
         if (ios.ne.0) then
-            call usage('minage: error reading initial fission track length for -aft:len0')
+            write(0,*) 'minage: error reading fission track lengths with -aft:len0 LEN1,LEN2,...'
+            write(0,*) 'Tried to parse "',trim(tag),'" as lengths'
+            call error_exit(1)
         endif
 
     elseif (trim(tag).eq.'-aft:segmentation') then
@@ -879,6 +884,9 @@ do while (i.le.narg)
 
 
 
+    elseif (trim(tag).eq.'-advanced') then
+        call usage('*****ADVANCED*****')
+
     else
         call usage('minage: no option '//trim(tag))
     endif
@@ -906,12 +914,11 @@ logical :: printAdvancedOptions
 i = index(str,'*****ADVANCED*****')
 if (i.ne.0) then
     printAdvancedOptions = .true.
-    str(i:i+18) = ' '
 else
     printAdvancedOptions = .false.
 endif
 if (str.ne.'') then
-    write(0,*) trim(str)
+    write(0,*) trim(str(1:i-1))
     write(0,*)
 endif
 write(0,*) 'Usage: minage -temp READTQTEC_TEMP_FILE [-dep READTQTEC_DEP_FILE] [...options...]'
@@ -920,22 +927,24 @@ write(0,*) '-temp READTQTEC_TEMP_FILE  Temperature history output from readtqtec
 write(0,*) '-dep READTQTEC_DEP_FILE    Depth history (default: track age from beginning of model)'
 write(0,*) '-aft AFT_FILE              Apatite fission track age'
 write(0,*) '-ahe AHE_FILE              Apatite (U-Th)/He age'
-write(0,*) '-advanced'
+write(0,*) '-advanced                  See advanced options'
 write(0,*)
-write(0,*) 'Apatite Fission Track Options:'
+if (printAdvancedOptions) then
+write(0,*)
+write(0,*) '******************** ADVANCED AFT OPTIONS *******************'
 write(0,*) '-aft:len0 LEN1,LEN2,...    Lengths of fission tracks generated every timestep (microns)'
-write(0,*) '-aft:segmentation ON|OFF   Turn Carlson (1990) track segmentation correction [on]/off'
+write(0,*) '    [Default: 5 15-um, 7 16-um, 7 17-um, 1 18-um => 20 FTs, avg len = 16.2 um]'
+write(0,*) '-aft:segmentation ON|OFF   Turn Carlson (1990) track segmentation [on]/off'
 write(0,*) '-aft:userbias ON|OFF       Turn Willett (1997) user bias/etching correction [on]/off'
 write(0,*)
+write(0,*)
+write(0,*) '******************** ADVANCED AHE OPTIONS *******************'
 write(0,*) 'Apatite (U-Th)/He Options:'
 write(0,*) '-ahe:radius R1,R2,...  Apatite grain radii to calculate ages (20,40,...,120,140)'
 write(0,*) '-ahe:param             Print finite difference parameter values'
 write(0,*)
-write(0,*)
-if (printAdvancedOptions) then
-write(0,*) '******************** ADVANCED OPTIONS *******************'
-write(0,*)
-write(0,*) 'FINITE DIFFERENCE'
+write(0,*) 'Note on Finite Difference Parameters'
+write(0,*) '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~'
 write(0,*) 'The default finite difference parameters were selected to produce (1) an accurate'
 write(0,*) 'solution to the diffusion-production equation over a wide range of geological scenarios'
 write(0,*) 'that (2) remains stable, and (3) completes relatively quickly. Increasing the number of'
