@@ -4,6 +4,7 @@
 ! Authors:                                                                                         !
 !     - Matt Herman (current Modern Fortran version, i.e., what you are looking at right now!)     !
 !     - Matt Legg (original version; PSU MS thesis)                                                !
+!     - Kevin Furlong (original version; supervisor)                                               !
 !                                                                                                  !
 ! This module contains variables and subroutines for the generation of fission tracks produced by  !
 ! spontaneous fission in geological materials and the analysis of ages corresponding to fission    !
