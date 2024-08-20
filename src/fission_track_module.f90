@@ -640,14 +640,14 @@ contains
 
 
     ! Calculate total number of tracks in fission track length distribution
-    total_length_microns = 0
+    total_length_microns = 0.0d0
     do i = 1,nbins
         total_length_microns = total_length_microns + dble(hist(i))*(len_min+binwid*dble(i-1))
     enddo
 
 
     ! Calculate fission track age
-    age_ma = total_length_microns * dt_ma / dble(nft_init) / avg_len_init / rst
+    age_ma = total_length_microns * dt_ma / dble(nft_init) / avg_len_init !/ rst
 
 
     return
@@ -698,70 +698,6 @@ contains
     enddo
     return
     end subroutine
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    ! ! Ratio of present-day average length for spontaneous tracks in Durango apatite to the average
-    ! ! induced fission track length (Donelick and Miller, 1991)
-    ! double precision, parameter :: PST = 0.893d0
-
-
-
-    ! ! Calculate raw (no corrections) fission track age (Ketcham, 2005; Equation 14)
-    ! ! ft_age = total_track_len/PST                                            ! AGE3
-    ! ft_age = total_track_len                                            ! AGE3
-
-
-    ! ! Total track lengths for corrected fission track distributions
-    ! total_track_len_hist = 0.0d0                                            ! FTOT5 (segmentation only)
-    ! total_track_len_hist_corr = 0.0d0                                       ! FTOT2 (segmentation + etching/user bias)
-
-
-    ! ! Calculate total fission track lengths for corrected distributions
-    ! do i = 1,ft_nbins
-    !     len = dble(i)*ft_hist_dlen
-    !     total_track_len_hist      = total_track_len_hist      + ft_hist_uncorr(i)*len
-    !     ! total_track_len_hist_corr = total_track_len_hist_corr + ft_hist_corr(i)*len
-    ! enddo
-
-
-    ! ! Ratio between segmentation + etching/user bias corrected and segmentation corrected total lengths
-    ! ratio = total_track_len_hist_corr/total_track_len_hist
-
-
-    ! ! Correct fission track age by multiplying raw age by ratio
-    ! ft_age_corr = ft_age * ratio                                            ! FTAGE
-
-
-    ! return
-    ! end subroutine
-
 
 
 
