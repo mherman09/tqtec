@@ -1,0 +1,40 @@
+TQTec - (T)emperature, Heat Flow (Q), (Tec)tonics
+
+
+OVERVIEW
+~~~~~~~~
+TQTec calculates the one-dimensional transient thermal field for an area that
+experiences processes occurring at tectonic plate boundaries. The package
+includes tools for estimating thermochronologic observables corresponding
+to the temperature history.
+
+    - tqtec
+    - readtqtec
+    - minage
+    - ftage (deprecated fission track tool; incorporated into minage)
+
+
+INSTALLATION
+~~~~~~~~~~~~
+Prerequisites:
+    - GNU Fortran and C compilers
+    - CMake
+    - Make
+
+Directions:
+
+    mkdir build
+    cd build
+    cmake .. 
+    cmake --build .
+
+
+AUTHORS
+~~~~~~~
+Kevin Furlong: Created original TQTec; supervises TQTec development
+Matthew Herman: Updated TQTec to Modern Fortran; maintains and develops TQTec
+Chris Guzofski: Bulk thickening and metamorphism
+Matthew Legg: Apatite fission track and petroleum observables
+Rachel Piotraschke: (U-Th)/He dating and helium diffusion in apatite
+
+
