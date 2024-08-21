@@ -7,7 +7,6 @@ add_library(tqteclib
             src/diffusion_module.f90
             src/error_exit.c
             src/fission_track_module.f90
-            src/apatite_helium_module.f90
             src/physical_constants_module.f90
             src/radiogenic_helium_module.f90
 )
@@ -26,6 +25,11 @@ add_executable(minage src/minage.f90)
 add_dependencies(minage tqteclib)
 target_link_libraries(minage tqteclib)
 install(TARGETS minage DESTINATION bin)
+
+add_executable(petrotqtec src/petrotqtec.f90)
+add_dependencies(petrotqtec tqteclib)
+target_link_libraries(petrotqtec tqteclib)
+install(TARGETS petrotqtec DESTINATION bin)
 
 add_executable(ftage src/ftage.f90)
 install(TARGETS ftage DESTINATION bin)

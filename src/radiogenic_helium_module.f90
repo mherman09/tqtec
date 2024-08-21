@@ -109,7 +109,7 @@ contains
     !   radius_microns:   radius of the (spherical) apatite grain (microns)
     !   nnodes:           number of spatial nodes + 2 boundary condition nodes
     !   beta:             implicitness weight in finite difference solution (0-1)
-    !   tau_max:          maximum dimensionless time to retain He and calculate diffusion (>1 Ma)
+    !   tau_max:          max dimensionless time to retain He (compared to tau for 1 Ma)
     !   verbosity:        level of output to print
     !
     ! Output:
@@ -232,8 +232,11 @@ contains
             ! Keep thermal history time step if smaller than resampled time step
             dt_seconds_resamp = dt_seconds
         endif
-    else
+    elseif (dt_var.lt.0.0d0) then
         dt_seconds_resamp = -dt_var*ma2s
+    else
+        write(0,*) 'ERROR: resampled dt is equal to zero'
+        call error_exit(1)
     endif
 
     ! Calculate number of resampled time steps
@@ -403,7 +406,7 @@ contains
         !***********************************************!
         ! Check whether diffusion calculation is needed !
         !***********************************************!
-        tau = diffusivity(itime)*ma2s/radius_meters**2
+        tau = diffusivity(itime)*1.0d0*ma2s/radius_meters**2 ! 1 Ma in dimensionless time
         if (tau.gt.tau_max) then
             runDiffusion = .false.
         else
@@ -463,9 +466,10 @@ contains
                     write(0,'(5X,A,F14.3)')   'tau_max:                ',tau_max
                     write(0,'(5X,A,F14.3)')   'beta:                   ',beta
                     write(0,*) 'Options:'
-                    write(0,*) '    1. Reduce timestep scale factor (-ahe:resamp)'
+                    write(0,*) '    1. Reduce resampled timestep (-ahe:dtfactor or -ahe:dtma)'
                     write(0,*) '    2. Reduce number of nodes (-ahe:nnodes)'
                     write(0,*) '    3. Increase implicitness factor (-ahe:beta)'
+                    write(0,*) '    4. Lower max dimensionless time to retain helium (-ahe:taumax)'
                     call error_exit(1)
                 endif
             enddo

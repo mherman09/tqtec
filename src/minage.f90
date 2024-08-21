@@ -25,37 +25,40 @@
 module minage
 
 
-! Input files
-character(len=512) :: readtqtec_temp_file
-character(len=512) :: readtqtec_dep_file
+    ! Input files
+    character(len=512) :: readtqtec_temp_file
+    character(len=512) :: readtqtec_dep_file
 
-! Output files
-character(len=512) :: aft_file
-character(len=512) :: ahe_file
-logical :: isOutputDefined
+    ! Output files
+    character(len=512) :: aft_file
+    character(len=512) :: ahe_file
+    logical :: isOutputDefined
 
-! Number of horizons to track
-integer :: nhorizons
-integer, parameter :: nhorizons_max = 100
+    ! Number of horizons to track
+    integer :: nhorizons
+    integer, parameter :: nhorizons_max = 100
 
-! Temperature-depth time series variables
-double precision :: time_ma
-double precision :: dt_ma
-integer :: ntimes
-double precision, allocatable :: temp_celsius_array(:,:)
-double precision, allocatable :: dep_km_array(:,:)
+    ! Temperature-depth time series variables
+    double precision :: time_ma
+    double precision :: dt_ma
+    integer :: ntimes
+    double precision, allocatable :: temp_celsius_array(:,:)
+    double precision, allocatable :: dep_km_array(:,:)
 
-! Apatite fission track variables
-integer :: aft_n0
-double precision, allocatable :: aft_len0(:)
-logical :: doSegmentationCarlson1990
-logical :: doEtchingUserBiasCorrectionWillett1997
+    ! Apatite fission track variables
+    integer :: aft_n0
+    double precision, allocatable :: aft_len0(:)
+    logical :: doSegmentationCarlson1990
+    logical :: doEtchingUserBiasCorrectionWillett1997
 
-! Apatite (U-Th)/He variables
-double precision :: ahe_beta
-double precision :: ahe_dt_var
-integer :: ahe_nnodes
-double precision :: ahe_taumax
+    ! Apatite (U-Th)/He variables
+    integer :: ahe_nradius
+    double precision, allocatable :: ahe_radius(:)
+    double precision :: ahe_beta
+    double precision :: ahe_dt_var
+    integer :: ahe_nnodes
+    double precision :: ahe_taumax
+    integer :: ahe_verbosity
 
 
 
@@ -445,7 +448,7 @@ allocate(aft_age(nhorizons))
 do ihorizon = 1,nhorizons ! for each horizon...
 
 
-    ! Calculate fission track lengths for the temperature history -> ftlen
+    ! Calculate fission track lengths for the temperature history -> aft_len
     call generate_fts_carlson_1990(     &
         aft_n0,                         &
         aft_len0,                       &
@@ -458,8 +461,15 @@ do ihorizon = 1,nhorizons ! for each horizon...
     )
 
 
-    ! Load the fission track lengths into a histogram
-    call load_histogram(aft_n0*ntimes, aft_len, binwid, xmin, nbins, aft_hist(:,ihorizon))
+    ! Load the fission track lengths into a histogram -> aft_hist
+    call load_histogram(     &
+        aft_n0*ntimes,       &
+        aft_len,             &
+        binwid,              &
+        xmin,                &
+        nbins,               &
+        aft_hist(:,ihorizon) &
+    )
     aft_hist_corr(:,ihorizon) = aft_hist(:,ihorizon)
 
 
@@ -601,35 +611,38 @@ end subroutine
 subroutine calc_ahe_ages()
 !----
 ! Calculate apatite (U-Th)/He ages from a temperature-depth history. Subroutines and variables
-! for apatite-helium calculations can be found in apatite_helium_module.f90
+! for apatite-helium calculations can be found in radiogenic_helium_module.f90
 !----
 
 
-use minage, only: ahe_file, &
-                  nhorizons, &
-                  dt_ma, &
-                  ntimes, &
-                  temp_celsius_array, &
-                  dep_km_array, &
-                  ahe_beta, &
-                  ahe_dt_var, &
-                  ahe_nnodes, &
-                  ahe_taumax
+use minage, only: &
+    ahe_file, &
+    nhorizons, &
+    dt_ma, &
+    ntimes, &
+    temp_celsius_array, &
+    dep_km_array, &
+    ahe_nradius, &
+    ahe_radius, &
+    ahe_nnodes, &
+    ahe_beta, &
+    ahe_dt_var, &
+    ahe_taumax, &
+    ahe_verbosity
 
-use apatite_helium, only: calc_apatite_he_age
+use radiogenic_helium, only: &
+    calc_apatite_he_age
 
 
 implicit none
 
 
-integer :: ihorizon                                              !
-integer :: iradius                                               !
-integer, parameter :: nradius = 7                                !
-double precision :: grain_radius_array(nradius)                  !
-double precision :: radius_microns                               !
-double precision :: he_age                                       !
-double precision, allocatable :: horizon_ahe_age(:,:)            !
-character(len=32) :: fmt_string                                  !
+! Local variables
+integer :: ihorizon
+integer :: iradius
+double precision :: radius_microns
+double precision, allocatable :: ahe_age(:,:)
+character(len=32) :: fmt_string
 
 
 
@@ -642,21 +655,25 @@ open(unit=23,file=ahe_file,status='unknown')
 
 
 ! Apatite grain radii
-grain_radius_array(1) = 20.0d0
-grain_radius_array(2) = 40.0d0
-grain_radius_array(3) = 60.0d0
-grain_radius_array(4) = 80.0d0
-grain_radius_array(5) = 100.0d0
-grain_radius_array(6) = 120.0d0
-grain_radius_array(7) = 140.0d0
+if (ahe_nradius.eq.0) then    ! if not set on the command line, use default values
+    ahe_nradius = 7
+    allocate(ahe_radius(ahe_nradius))
+    ahe_radius(1) = 20.0d0
+    ahe_radius(2) = 40.0d0
+    ahe_radius(3) = 60.0d0
+    ahe_radius(4) = 80.0d0
+    ahe_radius(5) = 100.0d0
+    ahe_radius(6) = 120.0d0
+    ahe_radius(7) = 140.0d0
+endif
 
 
 
 ! Array for grain-size-based ages in each tracked horizon
-if (.not.allocated(horizon_ahe_age)) then
-    allocate(horizon_ahe_age(nhorizons,nradius))
+if (.not.allocated(ahe_age)) then
+    allocate(ahe_age(nhorizons,ahe_nradius))
 endif
-horizon_ahe_age = 0.0d0
+ahe_age = 0.0d0
 
 
 ! For each horizon...
@@ -664,33 +681,32 @@ do ihorizon = 1,nhorizons
 
 
     ! For each grain radius...
-    do iradius = 1,nradius
+    do iradius = 1,ahe_nradius
 
 
-        ! if (printProgress) then
-        !     write(*,2301) 'minage: working on horizon',ihorizon,'of',nhorizons, &
-        !                 ': grain size',iradius,'of',nradius
-        !     2301 format(X,2(A,I6,X,A,I6))
-        ! endif
+        if (ahe_verbosity.ge.1) then
+            write(*,2301) 'minage: working on horizon',ihorizon,'of',nhorizons, &
+                        ': grain size',iradius,'of',ahe_nradius
+            2301 format(X,2(A,I6,X,A,I6))
+        endif
 
 
         ! Calculate (U-Th)/He age for this temperature-depth-time history and grain radius
-        ! See apatite_helium_module.f90 for correction details
-        radius_microns = grain_radius_array(iradius)
-        call calc_apatite_he_age(temp_celsius_array(ihorizon,:), &
-                                 dep_km_array(ihorizon,:), &
-                                 ntimes, &
-                                 dt_ma, &
-                                 ahe_dt_var, &
-                                 radius_microns, &
-                                 ahe_nnodes, &
-                                 ahe_beta, &
-                                 ahe_taumax, &
-                                 he_age)
+        radius_microns = ahe_radius(iradius)
+        call calc_apatite_he_age(           &
+            ntimes,                         &
+            temp_celsius_array(ihorizon,:), &
+            dep_km_array(ihorizon,:),       &
+            dt_ma,                          &
+            ahe_dt_var,                     &
+            radius_microns,                 &
+            ahe_nnodes,                     &
+            ahe_beta,                       &
+            ahe_taumax,                     &
+            ahe_verbosity,                  &
+            ahe_age(ihorizon,iradius)       &
+        )
 
-
-        ! Save grain-size-based ages for this horizon
-        horizon_ahe_age(ihorizon,iradius) = he_age
 
     enddo
 
@@ -701,9 +717,9 @@ enddo
 write(23,*) '# Apatite (U-Th)/He ages (Ma)'
 write(23,*) '# Radius(microns) Age(Ma)'
 write(fmt_string,'("(F12.1,"I6,"F12.3)")') nhorizons
-do iradius = 1,nradius
-    write(23,fmt_string) grain_radius_array(iradius), &
-                         (horizon_ahe_age(ihorizon,iradius),ihorizon=1,nhorizons)
+do iradius = 1,ahe_nradius
+    write(23,fmt_string) ahe_radius(iradius), &
+                         (ahe_age(ihorizon,iradius),ihorizon=1,nhorizons)
 enddo
 
 
@@ -730,19 +746,24 @@ subroutine gcmdln()
 ! Parse command line
 !----
 
-use minage, only: readtqtec_temp_file, &
-                  readtqtec_dep_file, &
-                  aft_file, &
-                  ahe_file, &
-                  isOutputDefined, &
-                  aft_n0, &
-                  aft_len0, &
-                  doSegmentationCarlson1990, &
-                  doEtchingUserBiasCorrectionWillett1997, &
-                  ahe_beta, &
-                  ahe_dt_var, &
-                  ahe_nnodes, &
-                  ahe_taumax
+use minage, only: &
+    readtqtec_temp_file, &
+    readtqtec_dep_file, &
+    aft_file, &
+    ahe_file, &
+    isOutputDefined, &
+    aft_n0, &
+    aft_len0, &
+    doSegmentationCarlson1990, &
+    doEtchingUserBiasCorrectionWillett1997, &
+    ahe_nradius, &
+    ahe_radius, &
+    ahe_beta, &
+    ahe_dt_var, &
+    ahe_nnodes, &
+    ahe_taumax, &
+    ahe_verbosity
+
 
 implicit none
 
@@ -751,6 +772,7 @@ integer :: j
 integer :: narg
 integer :: ios
 character(len=512) :: tag
+logical :: fileExists
 
 
 ! Initialize variables
@@ -767,10 +789,12 @@ doSegmentationCarlson1990 = .true.
 doEtchingUserBiasCorrectionWillett1997 = .true.
 
 ! Apatite (U-Th)/He variables
-ahe_beta = 0.85d0
+ahe_nradius = 0
 ahe_dt_var = 0.1d0
 ahe_nnodes = 102
+ahe_beta = 0.85d0
 ahe_taumax = 0.40d0
+ahe_verbosity = 0
 
 
 ! Count number of command line arguments
@@ -794,7 +818,11 @@ do while (i.le.narg)
     elseif (trim(tag).eq.'-dep') then
         i = i + 1
         call get_command_argument(i,readtqtec_dep_file,status=ios)
-
+        inquire(file=readtqtec_dep_file,exist=fileExists)
+        if (.not.fileExists) then
+            write(0,*) 'minage: could not find depth file ',trim(readtqtec_dep_file)
+            readtqtec_dep_file = ''
+        endif
 
     ! Output files
     elseif (trim(tag).eq.'-aft') then
@@ -860,11 +888,41 @@ do while (i.le.narg)
 
 
     ! Apatite (U-Th)/He age calculation variables
-    elseif (trim(tag).eq.'-ahe:beta') then
+    elseif (trim(tag).eq.'-ahe:radius') then
         i = i + 1
         call get_command_argument(i,tag,status=ios)
-        read(tag,*) ahe_beta
-    elseif (trim(tag).eq.'-ahe:dtfactor') then
+        if (ios.ne.0) then
+            write(0,*) 'minage: error reading argument for -ahe:radius R1,R2,...'
+            write(0,*) 'Received error flag: ios=',ios
+            write(0,*) 'Did you remember to include the list of grain radii?'
+            call error_exit(1)
+        endif
+        ahe_nradius = 1
+        do
+            j = index(tag,',')
+            if (j.ne.0) then
+                tag(j:j) = ' '
+                ahe_nradius = ahe_nradius + 1
+            else
+                exit
+            endif
+        enddo
+        allocate(ahe_radius(ahe_nradius))
+        read(tag,*,iostat=ios) (ahe_radius(j),j=1,ahe_nradius)
+        if (ios.ne.0) then
+            write(0,*) 'minage: error reading apatite radii with -ahe:radius R1,R2,...'
+            write(0,*) 'Tried to parse "',trim(tag),'" as radii'
+            call error_exit(1)
+        endif
+
+    elseif (trim(tag).eq.'-ahe:verbosity') then
+        i = i + 1
+        call get_command_argument(i,tag,status=ios)
+        read(tag,*) ahe_verbosity
+    elseif (trim(tag).eq.'-ahe:fd') then
+        call usage('*****FD*****')
+
+    elseif (trim(tag).eq.'-ahe:dtfactor') then              ! Timestep resampling
         i = i + 1
         call get_command_argument(i,tag,status=ios)
         read(tag,*) ahe_dt_var
@@ -872,12 +930,16 @@ do while (i.le.narg)
         i = i + 1
         call get_command_argument(i,tag,status=ios)
         read(tag,*) ahe_dt_var
-        ahe_dt_var = -ahe_dt_var
-    elseif (trim(tag).eq.'-ahe:nnodes') then
+        ahe_dt_var = -abs(ahe_dt_var)
+    elseif (trim(tag).eq.'-ahe:nnodes') then                ! Number of spatial nodes
         i = i + 1
         call get_command_argument(i,tag,status=ios)
         read(tag,*) ahe_nnodes
-    elseif (trim(tag).eq.'-ahe:taumax') then
+    elseif (trim(tag).eq.'-ahe:beta') then                  ! Implicitness weight
+        i = i + 1
+        call get_command_argument(i,tag,status=ios)
+        read(tag,*) ahe_beta
+    elseif (trim(tag).eq.'-ahe:taumax') then                ! Max dimensionless time to retain He
         i = i + 1
         call get_command_argument(i,tag,status=ios)
         read(tag,*) ahe_taumax
@@ -909,20 +971,35 @@ end subroutine
 subroutine usage(str)
 implicit none
 character(len=*) :: str
-integer :: i
+integer :: i, j
 logical :: printAdvancedOptions
+logical :: printFiniteDifference
+printAdvancedOptions = .false.
+printFiniteDifference = .false.
 i = index(str,'*****ADVANCED*****')
 if (i.ne.0) then
     printAdvancedOptions = .true.
-else
-    printAdvancedOptions = .false.
+endif
+j = index(str,'*****FD*****')
+write(0,*) 'j',j
+if (j.ne.0) then
+    printAdvancedOptions = .true.
+    printFiniteDifference = .true.
+    i = j
 endif
 if (str.ne.'') then
-    write(0,*) trim(str(1:i-1))
+    if (printAdvancedOptions) then
+        write(0,*) trim(str(1:i-1))
+    else
+        write(0,*) trim(str)
+    endif
     write(0,*)
 endif
 write(0,*) 'Usage: minage -temp READTQTEC_TEMP_FILE [-dep READTQTEC_DEP_FILE] [...options...]'
 write(0,*)
+if (printAdvancedOptions) then
+write(0,*) '******************** BASIC MINAGE OPTIONS *******************'
+endif
 write(0,*) '-temp READTQTEC_TEMP_FILE  Temperature history output from readtqtec'
 write(0,*) '-dep READTQTEC_DEP_FILE    Depth history (default: track age from beginning of model)'
 write(0,*) '-aft AFT_FILE              Apatite fission track age'
@@ -933,41 +1010,64 @@ if (printAdvancedOptions) then
 write(0,*)
 write(0,*) '******************** ADVANCED AFT OPTIONS *******************'
 write(0,*) '-aft:len0 LEN1,LEN2,...    Lengths of fission tracks generated every timestep (microns)'
-write(0,*) '    [Default: 5 15-um, 7 16-um, 7 17-um, 1 18-um => 20 FTs, avg len = 16.2 um]'
+write(0,*) '    [5 15-um, 7 16-um, 7 17-um, 1 18-um => 20 FTs, avg len = 16.2 um]'
 write(0,*) '-aft:segmentation ON|OFF   Turn Carlson (1990) track segmentation [on]/off'
 write(0,*) '-aft:userbias ON|OFF       Turn Willett (1997) user bias/etching correction [on]/off'
 write(0,*)
 write(0,*)
 write(0,*) '******************** ADVANCED AHE OPTIONS *******************'
-write(0,*) 'Apatite (U-Th)/He Options:'
-write(0,*) '-ahe:radius R1,R2,...  Apatite grain radii to calculate ages (20,40,...,120,140)'
-write(0,*) '-ahe:param             Print finite difference parameter values'
+write(0,*) '-ahe:radius R1,R2,...  Apatite grain radii to calculate ages [20,40,...,120,140]'
+write(0,*) '-ahe:verbosity LVL     Verbosity level for apatite helium calculation [0]'
+write(0,*) '-ahe:dtfactor VAL      Timestep resampling factor [0.1]'
+write(0,*) '    MinAge will try to reduce dt_resamp to 0.5*dr^2/max_diffusivity, but will use the'
+write(0,*) '    maximum of that and the following values:'
+write(0,*) '        VAL > 0: dt_resamp = dt_init * VAL'
+write(0,*) '        VAL < 0: dt_resamp = |VAL|'
+write(0,*) '-ahe:dtma DTMA         Resampled timestep (alternative to -ahe:dtfactor, sets VAL = -|DTMA|)'
+write(0,*) '-ahe:nnodes NNODES     NNODES = Number of spatial nodes + 2 BC nodes [102]'
+write(0,*) '-ahe:beta BETA         Finite difference implicitness coefficient [0.85]'
+write(0,*) '-ahe:taumax TAUMAX     Maximum dimensionless time to retain He [0.4]'
+write(0,*) '-ahe:fd                Print description of finite difference options'
 write(0,*)
-write(0,*) 'Note on Finite Difference Parameters'
-write(0,*) '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~'
-write(0,*) 'The default finite difference parameters were selected to produce (1) an accurate'
-write(0,*) 'solution to the diffusion-production equation over a wide range of geological scenarios'
-write(0,*) 'that (2) remains stable, and (3) completes relatively quickly. Increasing the number of'
-write(0,*) 'nodes improves accuracy, at the expense of stability and runtime. Stability depends on'
-write(0,*) 'the node spacing relative to the rate of helium diffusion; we provide several options'
-write(0,*) 'below to adjust the calculation. This can be done by modifying the details of the finite'
-write(0,*) 'difference setup:'
-write(0,*) '    1. Decrease the timestep size'
-write(0,*) '    2. Decrease the number of nodes'
-write(0,*) '    3. Increase the weighting of the implicitness in the calculation'
-write(0,*) 'Alternatively, the assumptions for diffusion in the geological system can be modified:'
-write(0,*) '    4. Define a threshold temperature for complete escape of the diffusion product'
-write(0,*)
-write(0,*) 'Default Parameter Values'
-write(0,*) '  Number of spatial nodes:  102 (including 2 boundary condition nodes)'
-write(0,*) '  Resampled timestep size:  0.5*(node_spacing)^2/max_diffusivity (minval=0.1*dt_input)'
-write(0,*) '  Implicitness coefficient: 0.85'
-write(0,*) '  Retention threshold:      diffusivity*(1 Ma)/grain_radius'
-write(0,*)
-write(0,*) '-ahe:nnodes NNODES     Number of spatial nodes + 2 BC nodes'
-write(0,*) '-ahe:dtma DTMA         Resampled timestep size, in Ma'
-write(0,*) '-ahe:beta BETA         Finite difference implicitness coefficient'
-write(0,*) '-ahe:temp TEMP         Maximum temperature to retain He'
+endif
+if (printFiniteDifference) then
+write(0,*) '******************** FINITE DIFFERENCE PARAMETERS ********************'
+write(0,*) '* The default finite difference parameters (listed below) are selected to produce:'
+write(0,*) '*     1. An accurate solution to the diffusion-production equation over a wide range of'
+write(0,*) '*        thermochronological scenarios'
+write(0,*) '*     2. A solution that remains stable in those situations'
+write(0,*) '*     3. A calculation completes "relatively quickly" (within a few seconds)'
+write(0,*) '*'
+write(0,*) '* Depending on your temperature history and finite difference parameters, you may still'
+write(0,*) '* experience long runtimes (not too common) or stability issues (more common).'
+write(0,*) '* In general, increasing the number of nodes (reducing node spacing) improves the'
+write(0,*) '* solution accuracy at the expense of stability and runtime. Decreasing the timestep'
+write(0,*) '* size increases solution accuracy and stability at the expense of runtime. Stability'
+write(0,*) '* also depends on the node spacing relative to the rate of helium diffusion, which'
+write(0,*) '* is a function of temperature.'
+write(0,*) '*'
+write(0,*) '* MinAge provides several options to adjust the finite difference setup that will'
+write(0,*) '* affect the accuracy, speed, and stability of the calculation:'
+write(0,*) '*     1. Resampled timestep size (-ahe:dtfactor or -ahe:dtma)'
+write(0,*) '*     2. Number of nodes (-ahe:nnodes)'
+write(0,*) '*     3. Implicitness weight (-ahe:beta)'
+write(0,*) '*'
+write(0,*) '* Solution stability typically becomes a problem at high temperatures, when the amount'
+write(0,*) '* of helium moving from node to node is very high. The most accurate way to handle this'
+write(0,*) '* problem is to decrease the timestep size, but at high temperatures a stable timestep'
+write(0,*) '* can lead to prohibitively long runtimes. An alternative simplifying assumption is to'
+write(0,*) '* set a threshold diffusion timescale above which all helium is lost (set to zero).'
+write(0,*) '* In MinAge, we calculate the dimensionless time, tau, for 1 Ma:'
+write(0,*) '*     tau = diffusivity*(1 Ma)/radius^2'
+write(0,*) '* And compare this to the value of tau_max set on the command line:'
+write(0,*) '*     4. Threshold dimensionless time for complete helium escape (-ahe:taumax)'
+write(0,*) '*'
+write(0,*) '* Default Parameter Values'
+write(0,*) '*   Resampled timestep size:  VAL=0.1'
+write(0,*) '*                             dt_resamp=max(0.5*dr^2/max_diffusivity,VAL*dt_input)'
+write(0,*) '*   Number of spatial nodes:  102'
+write(0,*) '*   Implicitness coefficient: 0.85'
+write(0,*) '*   Retention threshold time: 0.4 (dimensionless)'
 write(0,*)
 endif
 call error_exit(1)
