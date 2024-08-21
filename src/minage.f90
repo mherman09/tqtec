@@ -30,7 +30,6 @@ module minage
     character(len=512) :: readtqtec_dep_file
 
     ! Output files
-    character(len=512) :: aft_file
     character(len=512) :: ahe_file
     logical :: isOutputDefined
 
@@ -46,6 +45,9 @@ module minage
     double precision, allocatable :: dep_km_array(:,:)
 
     ! Apatite fission track variables
+    character(len=512) :: aft_file
+    character(len=512) :: aft_history_file
+    double precision :: aft_history_dt
     integer :: aft_n0
     double precision, allocatable :: aft_len0(:)
     logical :: doSegmentationCarlson1990
@@ -71,11 +73,13 @@ end module
 program main
 
 
-use minage, only: readtqtec_temp_file, &
-                  readtqtec_dep_file, &
-                  aft_file, &
-                  ahe_file, &
-                  isOutputDefined
+use minage, only:        &
+    readtqtec_temp_file, &
+    readtqtec_dep_file,  &
+    aft_file,            &
+    aft_history_file,    &
+    ahe_file,            &
+    isOutputDefined
 
 
 implicit none
@@ -126,12 +130,12 @@ call read_dep_history()
 !************************************!
 
 ! Apatite fission track (variables and descriptions in fission_track_module.f90)
-if (aft_file.ne.'') then
+if (aft_file.ne.''.or.aft_history_file.ne.'') then
     call calc_aft_ages()
 endif
 
 
-! Apatite (U-Th)/He (variables and descriptions in apatite_helium_module.f90)
+! Apatite (U-Th)/He (variables and descriptions in radiogenic_helium_module.f90)
 if (ahe_file.ne.'') then
     call calc_ahe_ages()
 endif
@@ -358,6 +362,8 @@ subroutine calc_aft_ages()
 
 use minage, only:                          &
     aft_file,                              &
+    aft_history_file,                      &
+    aft_history_dt,                        &
     nhorizons,                             &
     dt_ma,                                 &
     ntimes,                                &
@@ -383,6 +389,8 @@ implicit none
 
 ! Local variables
 integer :: i
+integer :: idt
+integer :: itm
 integer :: ibin
 integer :: nbins
 integer :: ihorizon
@@ -396,11 +404,11 @@ double precision, allocatable :: aft_len(:,:)
 double precision, allocatable :: aft_age(:)
 double precision, allocatable :: aft_retention_age(:)
 character(len=32) :: fmt_string
+logical :: isOpen
 
 
 
 write(*,*) 'minage: calculating apatite fission track ages'
-
 
 
 !----
@@ -435,165 +443,257 @@ nbins = 20
 allocate(aft_hist(nbins,nhorizons))
 allocate(aft_hist_corr(nbins,nhorizons))
 
-
 ! Fission track age arrays
 allocate(aft_retention_age(nhorizons))
 allocate(aft_age(nhorizons))
 
 
 
-!----
-!   Generate fission tracks and calculate ages
-!----
-do ihorizon = 1,nhorizons ! for each horizon...
+!*****************************************************************************!
+! Calculate fission track distribution and ages at end of temperature history !
+!*****************************************************************************!
+if (aft_file.ne.'') then
+
+    open(unit=22,file=aft_file,status='unknown')
+
+    do ihorizon = 1,nhorizons ! for each horizon...
+
+        ! Calculate fission track lengths for the temperature history -> aft_len
+        call generate_fts_carlson_1990(     &
+            aft_n0,                         &
+            aft_len0,                       &
+            ntimes,                         &
+            temp_celsius_array(ihorizon,:), &
+            dep_km_array(ihorizon,:),       &
+            dt_ma,                          &
+            'green-et-al-1986',             &
+            aft_len                         &
+        )
 
 
-    ! Calculate fission track lengths for the temperature history -> aft_len
-    call generate_fts_carlson_1990(     &
-        aft_n0,                         &
-        aft_len0,                       &
-        ntimes,                         &
-        temp_celsius_array(ihorizon,:), &
-        dep_km_array(ihorizon,:),       &
-        dt_ma,                          &
-        'green-et-al-1986',             &
-        aft_len                         &
-    )
+        ! Load the fission track lengths into a histogram -> aft_hist
+        call load_histogram(     &
+            aft_n0*ntimes,       &
+            aft_len,             &
+            binwid,              &
+            xmin,                &
+            nbins,               &
+            aft_hist(:,ihorizon) &
+        )
+        aft_hist_corr(:,ihorizon) = aft_hist(:,ihorizon)
 
 
-    ! Load the fission track lengths into a histogram -> aft_hist
-    call load_histogram(     &
-        aft_n0*ntimes,       &
-        aft_len,             &
-        binwid,              &
-        xmin,                &
-        nbins,               &
-        aft_hist(:,ihorizon) &
-    )
-    aft_hist_corr(:,ihorizon) = aft_hist(:,ihorizon)
+        ! Correct for fission track segmentation using Carlson (1990) method
+        if (doSegmentationCarlson1990) then
+            call segment_fts_carlson_1990( &
+                nbins,                     &
+                binwid,                    &
+                xmin,                      &
+                aft_hist_corr(:,ihorizon)  &
+            )
+        endif
 
 
-    ! Correct for fission track segmentation using Carlson (1990) method
-    if (doSegmentationCarlson1990) then
-        call segment_fts_carlson_1990( &
+        ! Correct for user bias and etching using Willett (1997) method
+        if (doEtchingUserBiasCorrectionWillett1997) then
+            call correct_fts_etching_userbias_willett_1997( &
+                nbins,                                      &
+                binwid,                                     &
+                xmin,                                       &
+                aft_len0_mean,                              &
+                aft_hist_corr(:,ihorizon)                   &
+            )
+        endif
+
+
+        ! Calculate fission track retention age (based on number of tracks)
+        call calc_ft_retention_age(     &
+            nbins,                      &
+            aft_hist_corr(:,ihorizon),  &
+            aft_n0,                     &
+            dt_ma,                      &
+            aft_retention_age(ihorizon) &
+        )
+
+
+        ! Calculate fission track age (based on number of tracks and average track length)
+        call calc_ft_age(              &
             nbins,                     &
             binwid,                    &
             xmin,                      &
-            aft_hist_corr(:,ihorizon)  &
+            aft_hist_corr(:,ihorizon), &
+            aft_n0,                    &
+            aft_len0_mean,             &
+            dt_ma,                     &
+            aft_age(ihorizon)          &
         )
+
+
+        ! ! Save temperature at time of track-count-based (retention) age
+        ! if (.not.allocated(temp_ft_retention_age_corr)) then
+        !     allocate(temp_ft_retention_age_corr(nhorizons))
+        ! endif
+        ! if (time_ma.lt.0.0d0) then
+        !     itemp = nint(-time_ma/dt_ma - ft_retention_age_corr/dt_ma)
+        ! else
+        !     itemp = nint(time_ma/dt_ma - ft_retention_age_corr/dt_ma)
+        ! endif
+        ! if (itemp.lt.1) then
+        !     itemp = 1
+        ! elseif (itemp.gt.ntimes) then
+        !     itemp = ntimes
+        ! endif
+        ! temp_ft_retention_age_corr(ihorizon) = temp_celsius_array(ihorizon,itemp)
+
+
+    enddo   ! end of loop over horizons
+
+
+    ! File header
+    write(22,'(A)')   '# Apatite fission track ages (Ma)'
+    write(22,'(A)')   '#'
+    write(22,'(A)')   '# CORRECTIONS:'
+    write(22,'(A,L)') '# doSegmentationCarlson1990=',doSegmentationCarlson1990
+    write(22,'(A,L)') '# doEtchingUserBiasCorrectionWillett1997=',doEtchingUserBiasCorrectionWillett1997
+    write(22,'(A)')   '#'
+
+    ! Retention ages
+    write(22,'(A)')   '# RETENTION AGE'
+    write(fmt_string,'("(6X,"I6,"F8.3)")') nhorizons
+    write(22,fmt_string) (aft_retention_age(ihorizon),ihorizon=1,nhorizons)
+    write(22,'(A)')   '#'
+
+    ! Fission track ages
+    write(22,'(A)')   '# FISSION TRACK AGE'
+    write(fmt_string,'("(6X,"I6,"F8.3)")') nhorizons
+    write(22,fmt_string) (aft_age(ihorizon),ihorizon=1,nhorizons)
+    write(22,'(A)')   '#'
+
+    ! write(22,*) 'Temperatures (C) at time of track-count-based (retention) ages'
+    ! write(fmt_string,'("(6X,"I6,"F8.2)")') nhorizons
+    ! write(22,fmt_string) (temp_ft_retention_age_corr(ihorizon),ihorizon=1,nhorizons)
+    ! write(22,*)
+
+    ! Track length histograms
+    write(22,'(A)') '# TRACK LENGTH HISTOGRAMS'
+    write(22,'(A)') '# Final (corrected) track lengths'
+    write(fmt_string,'("(F6.1,"I6,"I8)")') nhorizons
+    do ibin = 1,nbins
+        len = xmin+dble(ibin-1)*binwid
+        write(22,fmt_string) len, (aft_hist_corr(ibin,ihorizon),ihorizon=1,nhorizons)
+    enddo
+    write(22,'(A)')   '#'
+    write(22,'(A)') '# Initial (uncorrected) track lengths'
+    do ibin = 1,nbins
+        len = xmin+dble(ibin-1)*binwid
+        write(22,fmt_string) len, (aft_hist(ibin,ihorizon),ihorizon=1,nhorizons)
+    enddo
+
+    ! Close file
+    close(22)
+endif
+
+
+
+
+!*************************************************************************!
+! Calculate fission track distributions and ages over temperature history !
+!*************************************************************************!
+if (aft_history_file.ne.'') then
+
+    open(unit=23,file=aft_history_file,status='unknown')
+
+
+    idt = int(aft_history_dt/dt_ma) ! Interval in timesteps
+
+    do itm = idt,ntimes,idt
+
+        do ihorizon = 1,nhorizons
+
+            ! Calculate fission track lengths at the time of interest -> aft_len
+            call generate_fts_carlson_1990(         &
+                aft_n0,                             &
+                aft_len0,                           &
+                itm,                                &
+                temp_celsius_array(ihorizon,1:itm), &
+                dep_km_array(ihorizon,1:itm),       &
+                dt_ma,                              &
+                'green-et-al-1986',                 &
+                aft_len(1:aft_n0,1:itm)             &
+            )
+
+            ! Load the fission track lengths into a histogram -> aft_history_hist
+            call load_histogram(         &
+                aft_n0*itm,              &
+                aft_len(1:aft_n0,1:itm), &
+                binwid,                  &
+                xmin,                    &
+                nbins,                   &
+                aft_hist(:,ihorizon)     &
+            )
+
+            ! Calculate fission track retention age (based on number of tracks)
+            call calc_ft_retention_age(     &
+                nbins,                      &
+                aft_hist(:,ihorizon),       &
+                aft_n0,                     &
+                dt_ma,                      &
+                aft_retention_age(ihorizon) &
+            )
+
+            ! Calculate fission track age (based on number of tracks and average track length)
+            call calc_ft_age(              &
+                nbins,                     &
+                binwid,                    &
+                xmin,                      &
+                aft_hist(:,ihorizon),      &
+                aft_n0,                    &
+                aft_len0_mean,             &
+                dt_ma,                     &
+                aft_age(ihorizon)          &
+            )
+
+        enddo
+
+        ! Write results to file
+        write(23,'(A,F8.3)') '# MODEL_TIME',dble(itm)*dt_ma
+        write(fmt_string,'("(A,2X,"I6,"F8.3)")') nhorizons
+        write(23,fmt_string) '# RETENTION_AGE',(aft_retention_age(ihorizon),ihorizon=1,nhorizons)
+        write(fmt_string,'("(A,2X,"I6,"F8.3)")') nhorizons
+        write(23,fmt_string) '# AFT_AGE      ',(aft_age(ihorizon),ihorizon=1,nhorizons)
+        write(fmt_string,'("(4X,F6.1,7X,"I6,"I8)")') nhorizons
+        do ibin = 1,nbins
+            len = xmin+dble(ibin-1)*binwid
+            write(23,fmt_string) len, (aft_hist(ibin,ihorizon),ihorizon=1,nhorizons)
+        enddo
+    enddo
+
+    ! Close file
+    inquire(unit=23,opened=isOpen)
+    if (isOpen) then
+        close(23)
     endif
 
+endif
 
-    ! Correct for user bias and etching using Willett (1997) method
-    if (doEtchingUserBiasCorrectionWillett1997) then
-        call correct_fts_etching_userbias_willett_1997( &
-            nbins,                                      &
-            binwid,                                     &
-            xmin,                                       &
-            aft_len0_mean,                              &
-            aft_hist_corr(:,ihorizon)                   &
-        )
-    endif
-
-
-    ! Calculate fission track retention age (based on number of tracks)
-    call calc_ft_retention_age(     &
-        nbins,                      &
-        aft_hist_corr(:,ihorizon),  &
-        aft_n0,                     &
-        dt_ma,                      &
-        aft_retention_age(ihorizon) &
-    )
-
-
-    ! Calculate fission track age (based on number of tracks and average track length)
-    call calc_ft_age(              &
-        nbins,                     &
-        binwid,                    &
-        xmin,                      &
-        aft_hist_corr(:,ihorizon), &
-        aft_n0,                    &
-        aft_len0_mean,             &
-        dt_ma,                     &
-        aft_age(ihorizon)          &
-    )
-
-
-    ! ! Save temperature at time of track-count-based (retention) age
-    ! if (.not.allocated(temp_ft_retention_age_corr)) then
-    !     allocate(temp_ft_retention_age_corr(nhorizons))
-    ! endif
-    ! if (time_ma.lt.0.0d0) then
-    !     itemp = nint(-time_ma/dt_ma - ft_retention_age_corr/dt_ma)
-    ! else
-    !     itemp = nint(time_ma/dt_ma - ft_retention_age_corr/dt_ma)
-    ! endif
-    ! if (itemp.lt.1) then
-    !     itemp = 1
-    ! elseif (itemp.gt.ntimes) then
-    !     itemp = ntimes
-    ! endif
-    ! temp_ft_retention_age_corr(ihorizon) = temp_celsius_array(ihorizon,itemp)
-
-
-enddo   ! end of loop over horizons
-
-
-
-! Print results to AFT file
-open(unit=22,file=aft_file,status='unknown')
-
-! File header
-write(22,'(A)')   '# Apatite fission track ages (Ma)'
-write(22,'(A)')   '#'
-write(22,'(A)')   '# CORRECTIONS:'
-write(22,'(A,L)') '# doSegmentationCarlson1990=',doSegmentationCarlson1990
-write(22,'(A,L)') '# doEtchingUserBiasCorrectionWillett1997=',doEtchingUserBiasCorrectionWillett1997
-write(22,'(A)')   '#'
-
-! Retention ages
-write(22,'(A)')   '# RETENTION AGE'
-write(fmt_string,'("(6X,"I6,"F8.3)")') nhorizons
-write(22,fmt_string) (aft_retention_age(ihorizon),ihorizon=1,nhorizons)
-write(22,'(A)')   '#'
-
-! Fission track ages
-write(22,'(A)')   '# FISSION TRACK AGE'
-write(fmt_string,'("(6X,"I6,"F8.3)")') nhorizons
-write(22,fmt_string) (aft_age(ihorizon),ihorizon=1,nhorizons)
-write(22,'(A)')   '#'
-
-! write(22,*) 'Temperatures (C) at time of track-count-based (retention) ages'
-! write(fmt_string,'("(6X,"I6,"F8.2)")') nhorizons
-! write(22,fmt_string) (temp_ft_retention_age_corr(ihorizon),ihorizon=1,nhorizons)
-! write(22,*)
-
-! Track length histograms
-write(22,'(A)') '# TRACK LENGTH HISTOGRAMS'
-write(22,'(A)') '# Final (corrected) track lengths'
-write(fmt_string,'("(F6.1,"I6,"I8)")') nhorizons
-do ibin = 1,nbins
-    len = xmin+dble(ibin-1)*binwid
-    write(22,fmt_string) len, (aft_hist_corr(ibin,ihorizon),ihorizon=1,nhorizons)
-enddo
-write(22,'(A)')   '#'
-write(22,'(A)') '# Initial (uncorrected) track lengths'
-do ibin = 1,nbins
-    len = xmin+dble(ibin-1)*binwid
-    write(22,fmt_string) len, (aft_hist(ibin,ihorizon),ihorizon=1,nhorizons)
-enddo
-
-
-! Close file
-close(22)
 
 
 ! Free array memory
-deallocate(aft_len)
-deallocate(aft_hist)
-deallocate(aft_hist_corr)
-deallocate(aft_age)
-deallocate(aft_retention_age)
+if (allocated(aft_len)) then
+    deallocate(aft_len)
+endif
+if (allocated(aft_hist)) then
+    deallocate(aft_hist)
+endif
+if (allocated(aft_hist_corr)) then
+    deallocate(aft_hist_corr)
+endif
+if (allocated(aft_age)) then
+    deallocate(aft_age)
+endif
+if (allocated(aft_retention_age)) then
+    deallocate(aft_retention_age)
+endif
 
 
 return
@@ -749,9 +849,11 @@ subroutine gcmdln()
 use minage, only: &
     readtqtec_temp_file, &
     readtqtec_dep_file, &
-    aft_file, &
     ahe_file, &
     isOutputDefined, &
+    aft_file, &
+    aft_history_file, &
+    aft_history_dt, &
     aft_n0, &
     aft_len0, &
     doSegmentationCarlson1990, &
@@ -778,12 +880,14 @@ logical :: fileExists
 ! Initialize variables
 readtqtec_temp_file = ''
 readtqtec_dep_file = ''
-aft_file = ''
 ahe_file = ''
 isOutputDefined = .false.
 
 
 ! Apatite fission track variables
+aft_file = ''
+aft_history_file = ''
+aft_history_dt = 1.0d0
 aft_n0 = 0
 doSegmentationCarlson1990 = .true.
 doEtchingUserBiasCorrectionWillett1997 = .true.
@@ -825,18 +929,36 @@ do while (i.le.narg)
         endif
 
     ! Output files
-    elseif (trim(tag).eq.'-aft') then
-        i = i + 1
-        call get_command_argument(i,aft_file,status=ios)
-        isOutputDefined = .true.
-
     elseif (trim(tag).eq.'-ahe') then
         i = i + 1
         call get_command_argument(i,ahe_file,status=ios)
         isOutputDefined = .true.
 
 
-    ! Apatite fission track age calculation variables
+    !*************************************************!
+    ! Apatite fission track age calculation variables !
+    !*************************************************!
+    elseif (trim(tag).eq.'-aft') then
+        i = i + 1
+        call get_command_argument(i,aft_file,status=ios)
+        isOutputDefined = .true.
+
+    elseif (trim(tag).eq.'-aft:history') then
+        i = i + 1
+        call get_command_argument(i,tag,status=ios)
+        if (ios.ne.0) then
+            write(0,*) 'minage: reached end of line before -aft:history arguments read'
+            call error_exit(1)
+        endif
+        read(tag,*,iostat=ios) aft_history_dt
+        if (ios.ne.0) then
+            write(0,*) 'minage: tried to read -aft:history DT but could not parse "',trim(tag),'"'
+            call error_exit(1)
+        endif
+        i = i + 1
+        call get_command_argument(i,aft_history_file)
+        isOutputDefined = .true.
+
     elseif (trim(tag).eq.'-aft:len0') then
         i = i + 1
         call get_command_argument(i,tag,status=ios)
@@ -887,7 +1009,9 @@ do while (i.le.narg)
         endif
 
 
-    ! Apatite (U-Th)/He age calculation variables
+    !*********************************************!
+    ! Apatite (U-Th)/He age calculation variables !
+    !*********************************************!
     elseif (trim(tag).eq.'-ahe:radius') then
         i = i + 1
         call get_command_argument(i,tag,status=ios)
@@ -1003,6 +1127,7 @@ endif
 write(0,*) '-temp READTQTEC_TEMP_FILE  Temperature history output from readtqtec'
 write(0,*) '-dep READTQTEC_DEP_FILE    Depth history (default: track age from beginning of model)'
 write(0,*) '-aft AFT_FILE              Apatite fission track age'
+write(0,*) '-aft:history DT FILE       Apatite fission track distribution every DT Ma'
 write(0,*) '-ahe AHE_FILE              Apatite (U-Th)/He age'
 write(0,*) '-advanced                  See advanced options'
 write(0,*)
