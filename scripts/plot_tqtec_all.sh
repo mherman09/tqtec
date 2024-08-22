@@ -588,9 +588,9 @@ fi
 
 echo 0 0 | gmt psxy $PROJ $LIMS -O >> $PSFILE
 
-gmt psconvert $PSFILE -Tg -A
+# gmt psconvert $PSFILE -Tg -A
 gmt psconvert $PSFILE -Tf -A
-echo "Created file $(basename $PSFILE .ps).png"
+# echo "Created file $(basename $PSFILE .ps).png"
 echo "Created file $(basename $PSFILE .ps).pdf"
 
 rm $PSFILE
