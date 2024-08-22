@@ -1,0 +1,17 @@
+# Example of uplift in new TQTec input format (same model as ex_uplift_old.in)
+T_TOTAL=20
+T_GEOTHERM_OUTPUT=1
+TEMP_SURF=0
+HF_SURF=30
+COND_BASE=3
+HP_SURF=0
+HP_DEP=0
+NLAYERS=0
+NHORIZONS=10
+2 4 6 8 10 12 14 16 18 20
+NUPLIFT=1
+0 20 5
+NBURIAL=0
+NTHRUST=0
+NTHICKEN=0
+NHFVARS=0
