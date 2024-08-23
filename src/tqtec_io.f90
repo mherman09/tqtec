@@ -975,6 +975,8 @@ do while (iend.eq.0)
         read(value,*) max_depth
         nnodes = int(max_depth/dz)
         isMaxDepthDefined = .true.
+    elseif (var.eq.'DT'.or.var.eq.'dt') then
+        read(value,*) dt
 
 
     elseif (var.eq.'NLAYERS'.or.var.eq.'nlayers') then
