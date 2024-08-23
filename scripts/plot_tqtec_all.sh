@@ -179,8 +179,20 @@ echo 0 0 | gmt psxy $PROJ $LIMS -K -X1.5i -Y1.5i > $PSFILE
 
 if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
-gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time Before Present (Ma)" -Bya10g5+l"Depth (km)" -BWeS -K -O >> $PSFILE
-gmt psbasemap $PROJ $LIMS_MODEL -Bxa10+l"Model Time (Ma)" -BN -K -O >> $PSFILE
+AGE_TIKS=`echo $LIMS | sed -e "s/-R//" | awk -F"/" '{print $1,$2}' |\
+            awk '{
+                time = $2-$1
+                if (time>=200) {dt=50}
+                else if (time>=100) {dt=20}
+                else if (time>=50) {dt=10}
+                else if (time>=20) {dt=5}
+                else if (time>=10) {dt=2}
+                else {dt=1}
+                print dt
+            }'`
+
+gmt psbasemap $PROJ $LIMS -Bxa${AGE_TIKS}g${AGE_TIKS}+l"Time Before Present (Ma)" -Bya10g5+l"Depth (km)" -BWeS -K -O >> $PSFILE
+gmt psbasemap $PROJ $LIMS_MODEL -Bxa${AGE_TIKS}+l"Model Time (Ma)" -BN -K -O >> $PSFILE
 
 for COL in $(seq 1 $NCOL)
 do
@@ -251,8 +263,8 @@ TEMP_TIKS=`echo $LIMS | sed -e "s/-R//" |\
               print 50
           }
       }'`
-gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time Before Present (Ma)" -Bya${TEMP_TIKS}g${TEMP_TIKS}+l"Temperature (\260C)" -BWeS -K -O >> $PSFILE
-gmt psbasemap $PROJ $LIMS_MODEL -Bxa10+l"Model Time (Ma)" -BN -K -O >> $PSFILE
+gmt psbasemap $PROJ $LIMS -Bxa${AGE_TIKS}g${AGE_TIKS}+l"Time Before Present (Ma)" -Bya${TEMP_TIKS}g${TEMP_TIKS}+l"Temperature (\260C)" -BWeS -K -O >> $PSFILE
+gmt psbasemap $PROJ $LIMS_MODEL -Bxa${AGE_TIKS}+l"Model Time (Ma)" -BN -K -O >> $PSFILE
 
 for COL in $(seq 1 $NCOL)
 do
@@ -286,8 +298,8 @@ echo 0 0 | gmt psxy $PROJ $LIMS -Y4.5i -K -O >> $PSFILE
 
 if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
-gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya5g5+l"Surface Heat Flow (mW/m@+2@+)" -BWeS -K -O >> $PSFILE
-gmt psbasemap $PROJ $LIMS_MODEL -Bxa10+l"Model Time (Ma)" -BN -K -O >> $PSFILE
+gmt psbasemap $PROJ $LIMS -Bxa${AGE_TIKS}g${AGE_TIKS}+l"Time (Ma)" -Bya5g5+l"Surface Heat Flow (mW/m@+2@+)" -BWeS -K -O >> $PSFILE
+gmt psbasemap $PROJ $LIMS_MODEL -Bxa${AGE_TIKS}+l"Model Time (Ma)" -BN -K -O >> $PSFILE
 
 awk '{if (NR > 1) print '$tMIN'+(NR-1)*'$dt',$1}' $HFFILE |\
     gmt psxy $PROJ $LIMS -W1p -K -O >> $PSFILE
@@ -409,8 +421,8 @@ then
 
     if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
-    gmt psbasemap $PROJ $LIMS -Bxa10g10+l"Time (Ma)" -Bya10g5+l"Depth (km)" -BWeS -K -O >> $PSFILE
-    gmt psbasemap $PROJ $LIMS_MODEL -Bxa10+l"Model Time (Ma)" -BN -K -O >> $PSFILE
+    gmt psbasemap $PROJ $LIMS -Bxa${AGE_TIKS}g${AGE_TIKS}+l"Time (Ma)" -Bya10g5+l"Depth (km)" -BWeS -K -O >> $PSFILE
+    gmt psbasemap $PROJ $LIMS_MODEL -Bxa${AGE_TIKS}+l"Model Time (Ma)" -BN -K -O >> $PSFILE
 
     # Depth versus time
     DEP_DASH="2_1:0"
@@ -507,15 +519,6 @@ then
 
     # if [ "$TIMING_FILE" != "" ]; then plot_tectonic_timing; fi
 
-    AGE_TIKS=`echo $LIMS | sed -e "s/-R//" | awk -F"/" '{print $1,$2}' |\
-              awk '{
-                  time = $2-$1
-                  if (time>=50) {dt=10}
-                  else if (time>=20) {dt=5}
-                  else if (time>=10) {dt=2}
-                  else {dt=1}
-                  print dt
-              }'`
     DEP_TIKS=`echo $LIMS | sed -e "s/-R//" | awk -F"/" '{print $3,$4}' |\
               awk '{
                   relief = $2-$1
