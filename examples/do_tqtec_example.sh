@@ -66,7 +66,7 @@ echo "$0: Running readtqtec"
 ../scripts/plot_tqtec_temp_contours.sh dep.tmp geotherm.tmp \
     -timing timing.tmp
 # Horizon depth versus time
-../scripts/plot_all.sh temp.tmp dep.tmp hf.tmp \
+../scripts/plot_tqtec_all.sh temp.tmp dep.tmp hf.tmp \
     -timing timing.tmp \
     -closure closure.tmp \
     -geotherm geotherm.tmp \
