@@ -57,6 +57,7 @@ double precision :: delta_depth
 integer :: intqt(nhfvars)
 integer, allocatable :: total_shift(:)
 double precision :: thickening_ratio
+logical :: isThinning
 
 
 
@@ -175,24 +176,47 @@ enddo
 
 
 !**************************************************************************************************!
-! *** Bulk Crustal Thickening *********************************************************************!
+! *** Bulk Crustal Thickening/Thinning ************************************************************!
 do i = 1,nthicken
+
+    ! Check whether we are thickening or thinning
+    if (thicken_dat(i,3).lt.0) then
+        isThinning = .true.
+    else
+        isThinning = .false.
+    endif
+    thicken_dat(i,3) = abs(thicken_dat(i,3))
+
+    ! Make sure thinning amount is less than crustal thickness
+    if (isThinning .and. thicken_dat(i,3).ge.thicken_dat(i,5)) then
+        write(0,*) 'tqtec: thinning magnitude must be less than crustal thickness'
+        write(0,*) 'thinning amount   =',thicken_dat(i,3)
+        write(0,*) 'crustal thickness =',thicken_dat(i,5)
+        call error_exit(1)
+    endif
+
+    ! Set thickening/thinning timesteps
     nstart = int(thicken_dat(i,1)/dt)             ! Starting timestep                          NN(1)
     nduration = int(thicken_dat(i,2)/dt)          ! Duration in timesteps                      NN(2)
-    nthick = int(thicken_dat(i,3)/dz)             ! Amount to thicken crust in nodes           NN(4)
+    nthick = int(thicken_dat(i,3)/dz)             ! Amount to thicken/thin crust in nodes      NN(4)
     rate = dble(nthick)/dble(nduration)           ! Rate in nodes/timestep
-    jbeg = nstart + 1                             ! First timestep of thickening
-    jend = nstart + nduration                     ! Last timestep of thickening
-    ct = 0                                        ! Initialize counter for thickening steps
+    jbeg = nstart + 1                             ! First timestep of thickening/thinning
+    jend = nstart + nduration                     ! Last timestep of thickening/thinning
+    ct = 0                                        ! Initialize counter for thickening/thinning steps
     do j = jbeg,jend
-        arg = dble(j-nstart)*rate - dble(ct)      ! Test for thickening at this timestep
+        arg = dble(j-nstart)*rate - dble(ct)      ! Test for thickening/thinning at this timestep
         if (arg.ge.1.0d0) then
-            action(j) = 4                         ! Set thickening action code = 4
+
+            if (isThinning) then
+                action(j) = -4                    ! Set thinning action code = -4
+            else
+                action(j) = 4                     ! Set thickening action code = 4
+            endif
             ct = ct + 1
 
-            ! Save some parameters at beginning of thickening event for bookkeeping
+            ! Save some parameters at beginning of event for bookkeeping
             if (thicken_start(i).eq.0) then
-                thicken_start(i) = j                  ! Timestep to start thickening event
+                thicken_start(i) = j                  ! Timestep to start event
                 itop = int(thicken_dat(i,4)/dz) + 1   ! Top node of crust
                 ithick = int(thicken_dat(i,5)/dz)     ! Initial crustal thickness in nodes
                 crust_dat(i,1) = itop                 ! Save top node of crust
@@ -201,7 +225,7 @@ do i = 1,nthicken
         endif
     enddo
 
-    ! Check whether tracked horizons should move during thickening
+    ! Check whether tracked horizons should move during thickening/thinning
     if (thickenHorizons) then
         do ihor = 1,nhorizons
             ndep = depth_node(ihor)   ! horizon node
@@ -222,8 +246,13 @@ do i = 1,nthicken
                 arg = dble(j-nstart)*rate - dble(ct)  ! Test for horizon moving
 
                 if (arg.gt.1.0d0) then
-                    horizon_shift(ihor,j) = 1         ! Move horizon down by one node
-                    total_shift(ihor) = total_shift(ihor) + 1
+                    if (isThinning) then
+                        horizon_shift(ihor,j) = -1    ! Move horizon up by one node
+                        total_shift(ihor) = total_shift(ihor) - 1
+                    else
+                        horizon_shift(ihor,j) = 1     ! Move horizon down by one node
+                        total_shift(ihor) = total_shift(ihor) + 1
+                    endif
                     ct = ct + 1
                 endif
             enddo
@@ -780,6 +809,57 @@ enddo
 
 ! Count the duplicated node at the bottom of the crust
 crust_bot = crust_bot + 1
+
+
+return
+end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+
+subroutine thin()
+
+use tqtec, only: nnodes, &
+                 conductivity, &
+                 temp, &
+                 crust_top, &
+                 crust_bot, &
+                 verbosity
+
+implicit none
+
+! Local variables
+integer :: i
+integer :: j
+integer :: crust_thick
+double precision :: ratio
+
+
+if (verbosity.ge.3) then
+    write(*,*) '    thinning...'
+endif
+
+
+! Remove bottom crust node and shift conductivities up one node
+conductivity(crust_bot:nnodes-1) = conductivity(crust_bot+1:nnodes)
+
+! Shift temperatures up one node
+temp(crust_bot:nnodes-1) = temp(crust_bot+1:nnodes)
+
+
+! Redistribute temperatures throughout thinned crust
+crust_thick = crust_bot - crust_top
+ratio = dble(crust_thick)/dble(crust_thick-1)
+do i = 0,crust_thick
+    j = i + crust_top
+    temp(j) = temp(j) * (1 + dble(i)*(ratio-1.0d0)/dble(crust_thick-1))
+enddo
+
+
+! Remove a node from the bottom of the crust
+crust_bot = crust_bot - 1
 
 
 return

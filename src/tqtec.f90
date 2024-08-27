@@ -307,7 +307,7 @@ do while (istep.lt.nt_total)
             call thrust_lowerplate() ! (Formerly: THSTLP)
         endif
 
-    elseif (action(istep).eq.4) then
+    elseif (abs(action(istep)).eq.4) then
         ! Check to see if this is a new crustal thickening/thinning event
         do i = 1,nthicken
             if (thicken_start(i).eq.istep) then
@@ -317,7 +317,11 @@ do while (istep.lt.nt_total)
                 exit
             endif
         enddo
-        call thicken()
+        if (action(istep).gt.0) then
+            call thicken()
+        else
+            call thin()
+        endif
 
     elseif (action(istep).ne.0) then
         write(0,*) ''

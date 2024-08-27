@@ -1224,7 +1224,6 @@ do while (iend.eq.0)
             enddo
             ! We have something to do!
             isTectonicActionDefined = .true.
-            isTectonicActionDefined = .true.
         endif
 
     elseif (var.eq.'THICKENHORIZONS'.or.var.eq.'thickenhorizons'.or.var.eq.'thickenHorizons') then
