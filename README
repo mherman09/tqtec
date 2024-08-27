@@ -8,10 +8,10 @@ experiences processes occurring at tectonic plate boundaries. The package
 includes tools for estimating thermochronologic observables corresponding
 to the temperature history.
 
-    - tqtec
-    - readtqtec
-    - minage
-    - ftage (deprecated fission track tool; incorporated into minage)
+    - tqtec: calculate thermal histories for various tectonic processes
+    - readtqtec: post-process tqtec model output
+    - minage: model mineral thermochronologic ages experiencing temperature(-depth) histories
+    - ftage: deprecated fission track age tool; now incorporated into minage
 
 
 INSTALLATION
@@ -21,12 +21,24 @@ Prerequisites:
     - CMake
     - Make
 
-Directions:
+Basic directions:
 
+    git clone https://github.com/mherman09/tqtec tqtec
+    cd tqtec
     mkdir build
     cd build
     cmake .. 
     cmake --build .
+    cmake --install .
+
+The default installation directory for CMake on UNIX platforms (including macOS)
+is /usr/local. To manually define an installation directory for TQTec, replace
+
+    cmake --install .
+
+with
+
+    cmake --install . --prefix /path/to/tqtec/dir
 
 
 AUTHORS
