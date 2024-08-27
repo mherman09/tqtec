@@ -1,0 +1,51 @@
+# Example of bulk thickening
+
+# Total time (Ma)
+T_TOTAL=50
+
+# Time per geotherm outputs (Ma)
+T_GEOTHERM_OUTPUT=1
+
+# Surface temperature (Celsius)
+TEMP_SURF=5
+
+# Steady state surface heat flow (mW/m^2)
+HF_SURF=30
+
+# Conductivity at base of model (W/m*K)
+COND_BASE=3
+
+# Heat production
+HP_SURF=0
+HP_DEP=0
+
+# Number of layers with different conductivities
+NLAYERS=0
+
+# Number of depth horizons to track
+NHORIZONS=10
+
+# Horizon depths (km)
+2 4 6 8 10 12 14 16 18 20
+
+
+#####
+# Tectonic events
+#####
+NUPLIFT=0
+NBURIAL=0
+NTHRUST=0
+NHFVARS=0
+
+# Bulk thickening
+# START  DURATION  AMOUNT  TOP  THICK0
+NTHICKEN=1
+      5        11       4    5      9
+thickenHorizons=T
+
+#####
+# Model parameters
+#####
+MAX_DEPTH=60
+DZ=0.05
+DT=0.01
