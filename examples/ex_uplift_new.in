@@ -1,16 +1,39 @@
 # Example of uplift in new TQTec input format (same model as ex_uplift_old.in)
+
+# Total model run time (Ma)
 T_TOTAL=20
+
+# Time interval per geotherm output (Ma), if requested on command line with -geotherm
 T_GEOTHERM_OUTPUT=1
+
+# Surface temperature (C)
 TEMP_SURF=0
+
+# Steady state surface heat flow (mW/m^2)
 HF_SURF=30
+
+# Conductivity of the base of the model (W/mK)
 COND_BASE=3
+
+# Heat production at the surface (uW/m^3)
 HP_SURF=0
+
+# Heat production depth for exponentially decaying heat production (km)
 HP_DEP=0
+
+# Number of material layers with different conductivities
 NLAYERS=0
+
+# Number of horizons to track, must be followed on next line by horizon depths (km)
 NHORIZONS=10
 2 4 6 8 10 12 14 16 18 20
+
+# Number of uplift events, must be followed on next line by event parameters
+#     START(Ma)   DURATION(Ma)   UPLIFT(km)
 NUPLIFT=1
 0 20 5
+
+# No other tectonic actions, so set these to zero or leave them out of the input file
 NBURIAL=0
 NTHRUST=0
 NTHICKEN=0
