@@ -1,28 +1,38 @@
-TQTec - (T)emperature, Heat Flow (Q), (Tec)tonics
-
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~ TQTec - (T)emperature, Heat Flow (Q), (Tec)tonics ~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 OVERVIEW
 ~~~~~~~~
 TQTec calculates the one-dimensional transient thermal field for an area that
 experiences processes occurring at tectonic plate boundaries. The package
 includes tools for estimating thermochronologic observables corresponding
-to the temperature history.
+to the temperature history:
 
-    - tqtec: calculate thermal histories for various tectonic processes
-    - readtqtec: post-process tqtec model output
-    - minage: model mineral thermochronologic ages experiencing temperature(-depth) histories
-    - ftage: deprecated fission track age tool; now incorporated into minage
+    tqtec:     calculate thermal histories for tectonic processes
+    readtqtec: post-process tqtec model outputs
+    minage:    model mineral ages for temperature histories
+    ftage:     deprecated fission track age tool
+
+Example input model files (including comments describing their format) are
+available in the examples/ directory.
+
+Shell scripts for plotting model results are available in the scripts/
+directory. These require Generic Mapping Tools (GMT) to use. The plotting
+scripts have been developed and tested using GMT 6.5. Directions for GMT
+installation are at: https://docs.generic-mapping-tools.org/latest/install.html
 
 
 INSTALLATION
 ~~~~~~~~~~~~
-Prerequisites:
+Dependencies:
     - GNU Fortran and C compilers
     - CMake
     - Make
+Optional Dependencies:
+    - Generic Mapping Tools
 
-Basic directions:
-
+Installation directions:
     git clone https://github.com/mherman09/tqtec tqtec
     cd tqtec
     mkdir build
@@ -43,7 +53,7 @@ with
 
 AUTHORS
 ~~~~~~~
-Kevin Furlong: Created original TQTec; supervises TQTec development
+Kevin Furlong: Created original TQTec; advises TQTec development
 Matthew Herman: Updated TQTec to Modern Fortran; maintains and develops TQTec
 Chris Guzofski: Bulk thickening and metamorphism
 Matthew Legg: Apatite fission track and petroleum observables
