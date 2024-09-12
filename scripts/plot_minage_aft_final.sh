@@ -91,7 +91,7 @@ gmt set PS_MEDIA 100ix100i
 PSFILE=minage_aft_final.ps
 
 PROJ=-JX6i/3i
-CTMAX=`echo $NMAX | awk '{print $1*1.10}'`
+CTMAX=`echo $NMAX | awk '{print $1*1.12}'`
 LIMS=-R0/20/0/$CTMAX
 
 # Colors for each horizon
@@ -109,14 +109,31 @@ gmt psxy -T -K -Y95i > $PSFILE
 for COL in `seq 1 $NCOL`
 do
 
+    # Set color for this horizon
+    COLOR=$(sed -ne "${COL}p" color_list.tmp)
+
     # Plot gridlines
-    gmt psbasemap $PROJ $LIMS -Bxg1 -Byg -BSW -K -O \
+    gmt psbasemap $PROJ $LIMS -Byg -BSW -K -O \
         --MAP_GRID_PEN_PRIMARY=0.5p,205,4_2:0 >> $PSFILE
 
+    # Mean and median lengths
+    MEAN=`awk 'BEGIN{i='$COL'+1;sum=0;n=0}{
+        n = n + $i
+        len = $1
+        sum = sum + $i*len
+    }END{print sum/n}' aft_corrected_hist.tmp`
+    echo $MEAN $CTMAX | awk '{print $1,0;print $1,$2}' |\
+        gmt psxy $PROJ $LIMS -W2p,$COLOR -K -O >> $PSFILE
+    MEDIAN=`awk 'BEGIN{i='$COL'+1;n=0}{
+        for (j=1;j<=$i;j++) {
+            n++
+            len[n] = $1
+        }
+    }END{print len[int(n/2)]}' aft_corrected_hist.tmp`
+    echo $MEDIAN $CTMAX | awk '{print $1,0;print $1,$2}' |\
+        gmt psxy $PROJ $LIMS -W2p,$COLOR,2_6:0 -K -O --PS_LINE_CAP=round >> $PSFILE
+
     # Plot length distributions
-    COLOR=$(sed -ne "${COL}p" color_list.tmp)
-    # awk 'BEGIN{i='$COL'+1}{print $1,$i}' aft_corrected_hist.tmp |\
-    #     gmt psxy $PROJ $LIMS -W1p,$COLOR -K -O >> $PSFILE
     awk 'BEGIN{i='$COL'+1}{
         ct = $i
         print ">"
