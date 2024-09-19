@@ -4,7 +4,7 @@
 #   USAGE STATEMENT
 #####
 function usage() {
-    echo "Usage: $0 AFTFILE [-temp TEMPFILE]" 1>&2
+    echo "Usage: $0 AFTFILE [-temp TEMPFILE] [-timing TIMINGFILE]" 1>&2
     exit 1
 }
 
@@ -30,10 +30,12 @@ shift
 
 # Parse other command line arguments
 TEMP_FILE=
+TIMING_FILE=
 while [ "$1" != "" ]
 do
     case $1 in
         -temp) shift; TEMP_FILE=$1;;
+        -timing) shift; TIMING_FILE=$1;;
         *) usage;;
     esac
     shift
@@ -183,9 +185,36 @@ do
         PROJ_TEMP_AXIS=-JX-2.0i/1.6i
         LIMS_TEMP=-R0/$TIMEMAX/$TEMPMIN/$TEMPMAX
         SHFT="-Xa0.2i -Ya1.2i"
+
+        # White background
         echo $LIMS_TEMP | sed -e "s/-R//" |\
             awk -F/ '{print $1,$3;print $1,$4;print $2,$4;print $2,$3}' |\
             gmt psxy $PROJ_TEMP $LIMS_TEMP -Gwhite -K -O $SHFT >> $PSFILE
+
+        # Tectonic action timing
+        YMIN=$(echo $LIMS_TEMP | sed -e "s/-R//" | awk -F/ '{print $3}')
+        YMAX=$(echo $LIMS_TEMP | sed -e "s/-R//" | awk -F/ '{print $4}')
+        awk 'BEGIN{print ">"}{
+            if ($1=="burial" || $1=="uplift" || $1=="thicken") {
+                print ">"
+                print 0+$3,'$YMIN'
+                print 0+$4,'$YMIN'
+                print 0+$4,'$YMAX'
+                print 0+$3,'$YMAX'
+                print 0+$3,'$YMIN'
+            }
+        }' $TIMING_FILE |\
+            gmt psxy $PROJ_TEMP $LIMS_TEMP -G245 -K -O $SHFT >> $PSFILE
+        awk 'BEGIN{print ">"}{
+            if ($1=="thrust") {
+                print ">"
+                print 0+$3,'$YMIN'
+                print 0+$3,'$YMAX'
+            }
+        }' $TIMING_FILE |\
+            gmt psxy $PROJ_TEMP $LIMS_TEMP -W3p,225 -K -O $SHFT >> $PSFILE
+
+        # Temperature versus time
         awk '{
             if (NR==1) {
                 dt = $2

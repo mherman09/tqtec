@@ -1105,7 +1105,7 @@ if (i.ne.0) then
     printAdvancedOptions = .true.
 endif
 j = index(str,'*****FD*****')
-write(0,*) 'j',j
+! write(0,*) 'j',j
 if (j.ne.0) then
     printAdvancedOptions = .true.
     printFiniteDifference = .true.
