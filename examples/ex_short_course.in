@@ -1,0 +1,97 @@
+####################################################################################################
+##### GSA Connects 2024 Short Course: Unraveling the Thermal Signature of Mountain Building ########
+####################################################################################################
+##################################### Example TQTec Input File #####################################
+####################################################################################################
+
+
+# Lines that start with "#" and blank lines are ignored
+# Use comments to and spacing to document your input parameters and make this file more readable
+
+
+
+##### MODEL PARAMETERS #####
+
+# Total model run time (Ma)
+T_TOTAL=50
+
+# Timestep size (default: 0.001 Ma = 1000 years)
+DT=0.001
+
+
+# Number of nodes (default: 5000)
+NNODES=5000
+
+# User can define EITHER the node spacing (km) OR the maximum model depth (km)
+# Node spacing (default: 0.01 km = 10 m)
+DZ=0.01
+# Maximum model depth (default: 50 km)
+#MAX_DEPTH=50
+
+
+# Geotherms are only printed in a tqtec run if they are requested as an argument with -geotherm
+# Time interval per geotherm output (Ma)
+T_GEOTHERM_OUTPUT=1
+
+
+
+
+##### BOUNDARY CONDITIONS AND MATERIAL PROPERTIES #####
+
+# Surface temperature (C)
+TEMP_SURF=0
+
+# Steady state surface heat flow (mW/m^2)
+HF_SURF=30
+
+# Conductivity of the base of the model (W/mK)
+COND_BASE=3
+
+# Heat production at the surface (uW/m^3)
+HP_SURF=0
+
+# Heat production e-folding depth for exponentially decaying heat production (km)
+HP_DEP=0
+
+# Number of material layers with different conductivities
+# Must be followed on the next line(s) by the material properties
+#     TOP(km)   THICKNESS(km)   CONDUCTIVITY(W/mK)
+NLAYERS=0
+
+
+
+##### DEPTH HORIZON TRACKING #####
+
+# Number of horizons to track, must be followed on next line by horizon depths (km)
+NHORIZONS=10
+2 4 6 8 10 12 14 16 18 20
+
+
+
+##### TECTONIC EVENTS #####
+
+# Number of uplift events, must be followed on next line(s) by event parameters
+#     START(Ma)   DURATION(Ma)   UPLIFT(km)
+NUPLIFT=1
+              5              6            5
+
+
+# Number of burial events, must be followed on next line(s) by event parameters
+#     START(Ma)   DURATION(Ma)   THICKNESS(km)   CONDUCTIVITY(W/mK)
+NBURIAL=0
+
+
+# Number of thrust faulting events, must be followed on next line(s) by event parameters
+#     START(Ma)   HANGINGWALL(1)/FOOTWALL(2)   INIT_THICKNESS(km)   DEPTH(km)   FINAL_THICKNESS(km)
+NTHRUST=0
+
+
+# Number of thickening/thinning events, must be followed on next line(s) by event parameters
+# Set THICKENING < 0 to thin crust
+#     START(Ma)   DURATION(Ma)   THICKENING(km)   TOP(km)   INITIALTHICKNESS(km)
+NTHICKEN=0
+
+
+# Number of heat flow variation events, must be followed on next line(s) by event parameters
+#     START(Ma)   HEATFLOT(mW/m^2)
+NHFVARS=0
