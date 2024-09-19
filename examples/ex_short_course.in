@@ -44,7 +44,7 @@ TEMP_SURF=0
 # Steady state surface heat flow (mW/m^2)
 HF_SURF=30
 
-# Conductivity of the base of the model (W/mK)
+# Conductivity of the model (W/mK)
 COND_BASE=3
 
 # Heat production at the surface (uW/m^3)
@@ -53,7 +53,7 @@ HP_SURF=0
 # Heat production e-folding depth for exponentially decaying heat production (km)
 HP_DEP=0
 
-# Number of material layers with different conductivities
+# Number of material layers with different conductivities (for basement with different layers)
 # Must be followed on the next line(s) by the material properties
 #     TOP(km)   THICKNESS(km)   CONDUCTIVITY(W/mK)
 NLAYERS=0
@@ -70,7 +70,7 @@ NHORIZONS=10
 
 ##### TECTONIC EVENTS #####
 
-# Number of uplift events, must be followed on next line(s) by event parameters
+# Number of uplift/exhumation events, must be followed on next line(s) by event parameters
 #     START(Ma)   DURATION(Ma)   UPLIFT(km)
 NUPLIFT=1
               5              6            5
@@ -82,7 +82,7 @@ NBURIAL=0
 
 
 # Number of thrust faulting events, must be followed on next line(s) by event parameters
-#     START(Ma)   HANGINGWALL(1)/FOOTWALL(2)   INIT_THICKNESS(km)   DEPTH(km)   FINAL_THICKNESS(km)
+#     START(Ma)   HW(1)/FW(2)   INIT_THICKNESS(km)   DEPTH_FAULT_EMPLACEMENT(km)   FINAL_THICKNESS(km)
 NTHRUST=0
 
 
@@ -92,6 +92,6 @@ NTHRUST=0
 NTHICKEN=0
 
 
-# Number of heat flow variation events, must be followed on next line(s) by event parameters
-#     START(Ma)   HEATFLOT(mW/m^2)
+# Number of heat flow variation events at model base, must be followed on next line(s) by event parameters
+#     START(Ma)   HEATFLOW(mW/m^2)
 NHFVARS=0
