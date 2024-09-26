@@ -310,38 +310,6 @@ endif
 
 
 
-! Time-Temperature Index of Maturity (TTI) history
-if (tti_file.ne.'') then
-
-    if (allocated(tti)) then
-        deallocate(tti)
-    endif
-    allocate(tti(nhorizons))
-    if (allocated(tti_exp)) then
-        deallocate(tti_exp)
-    endif
-    allocate(tti_exp(nhorizons))
-
-    open(unit=9,file=tti_file,status='unknown')
-
-    ! Header: time_before_present(Ma)  sample_rate(Ma)  number_of_points
-    write(9,'(2F10.3,I6)') -xmin,2.0d0*dt,nt_total
-            ! sample_rate = 2*dt because every 2 pts are saved in tqtec_io.f90 subroutine output()
-
-    ! Calculate and print TTI for each horizon at each timestep
-    write(fmt_string,'("("I6,"E14.6)")') nhorizons
-    do l = 1,nt_total
-        tti_exp = 0.1d0*(results(l,1,:)-105.0d0)
-        if (l.eq.1) then
-            tti = 2.0d0*dt * 2**tti_exp
-        else
-            tti = tti + 2.0d0*dt * 2**tti_exp
-        endif
-        write(9,fmt_string) (tti(i),i=1,nhorizons)
-    enddo
-
-    close(9)
-endif
 
 
 
