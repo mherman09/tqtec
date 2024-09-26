@@ -83,9 +83,6 @@ character(len=1) :: dummy
 character(len=32) :: fmt_string
 logical :: ex, isClosed, isInRange
 double precision :: xmin, closure_time, final_depth, temp1
-double precision, allocatable :: tti_exp(:)
-double precision, allocatable :: tti(:)
-double precision, allocatable :: vr0(:)
 
 
 
@@ -312,44 +309,6 @@ endif
 
 
 
-
-! Vitrinite reflectance history
-if (vr_file.ne.'') then
-
-    if (allocated(tti)) then
-        deallocate(tti)
-    endif
-    allocate(tti(nhorizons))
-    if (allocated(tti_exp)) then
-        deallocate(tti_exp)
-    endif
-    allocate(tti_exp(nhorizons))
-    if (allocated(vr0)) then
-        deallocate(vr0)
-    endif
-    allocate(vr0(nhorizons))
-
-    open(unit=9,file=vr_file,status='unknown')
-
-    ! Header: time_before_present(Ma)  sample_rate(Ma)  number_of_points
-    write(9,'(2F10.3,I6)') -xmin,2.0d0*dt,nt_total
-            ! sample_rate = 2*dt because every 2 pts are saved in tqtec_io.f90 subroutine output()
-
-    ! Calculate TTI and VR0 and print VR0 for each horizon at each timestep
-    write(fmt_string,'("("I6,"E14.6)")') nhorizons
-    do l = 1,nt_total
-        tti_exp = 0.1d0*(results(l,1,:)-105.0d0)
-        if (l.eq.1) then
-            tti = 2.0d0*dt * 2**tti_exp
-        else
-            tti = tti + 2.0d0*dt * 2**tti_exp
-        endif
-        vr0 = (tti/41.0d0) ** 0.22d0
-        write(9,fmt_string) (vr0(i),i=1,nhorizons)
-    enddo
-
-    close(9)
-endif
 
 
 ! C

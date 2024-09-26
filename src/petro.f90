@@ -51,6 +51,9 @@ module petro
     ! TTI variables
     character(len=512) :: tti_file
 
+    ! Vitrinite reflectance variables
+    character(len=512) :: vitrinite_file
+
 end module petro
 
 !==================================================================================================!
@@ -61,7 +64,8 @@ use petro, only:         &
     readtqtec_temp_file, &
     readtqtec_dep_file,  &
     isOutputDefined,     &
-    tti_file
+    tti_file,            &
+    vitrinite_file
 
 
 implicit none
@@ -113,6 +117,11 @@ call read_dep_history()
 ! Time-temperature index of maturation
 if (tti_file.ne.'') then
     call calc_tti()
+endif
+
+! Vitrinite reflectance
+if (vitrinite_file.ne.'') then
+    call calc_vitrinite_reflectance()
 endif
 
 
@@ -386,6 +395,76 @@ return
 end subroutine
 
 
+!--------------------------------------------------------------------------------------------------!
+
+
+subroutine calc_vitrinite_reflectance()
+
+use petro, only:        &
+    nhorizons,          &
+    dt_ma,              &
+    ntimes,             &
+    temp_celsius_array, &
+    dep_km_array,       &
+    vitrinite_file
+
+implicit none
+
+
+! Local variables
+integer :: i
+integer :: j
+double precision, allocatable :: tti(:)
+double precision, allocatable :: tti_exp(:)
+double precision, allocatable :: vr0(:)
+character(len=32) :: fmt_string
+
+
+write(*,*) 'petro: calculating vitrinite reflectance'
+
+
+! Allocate memory to TTI arrays
+if (allocated(tti)) then
+    deallocate(tti)
+endif
+allocate(tti(nhorizons))
+if (allocated(tti_exp)) then
+    deallocate(tti_exp)
+endif
+allocate(tti_exp(nhorizons))
+if (allocated(vr0)) then
+    deallocate(vr0)
+endif
+allocate(vr0(nhorizons))
+
+
+
+! Open output file
+open(unit=32,file=vitrinite_file,status='unknown')
+
+
+! Header: time_before_present(Ma)  sample_rate(Ma)  number_of_points
+write(32,'(2F10.3,I6)') -ntimes*dt_ma, dt_ma, ntimes
+
+! Calculate and print TTI for each horizon at each timestep
+write(fmt_string,'("("I6,"E14.6)")') nhorizons
+do i = 1,ntimes
+    tti_exp = 0.1d0*(temp_celsius_array(:,i)-105.0d0)
+    if (i.eq.1) then
+        tti = dt_ma * 2**tti_exp
+    else
+        tti = tti + dt_ma * 2**tti_exp
+    endif
+    vr0 = (tti/41.0d0) ** 0.22d0
+    write(31,fmt_string) (vr0(j),j=1,nhorizons)
+enddo
+
+close(32)
+
+
+end subroutine
+
+
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -403,9 +482,10 @@ subroutine gcmdln()
 
 use petro, only:         &
     readtqtec_temp_file, &
-    readtqtec_dep_file, &
-    isOutputDefined, &
-    tti_file
+    readtqtec_dep_file,  &
+    isOutputDefined,     &
+    tti_file,            &
+    vitrinite_file
 
 implicit none
 
@@ -420,6 +500,8 @@ logical :: fileExists
 readtqtec_temp_file = ''
 readtqtec_dep_file = ''
 isOutputDefined = .false.
+tti_file = ''
+vitrinite_file = ''
 
 
 ! Count number of command line arguments
@@ -453,6 +535,11 @@ do while (i.le.narg)
     elseif (trim(tag).eq.'-tti') then
         i = i + 1
         call get_command_argument(i,tti_file,status=ios)
+        isOutputDefined = .true.
+
+    elseif (trim(tag).eq.'-vitrinite') then
+        i = i + 1
+        call get_command_argument(i,vitrinite_file,status=ios)
         isOutputDefined = .true.
 
 
