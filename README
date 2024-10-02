@@ -12,6 +12,7 @@ to the temperature history:
     tqtec:     calculate thermal histories for tectonic processes
     readtqtec: post-process tqtec model outputs
     minage:    model mineral ages for temperature histories
+    petro:     model petroleum-related observables for temperature histories
     ftage:     deprecated fission track age tool
 
 Example input model files (including comments describing their format) are
