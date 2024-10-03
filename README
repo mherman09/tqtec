@@ -18,10 +18,11 @@ to the temperature history:
 Example input model files (which include comments describing their format) are
 available in the examples/ directory.
 
-Shell scripts for plotting model results are available in the scripts/
-directory. These require Generic Mapping Tools (GMT) to use. The plotting
-scripts have been developed and tested using GMT 6.5. Directions for GMT
-installation are at: https://docs.generic-mapping-tools.org/latest/install.html.
+Shell scripts showing how to run models and plot model results are available in
+the scripts/ directory. These scripts are included with the TQTec executables when
+TQTec is built and installed. The plotting scripts require Generic Mapping Tools
+(GMT) version 6.5 or higher to use. Directions for GMT installation are at:
+https://docs.generic-mapping-tools.org/latest/install.html.
 
 
 INSTALLATION & UPDATING
@@ -30,7 +31,7 @@ Dependencies:
     - GNU Fortran and C compilers
     - CMake
     - Make
-Optional Dependencies:
+Optional Dependencies (for plotting scripts):
     - Generic Mapping Tools
 
 Installation directions:
@@ -44,8 +45,8 @@ Installation directions:
 
 The default installation directory for CMake on UNIX platforms (including macOS)
 is /usr/local. Specify /path/to/tqtec/dir to choose a different location to
-install TQTec. You will have to include that in your PATH environment variable
-to make sure TQTec is available in every terminal session.
+install TQTec. You will have to include that directory in your PATH environment
+variable to make TQTec available whenever you open the terminal.
 
 Updating directions (from the build/ directory):
     git pull
