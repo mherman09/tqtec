@@ -15,17 +15,17 @@ to the temperature history:
     petro:     model petroleum-related observables for temperature histories
     ftage:     deprecated fission track age tool
 
-Example input model files (including comments describing their format) are
+Example input model files (which include comments describing their format) are
 available in the examples/ directory.
 
 Shell scripts for plotting model results are available in the scripts/
 directory. These require Generic Mapping Tools (GMT) to use. The plotting
 scripts have been developed and tested using GMT 6.5. Directions for GMT
-installation are at: https://docs.generic-mapping-tools.org/latest/install.html
+installation are at: https://docs.generic-mapping-tools.org/latest/install.html.
 
 
-INSTALLATION
-~~~~~~~~~~~~
+INSTALLATION & UPDATING
+~~~~~~~~~~~~~~~~~~~~~~~
 Dependencies:
     - GNU Fortran and C compilers
     - CMake
@@ -38,18 +38,19 @@ Installation directions:
     cd tqtec
     mkdir build
     cd build
-    cmake .. 
+    cmake ..
     cmake --build .
-    cmake --install .
+    cmake --install . [--prefix /path/to/tqtec/dir]
 
 The default installation directory for CMake on UNIX platforms (including macOS)
-is /usr/local. To manually define an installation directory for TQTec, replace
+is /usr/local. Specify /path/to/tqtec/dir to choose a different location to
+install TQTec. You will have to include that in your PATH environment variable
+to make sure TQTec is available in every terminal session.
 
-    cmake --install .
-
-with
-
-    cmake --install . --prefix /path/to/tqtec/dir
+Updating directions (from the build/ directory):
+    git pull
+    cmake ..
+    cmake --build .
 
 
 AUTHORS
@@ -59,5 +60,3 @@ Matthew Herman: Updated TQTec to Modern Fortran; maintains and develops TQTec
 Chris Guzofski: Bulk thickening and metamorphism
 Matthew Legg: Apatite fission track and petroleum observables
 Rachel Piotraschke: (U-Th)/He dating and helium diffusion in apatite
-
-
