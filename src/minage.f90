@@ -582,7 +582,7 @@ if (aft_file.ne.'') then
         len = xmin+dble(ibin-1)*binwid
         write(22,fmt_string) len, (aft_hist_corr(ibin,ihorizon),ihorizon=1,nhorizons)
     enddo
-    write(22,'(A)')   '#'
+    write(22,'(A)') '#'
     write(22,'(A)') '# Initial (uncorrected) track lengths'
     do ibin = 1,nbins
         len = xmin+dble(ibin-1)*binwid

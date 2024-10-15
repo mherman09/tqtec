@@ -4,7 +4,7 @@
 #   USAGE STATEMENT
 #####
 function usage() {
-    echo "Usage: $0 AFTFILE [-temp TEMPFILE] [-timing TIMINGFILE]" 1>&2
+    echo "Usage: $0 AFTFILE [-temp TEMPFILE] [-timing TIMINGFILE] [-debug]" 1>&2
     exit 1
 }
 
@@ -36,6 +36,7 @@ do
     case $1 in
         -temp) shift; TEMP_FILE=$1;;
         -timing) shift; TIMING_FILE=$1;;
+        -debug) set -x;;
         *) usage;;
     esac
     shift
@@ -67,7 +68,7 @@ AFT_AGES=`awk '{
 
 # Corrected length distribution
 awk 'BEGIN{p=0}{
-    if ($1 == "#") {
+    if (substr($1,1,1) == "#") {
         if (/Final \(corrected\) track lengths/) {
             p = 1
             getline
@@ -110,6 +111,8 @@ gmt psxy -T -K -Y95i > $PSFILE
 # Different panel for each distribution
 for COL in `seq 1 $NCOL`
 do
+
+    echo $0: working on horizon $COL
 
     # Set color for this horizon
     COLOR=$(sed -ne "${COL}p" color_list.tmp)
@@ -192,27 +195,30 @@ do
             gmt psxy $PROJ_TEMP $LIMS_TEMP -Gwhite -K -O $SHFT >> $PSFILE
 
         # Tectonic action timing
-        YMIN=$(echo $LIMS_TEMP | sed -e "s/-R//" | awk -F/ '{print $3}')
-        YMAX=$(echo $LIMS_TEMP | sed -e "s/-R//" | awk -F/ '{print $4}')
-        awk 'BEGIN{print ">"}{
-            if ($1=="burial" || $1=="uplift" || $1=="thicken") {
-                print ">"
-                print 0+$3,'$YMIN'
-                print 0+$4,'$YMIN'
-                print 0+$4,'$YMAX'
-                print 0+$3,'$YMAX'
-                print 0+$3,'$YMIN'
-            }
-        }' $TIMING_FILE |\
-            gmt psxy $PROJ_TEMP $LIMS_TEMP -G245 -K -O $SHFT >> $PSFILE
-        awk 'BEGIN{print ">"}{
-            if ($1=="thrust") {
-                print ">"
-                print 0+$3,'$YMIN'
-                print 0+$3,'$YMAX'
-            }
-        }' $TIMING_FILE |\
-            gmt psxy $PROJ_TEMP $LIMS_TEMP -W3p,225 -K -O $SHFT >> $PSFILE
+        if [ "$TIMING_FILE" != "" ]
+        then
+            YMIN=$(echo $LIMS_TEMP | sed -e "s/-R//" | awk -F/ '{print $3}')
+            YMAX=$(echo $LIMS_TEMP | sed -e "s/-R//" | awk -F/ '{print $4}')
+            awk 'BEGIN{print ">"}{
+                if ($1=="burial" || $1=="uplift" || $1=="thicken") {
+                    print ">"
+                    print 0+$3,'$YMIN'
+                    print 0+$4,'$YMIN'
+                    print 0+$4,'$YMAX'
+                    print 0+$3,'$YMAX'
+                    print 0+$3,'$YMIN'
+                }
+            }' $TIMING_FILE |\
+                gmt psxy $PROJ_TEMP $LIMS_TEMP -G245 -K -O $SHFT >> $PSFILE
+            awk 'BEGIN{print ">"}{
+                if ($1=="thrust") {
+                    print ">"
+                    print 0+$3,'$YMIN'
+                    print 0+$3,'$YMAX'
+                }
+            }' $TIMING_FILE |\
+                gmt psxy $PROJ_TEMP $LIMS_TEMP -W3p,225 -K -O $SHFT >> $PSFILE
+        fi
 
         # Temperature versus time
         awk '{
