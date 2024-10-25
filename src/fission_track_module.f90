@@ -13,6 +13,8 @@
 ! References                                                                                       !
 ! Carlson, W. (1990). Mechanisms and kinetics of apatite fission-track annealing. American         !
 !     Mineralogist, 75, 1120–1139.                                                                 !
+! Crowley, K.D. (1993). LENMODEL: A forward model for calculating length distributions and         !
+!     fission-track ages in apatite. Computers & Geosciences 19, 5, 619-626.                       !
 ! Donelick, R.A., Miller, D.S. (1991). Enhanced tint fission track densities in low spontaneous    !
 !     track density apatites using 252Cf-derived fission fragment tracks: A model and experimental !
 !     observations. International Journal of Radiation Applications and Instrumentation. Part D.   !
@@ -25,6 +27,9 @@
 !     Isotope Geoscience Section, 59, 237-253.                                                     !
 ! Ketcham, R. A. (2005). Forward and Inverse Modeling of Low-Temperature Thermochronometry Data.   !
 !     Reviews in Mineralogy and Geochemistry, 58(1), 275–314.                                      !
+! Ketcham, R.A., Donelick, R.A., Carlson, W.D. (1999). Variability of apatite fission-track        !
+!     annealing kinetics: III. Extrapolation to geological time scales. American Mineralogist, 84, !
+!     1235-1255.                                                                                   !
 ! Legg, M.J. (2010). The Tectonic and Thermal Evolution of Hawke's Bay Basin, New Zealand.         !
 !     Pennsylvania State University MS Thesis. 72 pp.                                              !
 ! Willett, S.D. (1997). Inverse modeling of annealing of fission tracks in apatite: 1. A           !
@@ -36,14 +41,16 @@
 module fission_track
 
 
-    ! Fission track distribution subroutines
+    ! Fission track generation subroutines
     PUBLIC :: generate_fts_carlson_1990
+    PUBLIC :: generate_fts_ketcham_et_al_1999
     PUBLIC :: segment_fts_carlson_1990
     PUBLIC :: correct_fts_etching_userbias_willett_1997
 
     ! Fission track age subroutines
     PUBLIC :: calc_ft_age
     PUBLIC :: calc_ft_retention_age
+    PRIVATE :: total_len
 
 
 
@@ -233,6 +240,221 @@ contains
 
     end subroutine generate_fts_carlson_1990
 
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+
+    subroutine generate_fts_ketcham_et_al_1999( &
+        nft_init,                               &
+        len_init,                               &
+        nt,                                     &
+        temp_celsius,                           &
+        dep_km,                                 &
+        dt_ma,                                  &
+        kinetic_par,                            &
+        ft_len                                  &
+    )
+
+    !----
+    ! Calculate fission track lengths due to axial shortening of tracks produced over a
+    ! temperature-time history. <nft_init> fission tracks of length <len_init(nft_init)> are
+    ! generated every timestep, and the "equivalent time" backwards solution method of Crowley
+    ! (1993) is used with the parameters derived in Ketcham et al. (1999) to determine the final
+    ! length of each track.
+    !
+    ! The equation to solve (Ketcham et al., 1999) is either the "fanning Arrhenius model":
+    !
+    !     ( 1 - r^beta )^alpha
+    !     ( ---------- )
+    !     (    beta    )                     (  ln(t) - C2   )
+    !     --------------------   = C0 + C1 * (-------------- )
+    !            alpha                       (  (1/T) - C3   )
+    !
+    ! or the "curvilinear Arrhenius model":
+    !
+    !     ( 1 - r^beta )^alpha
+    !     ( ---------- )
+    !     (    beta    )                     (  ln(t) - C2  )
+    !     --------------------   = C0 + C1 * (------------- )
+    !            alpha                       ( ln(1/T) - C3 )
+    !
+    !         r: reduced track length (l/l_0)
+    !         l_0: initial, unannealed length
+    !         t: Time of interest
+    !         T: Temperature
+    !         alpha: Empirical parameter fit to data
+    !         beta: Empirical parameter fit to data
+    !         C0: Empirical parameter fit to data
+    !         C1: Empirical parameter fit to data
+    !         C3: Empirical parameter fit to data
+    !         C4: Empirical parameter fit to data
+    !
+    ! Inputs:
+    !   nft_init:     number of fission tracks generated each fission event
+    !   len_init:     nft_init-point double precision initial fission track length array (microns)
+    !   nt:           number of time steps
+    !   temp_celsius: n-point double precision temperature history array (Celsius)
+    !   dep_km:       n-point double precision depth history array (km)
+    !   dt_ma:        double precision timestep size (Ma)
+    !   kinetic_par:  string indicating kinetic parameters (i.e., empirical parameters)
+    !
+    ! Outputs:
+    !   ft_len:       (nft_init x nt) double precision fission track length array (microns)
+    !----
+
+
+    implicit none
+
+
+    ! Arguments
+    integer, intent(in) :: nft_init
+    double precision, intent(in) :: len_init(nft_init)
+    integer, intent(in) :: nt
+    double precision, intent(in) :: temp_celsius(nt)
+    double precision, intent(in) :: dep_km(nt)
+    double precision, intent(in) :: dt_ma
+    character(len=*), intent(in) :: kinetic_par
+    double precision, intent(out) :: ft_len(nft_init,nt)
+
+
+    ! Local variables
+    integer :: i
+    integer :: j
+    double precision :: c0, c1, c2, c3, alpha, beta
+    double precision :: dpar
+    double precision :: r_mr_0
+    double precision :: kappa
+    double precision :: r(nt)
+    double precision :: time
+    double precision :: dt_seconds
+    double precision :: temp_kelvin(nt)
+    character(len=32) :: model_type
+    logical :: keepTracks
+
+
+    ! Select parameters for annealing
+    model_type = 'none-specified'
+    if (kinetic_par.eq.'green-et-al-1986') then
+        c0 = -18.954d0
+        c1 = 8.2385d-4
+        c2 = -28.143d0
+        c3 = 1.1217d-11
+        alpha = -0.27951d0
+        beta = -1.7910d0
+        model_type = 'fanning-arrhenius'
+    elseif (kinetic_par.eq.'ketcham-et-al-1999-all-fanning-arrhenius') then
+        c0 = -11.053d0
+        c1 = 3.8964d-4
+        c2 = -17.842d0
+        c3 = 6.7674d-4
+        alpha = -0.14840d0
+        beta = -8.7627d0
+        model_type = 'fanning-arrhenius'
+    elseif (kinetic_par.eq.'ketcham-et-al-1999-all-fanning-curvilinear') then
+        c0 = -26.039d0
+        c1 = 0.53168d0
+        c2 = -62.319d0
+        c3 = -7.8935d0
+        alpha = -0.20196d0
+        beta = -7.4224d0
+        model_type = 'fanning-curvilinear'
+        dpar = 2.50d0
+    elseif (kinetic_par.eq.'ketcham-et-al-1999-all-fanning-curvilinear-c') then
+        c0 = -19.844d0
+        c1 = 0.38951d0
+        c2 = -51.523d0
+        c3 = -7.6423d0
+        alpha = -0.12327d0
+        beta = -11.988d0
+        model_type = 'fanning-curvilinear'
+        dpar = 1.75d0
+    endif
+
+
+    ! Convert units to Kelvin and seconds
+    temp_kelvin = temp_celsius + 273.0d0
+    dt_seconds = dt_ma * 1d6 * 365d0 * 24.0d0 * 60.0d0 * 60.0d0 ! SHOULD YEAR BE 365.25?
+
+
+    ! Set constants for fission track parameters in different apatites
+    r_mr_0 = 1.0d0 - exp(0.647d0*(dpar-1.75d0)-1.834d0)
+    kappa = 1.0d0 - r_mr_0
+
+
+    ! Initialize reduced track length array
+    r = 0.0d0
+
+    ! Calculate cumulative annealing backwards in time (Crowley, 1993)
+    do i = nt,1,-1
+
+        ! Calculate equivalent annealing time for current reduced length, temperature
+        if (i.eq.nt) then
+            time = exp(c3)
+        else
+            time = (((1.0d0-r(i+1)**beta)/beta)**alpha-1.0d0)/alpha
+            if (model_type.eq.'fanning-arrhenius') then
+                time = exp(((time-c0)/c1)*(1.0d0/temp_kelvin(i)-c3)+c2)
+            elseif (model_type.eq.'fanning-curvilinear') then
+                time = exp(((time-c0)/c1)*(log(1.0d0/temp_kelvin(i))-c3)+c2)
+            else
+                write(0,*) 'no model type called "',trim(model_type),'"'
+                call error_exit(1)
+            endif
+        endif
+
+        ! Add timestep duration to equivalent time
+        time = time + dt_seconds
+
+        ! Update reduced length
+        if (model_type.eq.'fanning-arrhenius') then
+            r(i) = c0 + c1*((log(time)-c2)/(1.0d0/temp_kelvin(i)-c3))
+        elseif (model_type.eq.'fanning-curvilinear') then
+            r(i) = c0 + c1*((log(time)-c2)/(log(1.0d0/temp_kelvin(i))-c3))
+        else
+            write(0,*) 'no model type called "',trim(model_type),'"'
+            call error_exit(1)
+        endif
+        r(i) = (1.0d0 + alpha*r(i))**(1/alpha)
+        r(i) = (1.0d0 - beta*r(i))**(1.0d0/beta)
+    enddo
+
+
+    ! Calculate the present-day lengths of fission tracks generated at each timestep
+    do j = 1,nft_init
+        do i = 1,nt
+
+        ! Multiply initial track length by reduced length factor
+        if (r(i)-r_mr_0.le.0.0d0) then
+            ft_len(j,i) = 0.0d0
+        else
+            ft_len(j,i) = len_init(j) * ((r(i)-r_mr_0)/(1.0d0-r_mr_0))**(kappa)
+        endif
+
+        ! Set negative lengths to zero
+            if (ft_len(j,i).lt.0.0d0) then
+                ft_len(j,i) = 0.0d0
+            endif
+
+        enddo
+    enddo
+
+
+    ! Remove tracks from time period before mineral actually formed
+    keepTracks = .false. ! At start of run, assume mineral has not formed and do not keep tracks
+    do i = 1,nt
+        if (.not.keepTracks) then
+            if (dep_km(i).le.0.0d0) then
+                keepTracks = .true.     ! Below surface, mineral exists, keep tracks from here on
+            else
+                ft_len(:,i) = 0.0d0     ! Above surface, remove tracks from this time
+            endif
+        endif
+    enddo
+
+    return
+    end subroutine generate_fts_ketcham_et_al_1999
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -444,7 +666,8 @@ contains
         len = dble(i-1)*binwid + len_min
 
 
-        ! Correct histogram for etching and user bias based on Willett (1997) Equation 4
+        ! Correct histogram for etching and user bias based on Willett (1997) Equation 4 fitting
+        ! Green et al. (1988) density-versus-track length data
         if (len.le.a) then
             ! No short tracks
             hist(i) = 0
@@ -632,7 +855,6 @@ contains
 
 
     ! Local variables
-    integer :: i
     double precision :: total_length_microns
     double precision, parameter :: rst = 0.893d0 ! Ratio between observed and induced FT length in
                                                  ! Durango apatite standard
@@ -640,10 +862,7 @@ contains
 
 
     ! Calculate total number of tracks in fission track length distribution
-    total_length_microns = 0.0d0
-    do i = 1,nbins
-        total_length_microns = total_length_microns + dble(hist(i))*(len_min+binwid*dble(i-1))
-    enddo
+    total_length_microns = total_len(nbins,binwid,len_min,hist)
 
 
     ! Calculate fission track age
@@ -699,6 +918,22 @@ contains
     return
     end subroutine
 
+!--------------------------------------------------------------------------------------------------!
+
+    function total_len(n,binwid,len_min,hist)
+    implicit none
+    double precision :: total_len
+    integer :: n
+    double precision :: binwid
+    double precision :: len_min
+    integer :: hist(n)
+    integer :: i
+    total_len = 0.0d0
+    do i = 1,n
+        total_len = total_len + dble(hist(i))*(len_min+binwid*dble(i-1))
+    enddo
+    return
+    end function
 
 
 end module fission_track

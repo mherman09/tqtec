@@ -377,6 +377,7 @@ use minage, only:                          &
 
 use fission_track, only:                       &
     generate_fts_carlson_1990,                 &
+    generate_fts_ketcham_et_al_1999,           &
     segment_fts_carlson_1990,                  &
     correct_fts_etching_userbias_willett_1997, &
     calc_ft_retention_age,                     &
@@ -467,6 +468,16 @@ if (aft_file.ne.'') then
             dep_km_array(ihorizon,:),       &
             dt_ma,                          &
             'green-et-al-1986',             &
+            aft_len                         &
+        )
+        call generate_fts_ketcham_et_al_1999(     &
+            aft_n0,                         &
+            aft_len0,                       &
+            ntimes,                         &
+            temp_celsius_array(ihorizon,:), &
+            dep_km_array(ihorizon,:),       &
+            dt_ma,                          &
+            'ketcham-et-al-1999-all-fanning-curvilinear', &
             aft_len                         &
         )
 
