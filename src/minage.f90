@@ -48,6 +48,8 @@ module minage
     character(len=512) :: aft_file
     character(len=512) :: aft_history_file
     double precision :: aft_history_dt
+    character(len=32) :: aft_annealing_model
+    double precision :: aft_dpar
     integer :: aft_n0
     double precision, allocatable :: aft_len0(:)
     logical :: doSegmentationCarlson1990
@@ -369,6 +371,8 @@ use minage, only:                          &
     ntimes,                                &
     temp_celsius_array,                    &
     dep_km_array,                          &
+    aft_annealing_model,                   &
+    aft_dpar,                              &
     aft_n0,                                &
     aft_len0,                              &
     doSegmentationCarlson1990,             &
@@ -460,26 +464,32 @@ if (aft_file.ne.'') then
     do ihorizon = 1,nhorizons ! for each horizon...
 
         ! Calculate fission track lengths for the temperature history -> aft_len
-        call generate_fts_carlson_1990(     &
-            aft_n0,                         &
-            aft_len0,                       &
-            ntimes,                         &
-            temp_celsius_array(ihorizon,:), &
-            dep_km_array(ihorizon,:),       &
-            dt_ma,                          &
-            'green-et-al-1986',             &
-            aft_len                         &
-        )
-        call generate_fts_ketcham_et_al_1999(     &
-            aft_n0,                         &
-            aft_len0,                       &
-            ntimes,                         &
-            temp_celsius_array(ihorizon,:), &
-            dep_km_array(ihorizon,:),       &
-            dt_ma,                          &
-            'ketcham-et-al-1999-all-fanning-curvilinear', &
-            aft_len                         &
-        )
+        if (aft_annealing_model.eq.'c90') then
+            call generate_fts_carlson_1990(     &
+                aft_n0,                         &
+                aft_len0,                       &
+                ntimes,                         &
+                temp_celsius_array(ihorizon,:), &
+                dep_km_array(ihorizon,:),       &
+                dt_ma,                          &
+                'green-et-al-1986',             &
+                aft_len                         &
+            )
+        elseif (aft_annealing_model(1:3).eq.'k99') then
+            call generate_fts_ketcham_et_al_1999( &
+                aft_n0,                           &
+                aft_len0,                         &
+                ntimes,                           &
+                temp_celsius_array(ihorizon,:),   &
+                dep_km_array(ihorizon,:),         &
+                dt_ma,                            &
+                aft_annealing_model,              &
+                aft_dpar,                         &
+                aft_len                           &
+            )
+        else
+            write(0,*) 'no annealing model named "',trim(aft_annealing_model),'"'
+        endif
 
 
         ! Load the fission track lengths into a histogram -> aft_hist
@@ -865,6 +875,8 @@ use minage, only: &
     aft_file, &
     aft_history_file, &
     aft_history_dt, &
+    aft_annealing_model, &
+    aft_dpar, &
     aft_n0, &
     aft_len0, &
     doSegmentationCarlson1990, &
@@ -899,6 +911,8 @@ isOutputDefined = .false.
 aft_file = ''
 aft_history_file = ''
 aft_history_dt = 1.0d0
+aft_annealing_model = 'c90'
+aft_dpar = 0.0d0
 aft_n0 = 0
 doSegmentationCarlson1990 = .true.
 doEtchingUserBiasCorrectionWillett1997 = .true.
@@ -969,6 +983,29 @@ do while (i.le.narg)
         i = i + 1
         call get_command_argument(i,aft_history_file)
         isOutputDefined = .true.
+
+    elseif (trim(tag).eq.'-aft:model') then
+        i = i + 1
+        call get_command_argument(i,aft_annealing_model,status=ios)
+        if (ios.ne.0) then
+            write(0,*) 'minage: error reading argument for -aft:model MODEL'
+            write(0,*) 'Received error flag: ios=',ios
+            write(0,*) 'Did you remember to include the model name?'
+            call error_exit(1)
+        endif
+
+    elseif (trim(tag).eq.'-aft:dpar') then
+        i = i + 1
+        call get_command_argument(i,tag,status=ios)
+        if (ios.ne.0) then
+            write(0,*) 'minage: reached end of line before -aft:dpar arguments read'
+            call error_exit(1)
+        endif
+        read(tag,*,iostat=ios) aft_dpar
+        if (ios.ne.0) then
+            write(0,*) 'minage: tried to read -aft:dpar DPAR but could not parse "',trim(tag),'"'
+            call error_exit(1)
+        endif
 
     elseif (trim(tag).eq.'-aft:len0') then
         i = i + 1
@@ -1145,6 +1182,14 @@ write(0,*)
 if (printAdvancedOptions) then
 write(0,*)
 write(0,*) '******************** ADVANCED AFT OPTIONS *******************'
+write(0,*) '-aft:model MODEL           Apatite fission track annealing model'
+write(0,*) '    [c90]:    Carlson (1990) kinetic model'
+write(0,*) '    k99-g86:  Ketcham et al. (1999) fanning Arrhenius model, Green et al. (1986) Durango apatite data'
+write(0,*) '    k99-rn:   Ketcham et al. (1999) fanning curvilinear model, Renfrew apatite'
+write(0,*) '    k99-dr:   Ketcham et al. (1999) fanning curvilinear model, Durango apatite'
+write(0,*) '    k99-b3:   Ketcham et al. (1999) fanning curvilinear model, Bamble apatite'
+write(0,*) '    k99-all:  Ketcham et al. (1999) fanning curvilinear model, all Carlson et al. (1999) data'
+write(0,*) '-aft:dpar DPAR             Dpar parameter, required for -aft:model k99-all'
 write(0,*) '-aft:len0 LEN1,LEN2,...    Lengths of fission tracks generated every timestep (microns)'
 write(0,*) '    [5 15-um, 7 16-um, 7 17-um, 1 18-um => 20 FTs, avg len = 16.2 um]'
 write(0,*) '-aft:segmentation ON|OFF   Turn Carlson (1990) track segmentation [on]/off'

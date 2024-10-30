@@ -253,7 +253,8 @@ contains
         temp_celsius,                           &
         dep_km,                                 &
         dt_ma,                                  &
-        kinetic_par,                            &
+        annealing_model,                        &
+        dpar,                                   &
         ft_len                                  &
     )
 
@@ -315,7 +316,8 @@ contains
     double precision, intent(in) :: temp_celsius(nt)
     double precision, intent(in) :: dep_km(nt)
     double precision, intent(in) :: dt_ma
-    character(len=*), intent(in) :: kinetic_par
+    character(len=*), intent(in) :: annealing_model
+    double precision, intent(in) :: dpar
     double precision, intent(out) :: ft_len(nft_init,nt)
 
 
@@ -323,7 +325,6 @@ contains
     integer :: i
     integer :: j
     double precision :: c0, c1, c2, c3, alpha, beta
-    double precision :: dpar
     double precision :: r_mr_0
     double precision :: kappa
     double precision :: r(nt)
@@ -332,11 +333,15 @@ contains
     double precision :: temp_kelvin(nt)
     character(len=32) :: model_type
     logical :: keepTracks
+    logical :: useDpar
+
 
 
     ! Select parameters for annealing
     model_type = 'none-specified'
-    if (kinetic_par.eq.'green-et-al-1986') then
+    if (annealing_model.eq.'k99-g86') then
+        write(*,*) 'minage: using Ketcham et al. (1999) fanning Arrhenius model'
+        write(*,*) '        for Green et al. (1986) data'
         c0 = -18.954d0
         c1 = 8.2385d-4
         c2 = -28.143d0
@@ -344,24 +349,11 @@ contains
         alpha = -0.27951d0
         beta = -1.7910d0
         model_type = 'fanning-arrhenius'
-    elseif (kinetic_par.eq.'ketcham-et-al-1999-all-fanning-arrhenius') then
-        c0 = -11.053d0
-        c1 = 3.8964d-4
-        c2 = -17.842d0
-        c3 = 6.7674d-4
-        alpha = -0.14840d0
-        beta = -8.7627d0
-        model_type = 'fanning-arrhenius'
-    elseif (kinetic_par.eq.'ketcham-et-al-1999-all-fanning-curvilinear') then
-        c0 = -26.039d0
-        c1 = 0.53168d0
-        c2 = -62.319d0
-        c3 = -7.8935d0
-        alpha = -0.20196d0
-        beta = -7.4224d0
-        model_type = 'fanning-curvilinear'
-        dpar = 2.50d0
-    elseif (kinetic_par.eq.'ketcham-et-al-1999-all-fanning-curvilinear-c') then
+        useDpar = .false.
+    elseif (annealing_model.eq.'k99-all') then
+        write(*,*) 'minage: using Ketcham et al. (1999) fanning curvilinear model'
+        write(*,*) '        for all Carlson et al. (1999) data'
+        write(0,*) 'minage: setting dpar to',dpar
         c0 = -19.844d0
         c1 = 0.38951d0
         c2 = -51.523d0
@@ -369,7 +361,10 @@ contains
         alpha = -0.12327d0
         beta = -11.988d0
         model_type = 'fanning-curvilinear'
-        dpar = 1.75d0
+        useDpar = .true.
+    else
+        write(0,*) 'model ',trim(annealing_model),' has not been implemented yet'
+        call error_exit(1)
     endif
 
 
@@ -379,15 +374,22 @@ contains
 
 
     ! Set constants for fission track parameters in different apatites
-    r_mr_0 = 1.0d0 - exp(0.647d0*(dpar-1.75d0)-1.834d0)
-    kappa = 1.0d0 - r_mr_0
+    if (useDpar) then
+        r_mr_0 = 1.0d0 - exp(0.647d0*(dpar-1.75d0)-1.834d0)
+        kappa = 1.0d0 - r_mr_0
+    else
+        r_mr_0 = 0.0d0
+        kappa = 0.0d0
+    endif
 
 
     ! Initialize reduced track length array
     r = 0.0d0
 
+
     ! Calculate cumulative annealing backwards in time (Crowley, 1993)
     do i = nt,1,-1
+
 
         ! Calculate equivalent annealing time for current reduced length, temperature
         if (i.eq.nt) then
@@ -404,8 +406,10 @@ contains
             endif
         endif
 
+
         ! Add timestep duration to equivalent time
         time = time + dt_seconds
+
 
         ! Update reduced length
         if (model_type.eq.'fanning-arrhenius') then
@@ -418,26 +422,33 @@ contains
         endif
         r(i) = (1.0d0 + alpha*r(i))**(1/alpha)
         r(i) = (1.0d0 - beta*r(i))**(1.0d0/beta)
+
     enddo
 
 
     ! Calculate the present-day lengths of fission tracks generated at each timestep
     do j = 1,nft_init
+
         do i = 1,nt
 
-        ! Multiply initial track length by reduced length factor
-        if (r(i)-r_mr_0.le.0.0d0) then
-            ft_len(j,i) = 0.0d0
-        else
-            ft_len(j,i) = len_init(j) * ((r(i)-r_mr_0)/(1.0d0-r_mr_0))**(kappa)
-        endif
+            ! Multiply initial track length by reduced length factor
+            if (useDpar) then
+                if (r(i)-r_mr_0.le.0.0d0) then
+                    ft_len(j,i) = 0.0d0
+                else
+                    ft_len(j,i) = len_init(j) * ((r(i)-r_mr_0)/(1.0d0-r_mr_0))**(kappa)
+                endif
+            else
+                ft_len(j,i) = len_init(j) * r(i)
+            endif
 
-        ! Set negative lengths to zero
+            ! Set negative lengths to zero
             if (ft_len(j,i).lt.0.0d0) then
                 ft_len(j,i) = 0.0d0
             endif
 
         enddo
+
     enddo
 
 
@@ -453,7 +464,9 @@ contains
         endif
     enddo
 
+
     return
+
     end subroutine generate_fts_ketcham_et_al_1999
 
 
