@@ -1072,6 +1072,9 @@ do while (i.le.narg)
             call usage('minage: error reading etching/user bias ON/OFF flag')
         endif
 
+    elseif (trim(tag).eq.'-advanced:aft') then
+        call usage('advanced:aft')
+
 
     !*********************************************!
     ! Apatite (U-Th)/He age calculation variables !
@@ -1103,13 +1106,6 @@ do while (i.le.narg)
             call error_exit(1)
         endif
 
-    elseif (trim(tag).eq.'-ahe:verbosity') then
-        i = i + 1
-        call get_command_argument(i,tag,status=ios)
-        read(tag,*) ahe_verbosity
-    elseif (trim(tag).eq.'-ahe:fd') then
-        call usage('*****FD*****')
-
     elseif (trim(tag).eq.'-ahe:dtfactor') then              ! Timestep resampling
         i = i + 1
         call get_command_argument(i,tag,status=ios)
@@ -1131,11 +1127,18 @@ do while (i.le.narg)
         i = i + 1
         call get_command_argument(i,tag,status=ios)
         read(tag,*) ahe_taumax
+    elseif (trim(tag).eq.'-ahe:verbosity') then
+        i = i + 1
+        call get_command_argument(i,tag,status=ios)
+        read(tag,*) ahe_verbosity
+    elseif (trim(tag).eq.'-advanced:ahe') then
+        call usage('advanced:ahe')
 
 
 
     elseif (trim(tag).eq.'-advanced') then
-        call usage('*****ADVANCED*****')
+        call usage('advanced:all')
+
 
     else
         call usage('minage: no option '//trim(tag))
@@ -1159,114 +1162,163 @@ end subroutine
 subroutine usage(str)
 implicit none
 character(len=*) :: str
-integer :: i, j
-logical :: printAdvancedOptions
-logical :: printFiniteDifference
-printAdvancedOptions = .false.
-printFiniteDifference = .false.
-i = index(str,'*****ADVANCED*****')
+integer :: i
+logical :: printAdvancedAHE
+logical :: printAdvancedAFT
+logical :: printAdvancedAll
+
+! Check for advanced option flags
+printAdvancedAHE = .false.
+printAdvancedAFT = .false.
+printAdvancedAll = .false.
+i = index(str,'advanced:ahe')
 if (i.ne.0) then
-    printAdvancedOptions = .true.
+    printAdvancedAHE = .true.
 endif
-j = index(str,'*****FD*****')
-! write(0,*) 'j',j
-if (j.ne.0) then
-    printAdvancedOptions = .true.
-    printFiniteDifference = .true.
-    i = j
+i = index(str,'advanced:aft')
+if (i.ne.0) then
+    printAdvancedAFT = .true.
 endif
+i = index(str,'advanced:all')
+if (i.ne.0) then
+    printAdvancedAll = .true.
+endif
+i = index(str,'advanced')
+
+! Write text before "advanced"
 if (str.ne.'') then
-    if (printAdvancedOptions) then
-        write(0,*) trim(str(1:i-1))
-    else
-        write(0,*) trim(str)
-    endif
+    write(0,*) trim(str(1:i-1))
     write(0,*)
 endif
+
+! Basic usage statement
 write(0,*) 'Usage: minage -temp READTQTEC_TEMP_FILE [-dep READTQTEC_DEP_FILE] [...options...]'
 write(0,*)
-if (printAdvancedOptions) then
-write(0,*) '******************** BASIC MINAGE OPTIONS *******************'
-endif
 write(0,*) '-temp READTQTEC_TEMP_FILE  Temperature history output from readtqtec'
-write(0,*) '-dep READTQTEC_DEP_FILE    Depth history (default: track age from beginning of model)'
+write(0,*) '-dep READTQTEC_DEP_FILE    Depth history (default: 0 km)'
 write(0,*) '-aft AFT_FILE              Apatite fission track age'
 write(0,*) '-aft:history DT FILE       Apatite fission track distribution every DT Ma'
 write(0,*) '-ahe AHE_FILE              Apatite (U-Th)/He age'
-write(0,*) '-advanced                  See advanced options'
+write(0,*) '-advanced[:[ahe|aft]]      Print advanced options'
 write(0,*)
-if (printAdvancedOptions) then
-write(0,*)
-write(0,*) '******************** ADVANCED AFT OPTIONS *******************'
-write(0,*) '-aft:model MODEL           Apatite fission track annealing model'
-write(0,*) '    [c90]:    Carlson (1990) kinetic model'
-write(0,*) '    k99-g86:  Ketcham et al. (1999) fanning Arrhenius model, Green et al. (1986) Durango apatite data'
-write(0,*) '    k99-rn:   Ketcham et al. (1999) fanning curvilinear model, Renfrew apatite'
-write(0,*) '    k99-dr:   Ketcham et al. (1999) fanning curvilinear model, Durango apatite'
-write(0,*) '    k99-b3:   Ketcham et al. (1999) fanning curvilinear model, Bamble apatite'
-write(0,*) '    k99-all:  Ketcham et al. (1999) fanning curvilinear model, all Carlson et al. (1999) data'
-write(0,*) '-aft:dpar DPAR             Dpar parameter, required for -aft:model k99-all'
-write(0,*) '-aft:len0 LEN1,LEN2,...    Lengths of fission tracks generated every timestep (microns)'
-write(0,*) '    [5 15-um, 7 16-um, 7 17-um, 1 18-um => 20 FTs, avg len = 16.2 um]'
-write(0,*) '-aft:segmentation ON|OFF   Turn Carlson (1990) track segmentation [on]/off'
-write(0,*) '-aft:userbias ON|OFF       Turn Willett (1997) user bias/etching correction [on]/off'
-write(0,*)
-write(0,*)
-write(0,*) '******************** ADVANCED AHE OPTIONS *******************'
-write(0,*) '-ahe:radius R1,R2,...  Apatite grain radii to calculate ages [20,40,...,120,140]'
-write(0,*) '-ahe:verbosity LVL     Verbosity level for apatite helium calculation [0]'
-write(0,*) '-ahe:dtfactor VAL      Timestep resampling factor [0.1]'
-write(0,*) '    MinAge will try to reduce dt_resamp to 0.5*dr^2/max_diffusivity, but will use the'
-write(0,*) '    maximum of that and the following values:'
-write(0,*) '        VAL > 0: dt_resamp = dt_init * VAL'
-write(0,*) '        VAL < 0: dt_resamp = |VAL|'
-write(0,*) '-ahe:dtma DTMA         Resampled timestep (alternative to -ahe:dtfactor, sets VAL = -|DTMA|)'
-write(0,*) '-ahe:nnodes NNODES     NNODES = Number of spatial nodes + 2 BC nodes [102]'
-write(0,*) '-ahe:beta BETA         Finite difference implicitness coefficient [0.85]'
-write(0,*) '-ahe:taumax TAUMAX     Maximum dimensionless time to retain He [0.4]'
-write(0,*) '-ahe:fd                Print description of finite difference options'
-write(0,*)
+if (printAdvancedAHE.or.printAdvancedAll) then
+    call usage_advanced_ahe()
 endif
-if (printFiniteDifference) then
-write(0,*) '******************** FINITE DIFFERENCE PARAMETERS ********************'
-write(0,*) '* The default finite difference parameters (listed below) are selected to produce:'
-write(0,*) '*     1. An accurate solution to the diffusion-production equation over a wide range of'
-write(0,*) '*        thermochronological scenarios'
-write(0,*) '*     2. A solution that remains stable in those situations'
-write(0,*) '*     3. A calculation completes "relatively quickly" (within a few seconds)'
-write(0,*) '*'
-write(0,*) '* Depending on your temperature history and finite difference parameters, you may still'
-write(0,*) '* experience long runtimes (not too common) or stability issues (more common).'
-write(0,*) '* In general, increasing the number of nodes (reducing node spacing) improves the'
-write(0,*) '* solution accuracy at the expense of stability and runtime. Decreasing the timestep'
-write(0,*) '* size increases solution accuracy and stability at the expense of runtime. Stability'
-write(0,*) '* also depends on the node spacing relative to the rate of helium diffusion, which'
-write(0,*) '* is a function of temperature.'
-write(0,*) '*'
-write(0,*) '* MinAge provides several options to adjust the finite difference setup that will'
-write(0,*) '* affect the accuracy, speed, and stability of the calculation:'
-write(0,*) '*     1. Resampled timestep size (-ahe:dtfactor or -ahe:dtma)'
-write(0,*) '*     2. Number of nodes (-ahe:nnodes)'
-write(0,*) '*     3. Implicitness weight (-ahe:beta)'
-write(0,*) '*'
-write(0,*) '* Solution stability typically becomes a problem at high temperatures, when the amount'
-write(0,*) '* of helium moving from node to node is very high. The most accurate way to handle this'
-write(0,*) '* problem is to decrease the timestep size, but at high temperatures a stable timestep'
-write(0,*) '* can lead to prohibitively long runtimes. An alternative simplifying assumption is to'
-write(0,*) '* set a threshold diffusion timescale above which all helium is lost (set to zero).'
-write(0,*) '* In MinAge, we calculate the dimensionless time, tau, for 1 Ma:'
-write(0,*) '*     tau = diffusivity*(1 Ma)/radius^2'
-write(0,*) '* And compare this to the value of tau_max set on the command line:'
-write(0,*) '*     4. Threshold dimensionless time for complete helium escape (-ahe:taumax)'
-write(0,*) '*'
-write(0,*) '* Default Parameter Values'
-write(0,*) '*   Resampled timestep size:  VAL=0.1'
-write(0,*) '*                             dt_resamp=max(0.5*dr^2/max_diffusivity,VAL*dt_input)'
-write(0,*) '*   Number of spatial nodes:  102'
-write(0,*) '*   Implicitness coefficient: 0.85'
-write(0,*) '*   Retention threshold time: 0.4 (dimensionless)'
-write(0,*)
+if (printAdvancedAFT.or.printAdvancedAll) then
+    call usage_advanced_aft()
 endif
 call error_exit(1)
 stop
+end subroutine usage
+
+!--------------------------------------------------------------------------------------------------!
+
+subroutine usage_advanced_aft()
+implicit none
+write(0,*)
+write(0,*) '******************** ADVANCED AFT OPTIONS *******************'
+write(0,*) '-aft:model MODEL           Apatite fission track annealing model [default: c90]'
+write(0,*) '-aft:dpar DPAR             Dpar parameter, required for some annealing models [1.75 um]'
+write(0,*) '-aft:len0 LEN1,LEN2,...    Lengths (um) of fission tracks generated every timestep'
+write(0,*) '-aft:segmentation ON|OFF   Turn Carlson (1990) track segmentation [on]/off'
+write(0,*) '-aft:userbias ON|OFF       Turn Willett (1997) user bias/etching correction [on]/off'
+write(0,*)
+write(0,*) 'Options for -aft:model MODEL:'
+write(0,*) '    [c90]:     Carlson (1990) kinetic model'
+write(0,*) '    k99-g86:   Ketcham et al. (1999) fanning Arrhenius model, '
+write(0,*) '                 Green et al. (1986) Durango apatite data'
+write(0,*) '    *k99-all:  Ketcham et al. (1999) fanning curvilinear model, '
+write(0,*) '                 all Carlson et al. (1999) data'
+write(0,*)
+write(0,*) '    *Model uses value of Dpar in calculation'
+! write(0,*) '    k99-rn:   Ketcham et al. (1999) fanning curvilinear model, Renfrew apatite'
+! write(0,*) '    k99-dr:   Ketcham et al. (1999) fanning curvilinear model, Durango apatite'
+! write(0,*) '    k99-b3:   Ketcham et al. (1999) fanning curvilinear model, Bamble apatite'
+write(0,*)
+write(0,*) 'Default for -aft:len0, based on Green et al. (1986):'
+write(0,*) '    15 um: 5 tracks'
+write(0,*) '    16 um: 7 tracks'
+write(0,*) '    17 um: 7 tracks'
+write(0,*) '    18 um: 1 track'
+write(0,*) '    ---------------'
+write(0,*) '    20 total tracks, average length = 16.2 um'
+write(0,*)
+return
+end subroutine
+
+!--------------------------------------------------------------------------------------------------!
+
+subroutine usage_advanced_ahe()
+implicit none
+write(0,*)
+write(0,*) '******************** ADVANCED AHE OPTIONS *******************'
+write(0,*) '-ahe:radius R1,R2,...  Apatite grain radii (um) to calculate ages [20,40,...,120,140]'
+write(0,*) '-ahe:dtfactor VAL      Timestep resampling factor for He diffusion [0.1]'
+write(0,*) '-ahe:dtma DTMA         Resampled timestep for He diffusion (ma)'
+write(0,*) '-ahe:nnodes NNODES     Total number of spatial nodes, incl. 2 BC nodes [102]'
+write(0,*) '-ahe:beta BETA         Finite difference implicitness coefficient [0.85]'
+write(0,*) '-ahe:taumax TAUMAX     Maximum dimensionless time to retain He [0.4]'
+write(0,*) '-ahe:verbosity LVL     Verbosity level for apatite helium calculation [0]'
+write(0,*)
+write(0,*) 'Options for -ahe:dtfactor VAL:'
+write(0,*) '    The He diffusion subroutine will try to determine an appropriate timestep size for'
+write(0,*) '    the calculation. The solution is guaranteed to be stable for the explicit finite'
+write(0,*) '    difference solution if:'
+write(0,*)
+write(0,*) '        dt_resamp = 0.5*dr^2/max_diffusivity      (Eqn. 1)'
+write(0,*)
+write(0,*) '    This is usually prohibitively small, but because we implement an implicit solution,'
+write(0,*) '    we can usually increase the timestep to use the maximum of (Eqn. 1) and the'
+write(0,*) '    following values (depending on whether VAL is positive or negative):'
+write(0,*)
+write(0,*) '        VAL > 0: dt_resamp = dt_init * VAL'
+write(0,*) '        VAL < 0: dt_resamp = |VAL|'
+write(0,*)
+write(0,*) '    The default is VAL=0.1'
+write(0,*)
+write(0,*) 'Options for -ahe:dtma DTMA:'
+write(0,*) '    This option sets the timestep for calculating He diffusion directly (VAL=-|DTMA|)'
+write(0,*)
+write(0,*)
+write(0,*) 'Finite difference parameters:'
+write(0,*) '    The default parameters are selected to produce:'
+write(0,*) '        1. An accurate solution to the diffusion-production equation over a wide range'
+write(0,*) '           of thermochronological scenarios'
+write(0,*) '        2. A solution that remains stable in those situations'
+write(0,*) '        3. A calculation completes "relatively quickly" (within a few seconds)'
+write(0,*)
+write(0,*) '    Depending on your temperature history and finite difference parameters, you may'
+write(0,*) '    still experience long runtimes (not too common) or stability issues (more common).'
+write(0,*) '    In general, increasing the number of nodes (reducing node spacing) improves the'
+write(0,*) '    solution accuracy at the expense of stability and runtime. Decreasing the timestep'
+write(0,*) '    size increases solution accuracy and stability at the expense of runtime. Stability'
+write(0,*) '    also depends on the node spacing relative to the rate of helium diffusion, which'
+write(0,*) '    is a function of temperature.'
+write(0,*)
+write(0,*) '    minage provides several options to adjust the finite difference setup that will'
+write(0,*) '    affect the accuracy, speed, and stability of the calculation:'
+write(0,*) '        1. Resampled timestep size (-ahe:dtfactor or -ahe:dtma)'
+write(0,*) '        2. Number of nodes (-ahe:nnodes)'
+write(0,*) '        3. Implicitness weight (-ahe:beta)'
+write(0,*)
+write(0,*) '    Solution stability typically becomes a problem at high temperatures, when the'
+write(0,*) '    amount of helium moving from node to node is very high. The most accurate way to'
+write(0,*) '    handle this problem is to decrease the timestep size, but at high temperatures a'
+write(0,*) '    stable timestep can lead to prohibitively long runtimes. An alternative simplifying'
+write(0,*) '    assumption is to set a threshold diffusion timescale above which all helium is lost'
+write(0,*) '    or simply set to zero in the calculation.'
+write(0,*)
+write(0,*) '    In minage, we calculate the dimensionless time, tau, for 1 Ma:'
+write(0,*) '        tau = diffusivity*(1 Ma)/radius^2'
+write(0,*) '    And compare this to the value of tau_max set on the command line:'
+write(0,*) '        4. Threshold dimensionless time for complete helium escape (-ahe:taumax)'
+write(0,*)
+write(0,*) '    Default Parameter Values'
+write(0,*) '        Resampled timestep size:  VAL=0.1'
+write(0,*) '                                  dt_resamp=max(0.5*dr^2/max_diffusivity,VAL*dt_input)'
+write(0,*) '        Number of spatial nodes:  102'
+write(0,*) '        Implicitness coefficient: 0.85'
+write(0,*) '        Retention threshold time: 0.4 (dimensionless)'
+write(0,*)
+return
 end subroutine
