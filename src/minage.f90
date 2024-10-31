@@ -48,7 +48,7 @@ module minage
     character(len=512) :: aft_file
     character(len=512) :: aft_history_file
     double precision :: aft_history_dt
-    character(len=32) :: aft_annealing_model
+    character(len=256) :: aft_annealing_model
     double precision :: aft_dpar
     integer :: aft_n0
     double precision, allocatable :: aft_len0(:)
@@ -408,6 +408,7 @@ double precision :: binwid
 double precision, allocatable :: aft_len(:,:)
 double precision, allocatable :: aft_age(:)
 double precision, allocatable :: aft_retention_age(:)
+character(len=512) :: model_label
 character(len=32) :: fmt_string
 logical :: isOpen
 
@@ -475,6 +476,7 @@ if (aft_file.ne.'') then
                 'green-et-al-1986',             &
                 aft_len                         &
             )
+            model_label = 'Carlson et al. (1990) kinetic model'
         elseif (aft_annealing_model(1:3).eq.'k99') then
             call generate_fts_ketcham_et_al_1999( &
                 aft_n0,                           &
@@ -487,6 +489,14 @@ if (aft_file.ne.'') then
                 aft_dpar,                         &
                 aft_len                           &
             )
+            if (aft_annealing_model.eq.'k99-g86') then
+                model_label = 'Ketcham et al. (1999) fanning Arrhenius model'//&
+                              'with Green et al. (1986) data'
+            elseif (aft_annealing_model.eq.'k99-all') then
+                write(model_label,'(A,F6.2)') 'Ketcham et al. (1999) '//&
+                                              'fanning curvilinear model with '//&
+                                              'all Carlson et al. (1999) data'
+            endif
         else
             write(0,*) 'no annealing model named "',trim(aft_annealing_model),'"'
         endif
@@ -572,6 +582,12 @@ if (aft_file.ne.'') then
 
     ! File header
     write(22,'(A)')   '# Apatite fission track ages (Ma)'
+    write(22,'(A)')   '#'
+    write(22,'(A)')   '# ANNEALING MODEL'
+    write(22,'(A)')   '# '//trim(model_label)
+    if (aft_annealing_model.eq.'k99-all') then
+        write(22,'(A,F6.2)') '# Dpar= ',aft_dpar
+    endif
     write(22,'(A)')   '#'
     write(22,'(A)')   '# CORRECTIONS:'
     write(22,'(A,L)') '# doSegmentationCarlson1990=',doSegmentationCarlson1990
@@ -912,7 +928,7 @@ aft_file = ''
 aft_history_file = ''
 aft_history_dt = 1.0d0
 aft_annealing_model = 'c90'
-aft_dpar = 0.0d0
+aft_dpar = 1.75d0
 aft_n0 = 0
 doSegmentationCarlson1990 = .true.
 doEtchingUserBiasCorrectionWillett1997 = .true.
