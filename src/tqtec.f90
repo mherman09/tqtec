@@ -255,12 +255,15 @@ endif
 
 ! Print the geotherm to a file (-geotherm flag)
 if (geotherm_file.ne.'') then
-    open(unit=12,file=geotherm_file,status='unknown')
-    ! Header contains time step, time since start in Ma, and time until end in Ma
-    write(12,'(A,I10,2E14.6)') '> #',0,0.0d0,0.0d0-t_total
-    do i = 1,nnodes
-        write(12,*) temp(i),dble(i)*dz
-    enddo
+    call print_geotherm( &
+        geotherm_file,   &
+        0,               &
+        0.0d0,           &
+        t_total,         &
+        nnodes,          &
+        temp,            &
+        dz               &
+    )
 endif
 
 
@@ -399,13 +402,19 @@ do while (istep.lt.nt_total)
     ! Print geotherm every nt_geotherm_output steps
     if (geotherm_file.ne.'') then
         if (mod(istep,nt_geotherm_output).eq.0) then
-            ! Header contains time step, time since start in Ma, and time until end in Ma
-            write(12,'(A,I10,2E14.6)') '> #',istep,dble(istep)*dt,dble(istep)*dt-t_total
-            do i = 1,nnodes
-                write(12,*) temp(i),dble(i)*dz
-            enddo
+            call print_geotherm( &
+                geotherm_file,   &
+                istep,           &
+                dble(istep)*dt,  &
+                t_total,         &
+                nnodes,          &
+                temp,            &
+                dz               &
+            )
         endif
     endif
+
+
 
 enddo   ! end of timestep loop
 

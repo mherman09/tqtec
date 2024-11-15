@@ -1712,6 +1712,65 @@ end subroutine
 !--------------------------------------------------------------------------------------------------!
 
 
+subroutine print_geotherm( &
+    geotherm_file,         &
+    itime,                 &
+    time,                  &
+    total_time,            &
+    nnodes,                &
+    temp,                  &
+    dz                     &
+)
+!----
+! Print the geotherm at the current timestep to a file. Each geotherm in the file has the format:
+!
+!     > #  timestep  time_since_start  time_until_end
+!     temp(1) dep(1)
+!     temp(2) dep(2)
+!     :
+!     temp(n) dep(n)
+!----
+
+
+implicit none
+
+
+! Arguments
+character(len=*), intent(in) :: geotherm_file
+integer, intent(in) :: itime
+double precision, intent(in) :: time
+double precision, intent(in) :: total_time
+integer, intent(in) :: nnodes
+double precision, intent(in) :: temp(nnodes)
+double precision, intent(in) :: dz
+
+! Local variables
+integer :: i
+logical :: isFileOpen
+
+
+! Check whether geotherm file is open, and open it if not
+inquire(file=geotherm_file,opened=isFileOpen)
+if (.not.isFileOpen) then
+    open(unit=12,file=geotherm_file,status='unknown')
+endif
+
+! Write header for geotherm at current timestep
+write(12,'(A,I10,2E14.6)') '> #', itime, time, time-total_time
+
+! Write geotherm at current timestep
+do i = 1,nnodes
+    write(12,*) temp(i),dble(i)*dz
+enddo
+
+
+return
+end subroutine
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
 subroutine print_model_parameters()
 !----
 ! Print salient model parameters to standard output (useful for debugging)
