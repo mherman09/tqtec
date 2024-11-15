@@ -1,120 +1,127 @@
-!--------------------------------------------------------------------------------------------------!
-! TQTec                                                                                            !
+!==================================================================================================!
+!                                                                                                  !
+! TQ[Tec|Clim]                                                                                     !
+!                                                                                                  !
+! TQTec (Temperature, Heat Flow, Tectonics) and TQClim (Temperature, Heat Flow, Climate)           !
+! calculate the one-dimensional transient thermal field within an area that experiences geologic,  !
+! tectonic, and/or climatic events. Processes that can be modeled include:                         !
+!     - Burial                                                                                     !
+!     - Uplift/Erosion                                                                             !
+!     - Thrust Faulting (monitoring either the hanging wall or footwall)                           !
+!     - Bulk Thickening                                                                            !
+!     - Surface Temperature Variations                                                             !
 !                                                                                                  !
 ! Authors:                                                                                         !
 !     - Kevin Furlong (original Fortran 77 program)                                                !
 !     - Matt Herman (Modern Fortran version, i.e., what you are looking at right now!)             !
 !     - Chris Guzofski, Matt Legg, Rachel Piotraschke (PSU MS theses)                              !
 !                                                                                                  !
-! TQTec (Temperature, Heat Flow, Tectonics) calculates the one-dimensional transient thermal field !
-! within an area that experiences geologic/tectonic events. Processes that can be modeled include: !
-!     - Burial                                                                                     !
-!     - Uplift/Erosion                                                                             !
-!     - Thrust Faulting (monitoring points in either hanging wall or footwall)                     !
-!     - Bulk Thickening                                                                            !
-!--------------------------------------------------------------------------------------------------!
+!==================================================================================================!
+
 
 
 module tqtec
 
 
 ! Inputs/outputs
-character(len=512) :: input_file                  ! name of input file                              INFIL
+character(len=512) :: input_file                  ! name of input file
 character(len=8) :: input_mode                    ! how to read input parameters (user, file)
-character(len=512) :: output_file                 ! name of output file                             OUTFIL
+character(len=512) :: output_file                 ! name of output file
 character(len=512) :: geotherm_file               ! name of output geotherm file
 character(len=512) :: timing_file                 ! name of output tectonic action timing file
 integer :: verbosity                              ! level of information to print during execution
 
 
 ! Finite difference parameters
-integer :: nnodes                                 ! number of spatial nodes                         N
-integer :: nt_total                               ! number of time steps                            Q1 (updated), II(5)
-integer :: istep                                  ! current time step                               V
-double precision :: dz                            ! node spacing (km)                               H1, II(1)
-double precision :: dt                            ! time step interval (Ma)                         K1, II(2)
-double precision :: r1                            ! finite difference time factor                   R1
+integer :: nnodes                                 ! number of spatial nodes
+integer :: nt_total                               ! number of time steps
+integer :: istep                                  ! current time step
+double precision :: dz                            ! node spacing (tqtec:km, tqclim:m)
+double precision :: dt                            ! time step interval (tqtec:Ma, tqclim:yr)
+double precision :: r1                            ! finite difference time factor
 
 
 ! Timing
-double precision :: t_total                       ! total model time (Ma)                           Q1 (initial), II(5)
-double precision :: t_geotherm_output             ! time per geotherm output (Ma)                   M1 (initial)
-integer :: nt_geotherm_output                     ! time steps between geotherm outputs             M1 (updated)
+double precision :: t_total                       ! total model time (tqtec:Ma, tqclim:yr)
+double precision :: t_geotherm_output             ! time per geotherm output (tqtec:Ma, tqclim:yr)
+integer :: nt_geotherm_output                     ! time steps between geotherm outputs
 
 
 ! Nodal parameters
-double precision, allocatable :: conductivity(:)  ! conductivity                                    COND
-double precision, allocatable :: temp(:)          ! temperature                                     B
-double precision, allocatable :: hp(:)            ! heat production                                 H
-double precision, allocatable :: hf(:)            ! heat flow                                       Q
+double precision, allocatable :: conductivity(:)  ! conductivity (W/m/K)
+double precision, allocatable :: temp(:)          ! temperature (C)
+double precision, allocatable :: hp(:)            ! heat production (uW/m^3)
+
+
+! Time-varying parameters
+double precision, allocatable :: hf(:)            ! surface heat flow (mW/m^2)
 
 
 ! Horizons of interest
-integer :: nhorizons                              ! number of horizons                              10
-double precision, allocatable :: depth(:)         ! depth of horizons                               Y (initial)
-integer, allocatable :: depth_node(:)             ! horizon nodes                                   Y (updated)
+integer :: nhorizons                              ! number of horizons
+double precision, allocatable :: depth(:)         ! depth of horizons (tqtec:km, tqclim:m)
+integer, allocatable :: depth_node(:)             ! horizon nodes
 
 
 ! Material properties
-integer :: nlayers                                ! number of distinct material layers              INL
-double precision, allocatable :: layer(:,:)       ! layer(:,1): depth to top (km)                   TOP
-                                                  ! layer(:,2): thickness (km)                      THICK
-                                                  ! layer(:,3): conductivity (W/(m*K))              ACOND
-double precision :: diffusivity                   ! diffusivity                                     D1, II(6)
-double precision :: cond_base                     ! basal conductivity                              C1
+integer :: nlayers                                ! number of distinct material layers
+double precision, allocatable :: layer(:,:)       ! layer(:,1): depth to top (km)
+                                                  ! layer(:,2): thickness (km)
+                                                  ! layer(:,3): conductivity (W/m/K)
+double precision :: diffusivity                   ! diffusivity (currently a hard-coded constant)
+double precision :: cond_base                     ! basal conductivity (W/m/K)
 
 
 ! Boundary conditions
-double precision :: temp_surf                     ! surface temperature (C)                         W(1)
-double precision :: hp_surf                       ! surface heat production                         A1, II(3)
-double precision :: hp_dep                        ! depth of heat production                        B1, II(4)
-double precision :: hf_surf                       ! surface heat flow                               G1
-double precision :: hf_base                       ! basal heat flow                                 QBASE
-double precision :: dtemp_wo_hp                   ! temp change w/o heat prod                       W(2)
-double precision :: temp_factor                   ! temp scaling factor                             W1
-double precision :: temp_base_adj                 ! temp at node nnodes+1                           W(3)
+double precision :: temp_surf                     ! surface temperature (C)
+double precision :: hp_surf                       ! surface heat production (uW/m^3)
+double precision :: hp_dep                        ! depth of heat production (km)
+double precision :: hf_surf                       ! surface heat flow (mW/m^2)
+double precision :: hf_base                       ! basal heat flow (mW/m^2)
+double precision :: dtemp_wo_hp                   ! temp change w/o heat prod (C)
+double precision :: temp_factor                   ! temp scaling factor
+double precision :: temp_base_adj                 ! temp at node nnodes+1 (c)
 
 
 ! Thermal/tectonic/climate events
 logical :: isActionDefined
-integer, allocatable :: action(:)                 ! burial (1), erosion (2), thrust (3)             P
+integer, allocatable :: action(:)                 ! burial (1), erosion (2), thrust (3)
+
+integer :: nburial !------------------------------! number of burial events
+double precision, allocatable :: burial_dat(:,:)  ! burial_dat(:,1): start (Ma)
+                                                  ! burial_dat(:,2): duration (Ma)
+                                                  ! burial_dat(:,3): thickness (km)
+                                                  ! burial_dat(:,4): conductivity (W/(m*K))
+double precision, allocatable :: burial_cond(:)   ! conductivity of new material at each timestep
 
 
-integer :: nburial !------------------------------! number of burial events                         NBP
-double precision, allocatable :: burial_dat(:,:)  ! burial_dat(:,1): start (Ma)                     AN(1)
-                                                  ! burial_dat(:,2): duration (Ma)                  AN(2)
-                                                  ! burial_dat(:,3): thickness (km)                 AN(3)
-                                                  ! burial_dat(:,4): conductivity (W/(m*K))         AN(4)
-double precision, allocatable :: burial_cond(:)   ! conductivity of new material at each timestep   BCOND
+integer :: nuplift !------------------------------! number of uplift/erosion events
+double precision, allocatable :: uplift_dat(:,:)  ! uplift_dat(:,1): start (Ma)
+                                                  ! uplift_dat(:,2): duration (Ma)
+                                                  ! uplift_dat(:,3): thickness (km)
 
 
-integer :: nuplift !------------------------------! number of uplift/erosion events                 NUEP
-double precision, allocatable :: uplift_dat(:,:)  ! uplift_dat(:,1): start (Ma)                     AN(1)
-                                                  ! uplift_dat(:,2): duration (Ma)                  AN(2)
-                                                  ! uplift_dat(:,3): thickness (km)                 AN(3)
-
-
-integer :: nthrust !------------------------------! number of thrusting events                      NTP
+integer :: nthrust !------------------------------! number of thrusting events
 integer, allocatable :: thrust_step(:)            ! thrusting timestep array
-double precision, allocatable :: thrust_dat(:,:)  ! thrust_dat(:,1): start (Ma)                     AN(1)
-                                                  ! thrust_dat(:,2): upper (1) or lower (2) plate   AN(2)
-                                                  ! thrust_dat(:,3): initial base (km)              AZ(1)
-                                                  ! thrust_dat(:,4): initial depth (km)             AZ(2)
-                                                  ! thrust_dat(:,5): initial thickness (km)         AZ(3)
+double precision, allocatable :: thrust_dat(:,:)  ! thrust_dat(:,1): start (Ma)
+                                                  ! thrust_dat(:,2): upper (1) or lower (2) plate
+                                                  ! thrust_dat(:,3): initial base (km)
+                                                  ! thrust_dat(:,4): initial emplacement depth (km)
+                                                  ! thrust_dat(:,5): initial thickness (km)
 
 
-integer :: nhfvars !------------------------------! number of surface heat flow variations          QSTEP
-double precision, allocatable :: hfvar(:,:)       ! (1) start (2) new heat flow                     QVTIME
-double precision, allocatable :: bas_grad(:)      ! temperature gradient at the base of the model   BASGRAD
+integer :: nhfvars !------------------------------! number of surface heat flow variations
+double precision, allocatable :: hfvar(:,:)       ! (1) start (2) new heat flow
+double precision, allocatable :: bas_grad(:)      ! temperature gradient at the base of the model
 
 
 integer :: nthicken !-----------------------------! number of thickening/thinning events
-double precision, allocatable :: thicken_dat(:,:) ! thicken_dat(:,1): start (Ma)                    AN(1)
-                                                  ! thicken_dat(:,2): duration (Ma)                 AN(2)
-                                                  ! thicken_dat(:,3): total thickening amount (km)  AN(4)
+double precision, allocatable :: thicken_dat(:,:) ! thicken_dat(:,1): start (Ma)
+                                                  ! thicken_dat(:,2): duration (Ma)
+                                                  ! thicken_dat(:,3): total thickening amount (km)
                                                   ! thicken_dat(:,4): top of crust (km)
                                                   ! thicken_dat(:,5): initial crustal thickness (km)
-integer, allocatable :: thicken_start(:)          ! thicken_start(:): timestep thickening event starts
+integer, allocatable :: thicken_start(:)          ! thicken_start(:): timestep thickening starts
 integer, allocatable :: crust_dat(:,:)            ! crust_dat(:,1): top of crust (node)
                                                   ! crust_dat(:,2): bottom of crust (node)
 integer:: crust_top
@@ -133,7 +140,7 @@ double precision, allocatable :: temp_surf_var(:)     ! surface temperature vari
 
 
 ! Results array
-double precision, allocatable :: results(:,:,:)   ! temperature and depth for each timstep/depth    r1
+double precision, allocatable :: results(:,:,:)   ! temperature and depth for each timstep/depth
 
 
 end module tqtec
@@ -154,7 +161,7 @@ program main
 
 !----
 ! Solve for the 1-D transient thermal field defined by boundary conditions, material properties,
-! and tectonic/geologic actions
+! and tectonic/geologic/climate actions
 !----
 
 
@@ -172,14 +179,17 @@ integer :: ierr
 integer :: iplate
 double precision :: cond_surf
 character(len=8) :: exec_name
+character(len=2) :: time_unit
 
 
 
 ! Set name of executable
 #ifdef COMPILE_TQTEC
     exec_name = 'tqtec'
+    time_unit = 'Ma'
 #elif COMPILE_TQCLIM
     exec_name = 'tqclim'
+    time_unit = 'yr'
 #else
     exec_name = 'NAME_ERR'
 #endif
@@ -188,7 +198,7 @@ character(len=8) :: exec_name
 
 
 ! Initialize default model parameters
-call initialize_defaults()                            ! tqtec_io.f90
+call initialize_defaults()                            ! tqtec_io.f90 (SHOULD THIS BE IN THIS FILE?)
 
 
 
@@ -198,49 +208,30 @@ call gcmdln()                                         ! tqtec_io.f90
 
 
 if (verbosity.ge.1) then
-    write(*,*) 'tqtec: starting'
+    write(*,*) trim(exec_name)//': starting'
 endif
 
 
 
-! Read control file or user input from standard input (formerly INPUT)
+! Read control file or user input from standard input (deprecated)
 call read_model_parameters()                          ! tqtec_io.f90
 
 
 
-! Check that model is deep enough to include all horizons of interest
+! Check that model is deep enough to include all depth horizons of interest
 if (dz*dble(nnodes).lt.maxval(depth)) then
-    write(0,*) 'tqtec: model extent is shallower than deepest horizon'
+    write(0,*) trim(exec_name)//': model extent is shallower than deepest horizon'
     call error_exit(1)
 endif
 
 
 
-! Calculate model parameters
-nt_total = int(t_total/dt)                            ! number of time steps
-nt_geotherm_output = int(t_geotherm_output/dt)        ! number of time steps between geotherm outputs
-temp_factor = diffusivity*dt/cond_base                ! temperature scaling factor
-r1 = diffusivity*dt/(dz*dz)                           ! finite difference time factor
-dtemp_wo_hp = (hf_surf - hp_surf*hp_dep)*dz/cond_base ! temperature difference without heat production
-
-
-
-! Allocate arrays
-allocate(depth_node(nhorizons))                       ! Node where each horizon of interest sits
-allocate(conductivity(nnodes))                        ! Conductivity at each node
-allocate(temp(nnodes))                                ! Temperature at each node
-allocate(hp(nnodes))                                  ! Heat production at each node
-allocate(hf(nt_total))                                ! Surface heat flow at each time
-allocate(results(nt_total,2,nhorizons))               ! Temperature and depth at each time step for each horizon
-
-
-
-! Initialize the temperature, heat flow, and heat production at each node (formerly INIT)
+! Initialize the temperature, heat flow, and heat production at each node
 call initialize_thermal_parameters()                  ! tqtec.f90
 
 
 
-! Set up action timing arrays (formerly HIST)
+! Set up action timing arrays
 call setup_action_arrays()                            ! tqtec_actions.f90
 call check_actions()                                  ! tqtec_actions.f90
 
@@ -270,7 +261,11 @@ endif
 
 ! Step through time and run the finite difference procedure to calculate the temperature at each
 ! node for each time step
+
+! Initialize timestep
 istep = 0
+
+! Until model reaches the final step...
 do while (istep.lt.nt_total)
 
 
@@ -279,7 +274,6 @@ do while (istep.lt.nt_total)
 
 
     ! Calculate the updated temperatures at each node (***THE MAIN FINITE DIFFERENCE PROCEDURE***)
-    ! (formerly MAT and TRID)
     call update_temps(nnodes,ierr)                    ! tqtec.f90
     if (ierr.ne.0) then
         write(0,*) trim(exec_name)//': error in update_temps() TRID algorithm at step',istep
@@ -291,27 +285,30 @@ do while (istep.lt.nt_total)
     istep = istep + 1
     if (verbosity.le.2) then
         if (istep.lt.nt_total) then
-            write(*,'(A,I6,A,I6,A)',advance='no') ' tqtec: working on step',istep,' of',nt_total,char(13)
+            write(*,'(X,A,I6,A,I6,A)',advance='no') trim(exec_name)//': working on step',istep,&
+                                                    ' of',nt_total,char(13)
         else
-            write(*,'(A,I6,A,I6)') ' tqtec: working on step',istep,' of',nt_total
+            write(*,'(X,A,I6,A,I6)') trim(exec_name)//': working on step',istep,' of',nt_total
         endif
     elseif (verbosity.ge.3) then
         if (istep.lt.nt_total.and.action(istep).eq.0) then
-            write(*,'(A,I6,A,I6,A)',advance='no') ' tqtec: working on step',istep,' of',nt_total,char(13)
+            write(*,'(X,A,I6,A,I6,A)',advance='no') trim(exec_name)//': working on step',istep,&
+                                                    ' of',nt_total,char(13)
         else
-            write(*,'(A,I6,A,I6)') ' tqtec: working on step',istep,' of',nt_total
+            write(*,'(X,A,I6,A,I6)') trim(exec_name)//': working on step',istep,' of',nt_total
         endif
     endif
+
 
 
     ! Thermal/tectonic/climate actions (in tqtec_actions.f90)
     if (action(istep).eq.1) then
         ! Add material to the top of the model (burial)
-        call bury() ! (Formerly: BURIAL)
+        call bury()
 
     elseif (action(istep).eq.2) then
-        ! Remove material from the top of the model (erosion)
-        call erode() ! (Formerly: EROS)
+        ! Remove material from the top of the model (uplift + erosion)
+        call erode()
 
     elseif (action(istep).eq.3) then
         ! Get thrust event number
@@ -323,19 +320,19 @@ do while (istep.lt.nt_total)
             endif
         enddo
         if (j.eq.0) then
-            write(0,*) 'tqtec: error setting thrust number'
+            write(0,*) trim(exec_name)//': error setting thrust number at timestep',istep
         endif
         iplate = int(thrust_dat(j,2))
         if (iplate.eq.0) then
-            write(0,*) 'tqtec: error setting thrust number'
+            write(0,*) trim(exec_name)//': error setting thrust number at timestep',istep
         endif
         ! Duplicate material and insert it (thrusting)
         if (iplate.eq.1) then
             ! Track horizons in the hanging wall (upper plate) of the thrust sheet
-            call thrust_upperplate() ! (Formerly: THSTUP)
+            call thrust_upperplate()
         elseif (iplate.eq.2) then
             ! Track horizons in the footwall (lower plate) of the thrust sheet
-            call thrust_lowerplate() ! (Formerly: THSTLP)
+            call thrust_lowerplate()
         endif
 
     elseif (abs(action(istep)).eq.4) then
@@ -348,6 +345,7 @@ do while (istep.lt.nt_total)
                 exit
             endif
         enddo
+        ! Add or remove a node within the model interior (thickening/thinning)
         if (action(istep).gt.0) then
             call thicken()
         else
@@ -355,8 +353,8 @@ do while (istep.lt.nt_total)
         endif
 
     elseif (action(istep).ne.0) then
-        write(0,*) ''
-        write(0,*) 'tqtec: error defining action flag'
+        write(0,*)
+        write(0,*) trim(exec_name)//' error defining action flag'
         write(0,*) 'No action flag number',action(istep)
         call error_exit(1)
 
@@ -364,8 +362,8 @@ do while (istep.lt.nt_total)
 
 
     ! Check if horizons should be shifted at this timestep
-    ! NOTE: I wanted to move this to thicken(), but when nodes move is different from when a node is
-    ! added to the crust during a thickening event
+    ! NOTE: I want to move this to thicken()/thin(), but when horizon nodes move during a thickening
+    ! or thinning event is different from when a node i added to the crust during that event
     if (nthicken.gt.0.and.thickenHorizons) then
         depth_node = depth_node + horizon_shift(:,istep)
     endif
@@ -427,16 +425,17 @@ endif
 
 
 
-! Print the results to the defined output file
+! Print the results to the output file
 call output()                                         ! tqtec_io.f90
 
 
 
 if (verbosity.ge.1) then
-    write(*,*) 'tqtec: finished'
+    write(*,*) trim(exec_name)//': finished'
     write(*,*) 'Results can be found in ',trim(output_file)
     if (geotherm_file.ne.'') then
-        write(*,*) 'Geotherms every ',t_geotherm_output,' Ma can be found in ',trim(geotherm_file)
+        write(*,*) 'Geotherms every ',t_geotherm_output,trim(time_unit), &
+                   ' can be found in ',trim(geotherm_file)
     endif
 endif
 
@@ -459,24 +458,7 @@ subroutine initialize_thermal_parameters()
 ! temperature, conductivity, and heat production
 !----
 
-use tqtec, only: verbosity, &
-                 nnodes, &
-                 dz, &
-                 conductivity, &
-                 hp, &
-                 hf, &
-                 nlayers, &
-                 layer, &
-                 hf_surf, &
-                 hf_base, &
-                 hp_surf, &
-                 hp_dep, &
-                 temp_surf, &
-                 cond_base, &
-                 nhorizons, &
-                 temp, &
-                 depth, &
-                 depth_node
+use tqtec
 
 implicit none
 
@@ -490,6 +472,25 @@ double precision :: hfhp
 if (verbosity.ge.2) then
     write(*,*) 'initialize_thermal_parameters: starting'
 endif
+
+
+! Calculate model parameters
+nt_total = int(t_total/dt)                            ! number of timesteps
+nt_geotherm_output = int(t_geotherm_output/dt)        ! number of timesteps between geotherm outputs
+temp_factor = diffusivity*dt/cond_base                ! temperature scaling factor
+r1 = diffusivity*dt/(dz*dz)                           ! finite difference time factor
+dtemp_wo_hp = (hf_surf - hp_surf*hp_dep)*dz/cond_base ! temperature difference without heat production
+
+
+
+! Allocate arrays
+allocate(depth_node(nhorizons))                       ! node where each horizon of interest sits
+allocate(conductivity(nnodes))                        ! conductivity at each node
+allocate(temp(nnodes))                                ! temperature at each node
+allocate(hp(nnodes))                                  ! heat production at each node
+allocate(hf(nt_total))                                ! surface heat flow at each timestep
+allocate(results(nt_total,2,nhorizons))               ! temperature/depth at each time step & horizon
+
 
 
 ! Initialize the conductivity at each node to be the basal conductivity
