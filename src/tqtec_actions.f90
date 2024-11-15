@@ -38,7 +38,12 @@ use tqtec, only: timing_file, &
                  thicken_start, &
                  crust_dat, &
                  thickenHorizons, &
-                 horizon_shift
+                 horizon_shift, &
+                 ntempsteps, &
+                 temp_step_dat, &
+                 ntempramps, &
+                 temp_ramp_dat, &
+                 temp_surf_var
 
 implicit none
 
@@ -261,6 +266,33 @@ do i = 1,nthicken
 enddo
 
 
+! Add step temperature changes to surface temperature
+do i = 1,ntempsteps
+    jbeg = int(temp_step_dat(i,1)/dt)
+    jend = nt_total
+    do j = jbeg,jend
+        temp_surf_var(j) = temp_surf_var(j) + temp_step_dat(i,2)
+    enddo
+enddo
+
+! Add ramp temperature changes to surface temperature
+do i = 1,ntempramps
+    jbeg = int(temp_ramp_dat(i,1)/dt)
+    jend = jbeg + int(temp_ramp_dat(i,2)/dt)
+    if (jend.gt.nt_total) then
+        write(0,*) 'tqclim: end of temperature ramp period goes beyond model duration'
+        call error_exit(1)
+    endif
+    rate = temp_ramp_dat(i,3)/temp_ramp_dat(i,2)
+    do j = jbeg,jend
+        temp_surf_var(j) = temp_surf_var(j) + (j-jbeg)*dt*rate
+    enddo
+    do j = jend+1,nt_total
+        temp_surf_var(j) = temp_surf_var(j) + temp_ramp_dat(i,3)
+    enddo
+enddo
+
+
 
 ! Print timing of tectonic actions to file
 if (timing_file.ne.'') then
@@ -313,7 +345,9 @@ use tqtec, only: nt_total, &
                  nthicken, &
                  thicken_start, &
                  thickenHorizons, &
-                 horizon_shift
+                 horizon_shift, &
+                 temp_surf, &
+                 temp_surf_var
 
 
 implicit none
@@ -346,6 +380,7 @@ endif
 ! Allocate memory to tectonic action arrays
 ! DO NOT NEED TO STORE CONDUCTIVITY AND BASE TEMP GRADIENT FOR ALL TIMESTEPS.
 ! THOSE ARRAYS ARE MOSTLY ZEROS!
+allocate(temp_surf_var(nt_total))
 allocate(action(nt_total))         ! action code at each timestep: 0=no action, >0=action
 if (nburial.gt.0) then
     allocate(burial_cond(nt_total))! conductivity of material added to model during burial step
@@ -365,6 +400,7 @@ endif
 
 ! Initialize arrays
 action = 0
+temp_surf_var = temp_surf
 if (nburial.gt.0) then
     burial_cond = 0.0d0
 endif

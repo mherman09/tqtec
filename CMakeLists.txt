@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 project(TQTec VERSION 2024.10)
 enable_language(C Fortran)
+set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -cpp")
 set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -Wall -Wextra -Wunused -Wconversion -fcheck=bounds,do,mem,pointer,recursion -fbacktrace")
 
 
@@ -14,12 +15,28 @@ add_library(
     src/radiogenic_helium_module.f90
 )
 
+if (NOT "${SUPERLU_DIR}" STREQUAL "" )
+    find_package(BLAS)
+    set(extra_libraries ${SUPERLU_DIR}/lib/libsuperlu_fortran.a ${SUPERLU_DIR}/lib/libsuperlu.a ${BLAS_LIBRARIES})
+    add_compile_definitions(COMPILE_WITH_SUPERLU)
+else()
+    set(extra_libraries "")
+    add_compile_definitions(COMPILE_WITHOUT_SUPERLU)
+endif()
+
 
 # TQTec executables
 add_executable(tqtec src/tqtec.f90 src/tqtec_io.f90 src/tqtec_actions.f90)
 add_dependencies(tqtec tqteclib)
 target_link_libraries(tqtec tqteclib)
+target_compile_definitions(tqtec PUBLIC COMPILE_TQTEC)
 install(TARGETS tqtec DESTINATION bin)
+
+add_executable(tqclim src/tqtec.f90 src/tqtec_io.f90 src/tqtec_actions.f90)
+add_dependencies(tqclim tqteclib)
+target_link_libraries(tqclim tqteclib)
+target_compile_definitions(tqclim PUBLIC COMPILE_TQCLIM)
+install(TARGETS tqclim DESTINATION bin)
 
 add_executable(readtqtec src/readtqtec.f90)
 add_dependencies(readtqtec tqteclib)
@@ -28,7 +45,7 @@ install(TARGETS readtqtec DESTINATION bin)
 
 add_executable(minage src/minage.f90)
 add_dependencies(minage tqteclib)
-target_link_libraries(minage tqteclib)
+target_link_libraries(minage tqteclib ${extra_libraries})
 install(TARGETS minage DESTINATION bin)
 
 add_executable(petro src/petro.f90)

@@ -23,7 +23,7 @@ fi
 #   RUN TQTEC
 #####
 echo "$0: Running tqtec"
-../build/tqtec \
+tqtec \
     -f $BASENAME.in \
     -o $BASENAME.out \
     -timing timing.tmp \
@@ -35,7 +35,7 @@ echo "$0: Running tqtec"
 #   RUN READTQTEC
 #####
 echo "$0: Running readtqtec"
-../build/readtqtec \
+readtqtec \
     $BASENAME.out \
     -dep dep.tmp \
     -temp temp.tmp \
@@ -49,7 +49,7 @@ echo "$0: Running readtqtec"
 #   PLOT TECTONIC-THERMAL MODEL RESULTS
 #####
 # All plots
-../scripts/plot_tqtec_all.sh temp.tmp dep.tmp hf.tmp \
+plot_tqtec_all.sh temp.tmp dep.tmp hf.tmp \
     -timing timing.tmp \
     -closure closure.tmp \
     -geotherm geotherm.tmp \
@@ -64,11 +64,11 @@ echo "$0: Running readtqtec"
 #####
 #   PLOT APATITE FISSION TRACK RESULTS
 #####
-../build/minage \
+minage \
     -temp temp.tmp \
     -dep dep.tmp \
     -aft aft.tmp || exit 1
-../scripts/plot_minage_aft_final.sh aft.tmp \
+plot_minage_aft_final.sh aft.tmp \
     -temp temp.tmp \
     -timing timing.tmp
 
@@ -79,4 +79,4 @@ echo "$0: Running readtqtec"
 test -d ${BASENAME}_results || mkdir ${BASENAME}_results
 cp *.pdf ${BASENAME}_results
 mv $BASENAME.out ${BASENAME}_results
-rm *.tmp
+# rm *.tmp

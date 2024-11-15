@@ -75,9 +75,10 @@ double precision :: temp_factor                   ! temp scaling factor         
 double precision :: temp_base_adj                 ! temp at node nnodes+1                           W(3)
 
 
-! Tectonic events
+! Thermal/tectonic/climate events
+logical :: isActionDefined
 integer, allocatable :: action(:)                 ! burial (1), erosion (2), thrust (3)             P
-logical :: isTectonicActionDefined
+
 
 integer :: nburial !------------------------------! number of burial events                         NBP
 double precision, allocatable :: burial_dat(:,:)  ! burial_dat(:,1): start (Ma)                     AN(1)
@@ -86,10 +87,12 @@ double precision, allocatable :: burial_dat(:,:)  ! burial_dat(:,1): start (Ma) 
                                                   ! burial_dat(:,4): conductivity (W/(m*K))         AN(4)
 double precision, allocatable :: burial_cond(:)   ! conductivity of new material at each timestep   BCOND
 
+
 integer :: nuplift !------------------------------! number of uplift/erosion events                 NUEP
 double precision, allocatable :: uplift_dat(:,:)  ! uplift_dat(:,1): start (Ma)                     AN(1)
                                                   ! uplift_dat(:,2): duration (Ma)                  AN(2)
                                                   ! uplift_dat(:,3): thickness (km)                 AN(3)
+
 
 integer :: nthrust !------------------------------! number of thrusting events                      NTP
 integer, allocatable :: thrust_step(:)            ! thrusting timestep array
@@ -99,9 +102,11 @@ double precision, allocatable :: thrust_dat(:,:)  ! thrust_dat(:,1): start (Ma) 
                                                   ! thrust_dat(:,4): initial depth (km)             AZ(2)
                                                   ! thrust_dat(:,5): initial thickness (km)         AZ(3)
 
+
 integer :: nhfvars !------------------------------! number of surface heat flow variations          QSTEP
 double precision, allocatable :: hfvar(:,:)       ! (1) start (2) new heat flow                     QVTIME
 double precision, allocatable :: bas_grad(:)      ! temperature gradient at the base of the model   BASGRAD
+
 
 integer :: nthicken !-----------------------------! number of thickening/thinning events
 double precision, allocatable :: thicken_dat(:,:) ! thicken_dat(:,1): start (Ma)                    AN(1)
@@ -116,6 +121,16 @@ integer:: crust_top
 integer:: crust_bot
 logical :: thickenHorizons                        ! T: move tracked horizon depths with thickening
 integer, allocatable :: horizon_shift(:,:)
+
+
+integer :: ntempsteps !---------------------------! number of surface temperature step variations
+integer :: ntempramps !---------------------------! number of surface temperature ramp variations
+logical :: isTempSin !----------------------------! Is temperature varying sinusoidally?
+double precision, allocatable :: temp_step_dat(:,:)   ! (1) start (2) new temp
+double precision, allocatable :: temp_ramp_dat(:,:)   ! (1) start (2) duration (3) temp change
+double precision :: temp_sin_dat(3)                   ! (1) amplitude (2) frequency (3) phase
+double precision, allocatable :: temp_surf_var(:)     ! surface temperature variations over time
+
 
 ! Results array
 double precision, allocatable :: results(:,:,:)   ! temperature and depth for each timstep/depth    r1
@@ -156,6 +171,19 @@ integer :: np
 integer :: ierr
 integer :: iplate
 double precision :: cond_surf
+character(len=8) :: exec_name
+
+
+
+! Set name of executable
+#ifdef COMPILE_TQTEC
+    exec_name = 'tqtec'
+#elif COMPILE_TQCLIM
+    exec_name = 'tqclim'
+#else
+    exec_name = 'NAME_ERR'
+#endif
+
 
 
 
@@ -212,7 +240,7 @@ call initialize_thermal_parameters()                  ! tqtec.f90
 
 
 
-! Set up tectonic action timing arrays (formerly HIST)
+! Set up action timing arrays (formerly HIST)
 call setup_action_arrays()                            ! tqtec_actions.f90
 call check_actions()                                  ! tqtec_actions.f90
 
@@ -229,7 +257,7 @@ endif
 if (geotherm_file.ne.'') then
     open(unit=12,file=geotherm_file,status='unknown')
     ! Header contains time step, time since start in Ma, and time until end in Ma
-    write(12,'(A,I10,2F10.3)') '> #',0,0.0d0,0.0d0-t_total
+    write(12,'(A,I10,2E14.6)') '> #',0,0.0d0,0.0d0-t_total
     do i = 1,nnodes
         write(12,*) temp(i),dble(i)*dz
     enddo
@@ -251,7 +279,7 @@ do while (istep.lt.nt_total)
     ! (formerly MAT and TRID)
     call update_temps(nnodes,ierr)                    ! tqtec.f90
     if (ierr.ne.0) then
-        write(0,*) 'tqtec: error in update_temps() TRID algorithm at step',istep
+        write(0,*) trim(exec_name)//': error in update_temps() TRID algorithm at step',istep
         call error_exit(1)
     endif
 
@@ -273,7 +301,7 @@ do while (istep.lt.nt_total)
     endif
 
 
-    ! Tectonic actions (in tqtec_actions.f90)
+    ! Thermal/tectonic/climate actions (in tqtec_actions.f90)
     if (action(istep).eq.1) then
         ! Add material to the top of the model (burial)
         call bury() ! (Formerly: BURIAL)
@@ -350,6 +378,10 @@ do while (istep.lt.nt_total)
     hf(istep) = hf(istep)*cond_surf             ! Heat flow = dT/dz * conductivity
 
 
+    ! Update surface temperature
+    temp_surf = temp_surf_var(istep)
+
+
     ! Save depths and temperatures of tracked horizons in results array
     do i = 1,nhorizons
         np = depth_node(i)
@@ -368,7 +400,7 @@ do while (istep.lt.nt_total)
     if (geotherm_file.ne.'') then
         if (mod(istep,nt_geotherm_output).eq.0) then
             ! Header contains time step, time since start in Ma, and time until end in Ma
-            write(12,'(A,I10,2F10.3)') '> #',istep,dble(istep)*dt,dble(istep)*dt-t_total
+            write(12,'(A,I10,2E14.6)') '> #',istep,dble(istep)*dt,dble(istep)*dt-t_total
             do i = 1,nnodes
                 write(12,*) temp(i),dble(i)*dz
             enddo

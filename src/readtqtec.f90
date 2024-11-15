@@ -154,6 +154,7 @@ enddo
 ! Check for read errors or end-of-file
 1002 if (ios.ne.0) then
     write(0,*) 'readtqtec: error reading heat flow'
+    write(0,*) 'last read j=',j-1
     call error_exit(1)
 endif
 2002 if (ios.ne.0) then
@@ -237,7 +238,7 @@ if (temp_file.ne.'') then
             ! sample_rate = 2*dt because every 2 pts are saved in tqtec_io.f90 subroutine output()
 
     ! Write temperature for each horizon at each timestep
-    write(fmt_string,'("("I6,"F8.3)")') nhorizons
+    write(fmt_string,'("("I6,"E14.6)")') nhorizons
     do l = 1,nt_total
         write(9,fmt_string) (results(l,1,i),i=1,nhorizons)
     enddo
@@ -253,11 +254,11 @@ if (dep_file.ne.'') then
     open(unit=9,file=dep_file,status='unknown')
 
     ! Header: time_before_present(Ma)  sample_rate(Ma)  number_of_points
-    write(9,'(2F10.3,I6)') -xmin,2.0d0*dt,nt_total 
+    write(9,'(2F10.3,I6)') -xmin,2.0d0*dt,nt_total
             ! sample_rate = 2*dt because every 2 pts are saved in tqtec_io.f90 subroutine output()
 
     ! Write depth for each horizon at each timestep
-    write(fmt_string,'("("I6,"F8.3)")') nhorizons
+    write(fmt_string,'("("I6,"E14.6)")') nhorizons
     do l = 1,nt_total
         write(9,fmt_string) (-1.0d0*results(l,2,i)*dz,i=1,nhorizons)
     enddo
@@ -296,7 +297,7 @@ if (time_file.ne.'') then
             ! sample_rate = 2*dt because every 2 pts are saved in tqtec_io.f90 subroutine output()
 
     ! Write time in Ma for each horizon at each timestep
-    write(fmt_string,'("("I6,"F8.3)")') nhorizons
+    write(fmt_string,'("("I6,"E14.6)")') nhorizons
     do l = 1,nt_total
         write(9,fmt_string) (l*dt*2.0d0,i=1,nhorizons)
     enddo

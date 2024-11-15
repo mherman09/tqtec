@@ -7,7 +7,7 @@
 
 subroutine usage(str)
 !----
-! Print error statement (if provided) and tqtec usage, then exit with error code 1
+! Print error statement (if provided) and usage, then exit with error code 1
 !----
 
 implicit none
@@ -20,24 +20,27 @@ if (str.ne.'') then
     write(0,*)
 endif
 
-! Print tqtec usage statement
-write(0,*) 'Usage: tqtec -i|-f INPUT_FILE  [-o OUTPUT_FILE] [-geotherm geotherm_file] [-timing TIMING_FILE]'
+! Print usage statement
+#ifdef COMPILE_TQTEC
+    write(0,*) 'Usage: tqtec -i|-f INPUT_FILE -o OUTPUT_FILE [-geotherm geotherm_file] [...options...]'
+#elif COMPILE_TQCLIM
+    write(0,*) 'Usage: tqclim -i|-f INPUT_FILE -o OUTPUT_FILE [-geotherm geotherm_file] [...options...]'
+#else
+    write(0,*) 'No usage statement for this pre-processor option...exiting'
+    call error_exit(1)
+#endif
 write(0,*)
 write(0,*) 'INPUTS'
-write(0,*) '-i[nteractive]           Interactively defined model parameters'
 write(0,*) '-f INPUT_FILE            Input model parameter file (type "tqtec -fd" for details)'
+write(0,*) '-i[nteractive]           Interactively defined model parameters (deprecated)'
 write(0,*)
 write(0,*) 'OUTPUTS'
 write(0,*) '-o OUTPUT_FILE           Output temperature-depth-time file for specified horizons'
 write(0,*) '-geotherm GEOTHERM_FILE  Geotherms (output frequency defined in INPUT_FILE)'
 write(0,*) '-timing TIMING_FILE      Timing of tectonic actions'
-write(0,*) '-v VERBOSITY             Verbosity level'
 write(0,*)
-write(0,*) 'MODEL PARAMETERS'
-write(0,*) 'Note: values set in INPUT_FILE new format overrides these command line values'
-write(0,*) 'NNODES=<nnodes>          Number of nodes (default: 5000)'
-write(0,*) 'DZ=<dz>                  Node spacing (default: 0.01 km = 10 m)'
-write(0,*) 'DT=<dt>                  Time step size (default: 0.001 Ma = 1 ka)'
+write(0,*) 'OTHER OPTIONS'
+write(0,*) '-v VERBOSITY             Verbosity level'
 write(0,*)
 
 ! Exit with error code 1
@@ -68,7 +71,8 @@ use tqtec, only: input_file, &
 implicit none
 
 ! Local variables
-character(len=512) arg
+character(len=512) :: arg
+character(len=8) :: exec_name
 integer :: i, j, ios, narg
 
 
@@ -78,10 +82,17 @@ ios = 0
 
 ! Initialize default values
 input_file = ''
-input_mode = 'user'
+input_mode = 'file'
 output_file = ''
 geotherm_file = ''
 timing_file = ''
+#ifdef COMPILE_TQTEC
+    exec_name = 'tqtec'
+#elif COMPILE_TQCLIM
+    exec_name = 'tqclim'
+#else
+    exec_name = 'NAME_ERR'
+#endif
 
 
 ! Count arguments, then exit with usage statement if no arguments
@@ -91,71 +102,91 @@ if (narg.eq.0) then
 endif
 
 
+
 ! Parse command line arguments
 i = 1
 do while (i.le.narg)
 
+
     call get_command_argument(i,arg)
 
 
+    ! Input file
     if (arg.eq.'-f') then
         input_mode = 'file'
         i = i + 1
         call get_command_argument(i,input_file,status=ios)
+
+
+    ! Print input file format
     elseif (arg.eq.'-fd') then
         call print_input_file_details()
 
 
+    ! Input interactively (not recommended)
     elseif (arg.eq.'-i'.or.arg.eq.'-interactive') then
         input_mode = 'user'
+        write(0,*) 'WARNING: Interactive mode is no longer supported and may not work properly'
+        write(0,*) 'We recommend that you use an input file (-f)'
 
 
+    ! Output file
     elseif (arg.eq.'-o') then
         i = i + 1
         call get_command_argument(i,output_file,status=ios)
 
 
+    ! Geotherm file
     elseif (arg.eq.'-geotherm') then
         i = i + 1
         call get_command_argument(i,geotherm_file,status=ios)
 
 
+    ! Timing action file
     elseif (arg.eq.'-timing') then
         i = i + 1
         call get_command_argument(i,timing_file,status=ios)
 
 
+    ! Verbosity level
     elseif (arg.eq.'-v'.or.arg.eq.'-verbosity') then
         i = i + 1
         call get_command_argument(i,arg,status=ios)
         read(arg,*) verbosity
 
 
+    ! Print usage
     elseif (arg.eq.'-h') then
         call usage('')
 
 
+    ! Set model parameters
     elseif (arg(1:7).eq.'NNODES=') then
         j = index(arg,'=')
         arg(1:j) = ' '
         read(arg,*,iostat=ios) nnodes
+        write(0,*) 'WARNING: We recommend setting NNODES in the input file instead of the command line'
     elseif (arg(1:3).eq.'DZ=') then
         j = index(arg,'=')
         arg(1:j) = ' '
         read(arg,*,iostat=ios) dz
+        write(0,*) 'WARNING: We recommend setting DZ in the input file instead of the command line'
     elseif (arg(1:3).eq.'DT=') then
         j = index(arg,'=')
         arg(1:j) = ' '
         read(arg,*,iostat=ios) dt
+        write(0,*) 'WARNING: We recommend setting DT in the input file instead of the command line'
 
 
+    ! Could not find this option...
     else
-        call usage('tqtec: no option '//trim(arg))
+        call usage(trim(exec_name)//': no option '//trim(arg))
     endif
 
 
+    ! Ran into an error...
     if (ios.ne.0) then
-        call usage('tqtec: error parsing "'//trim(arg)//'" flag arguments')
+        call usage(trim(exec_name)//': error parsing "'//trim(arg)//'" flag arguments')
     endif
 
 
@@ -167,7 +198,10 @@ return
 end subroutine
 
 
+
 !--------------------------------------------------------------------------------------------------!
+
+
 
 
 subroutine initialize_defaults()
@@ -189,11 +223,16 @@ implicit none
 
 ! Variable = value       ! Value in old tqtec
 nnodes = 5000            ! N=1200                 ! number of finite difference spatial nodes
+#ifdef COMPILE_TQTEC
 dz = 0.01d0              ! H1=0.05                ! node spacing (km)
 dt = 0.001d0             ! K1=0.005               ! time step size (Ma)
+#elif COMPILE_TQCLIM
+dz = 1.0d0                                        ! node spacing (m)
+dt = 1.0d0                                        ! time step size (yr)
+#endif
 nhorizons = 10           ! Hard-coded to 10       ! number of depth horizons to track
 nlayers = 0              ! INL                    ! number of layers with different conductivity
-diffusivity = 32.0d0     ! D1=32.0                ! thermal diffusivity
+diffusivity = 32.0d0     ! D1=32.0                ! thermal diffusivity (m^2/yr = km^2/Ma)
 nburial = 0              ! NBP                    ! number of burial events
 nuplift = 0              ! NUEP                   ! number of uplift/erosion events
 nthrust = 0              ! NTP                    ! number of thrust events
@@ -203,7 +242,9 @@ return
 end subroutine
 
 
+
 !--------------------------------------------------------------------------------------------------!
+
 
 
 subroutine read_model_parameters()
@@ -225,11 +266,23 @@ implicit none
 
 ! Local variables
 character(len=32) :: reply
+character(len=8) :: exec_name
 
 
 if (verbosity.ge.2) then
     write(*,*) 'read_model_parameters: starting'
 endif
+
+
+! Set name of executable
+#ifdef COMPILE_TQTEC
+    exec_name = 'tqtec'
+#elif COMPILE_TQCLIM
+    exec_name = 'tqclim'
+#else
+    exec_name = 'NAME_ERR'
+#endif
+
 
 
 
@@ -248,18 +301,22 @@ if (input_mode.eq.'user') then  ! Interactive mode (like original tqtec)
         read(*,*) input_file
         call read_input_file()                                  ! Read existing data file
     else
-        write(0,*) 'tqtec: could not understand response "',trim(reply),'"...'
-        write(0,*) 'Exiting tqtec'
+        write(0,*) trim(exec_name)//': could not understand response "',trim(reply),'"...'
+        write(0,*) 'Exiting '//trim(exec_name)
         call error_exit(1)
     endif
+
+
 
 elseif (input_mode.eq.'file') then  ! Input file mode (for batch processing)
 
     call read_input_file()
 
+
+
 else
 
-    write(0,*) 'tqtec: no input mode named "',trim(input_mode),'"'
+    write(0,*) trim(exec_name)//': no input mode named "',trim(input_mode),'"'
     call error_exit(1)
 
 endif
@@ -269,20 +326,26 @@ endif
 if (output_file.eq.'') then
     write(*,*) 'Name of output file?'
     read(*,*) output_file
-    write(*,*) 'tqtec: creating output file "',trim(output_file),'"'
-    write(*,*) 'To create this file automatically, run tqtec -o ',trim(output_file)
+    write(*,*) trim(exec_name)//': creating output file "',trim(output_file),'"'
+    write(*,*) 'To create this file automatically, run '//trim(exec_name)//' -o ',trim(output_file)
 endif
+
 
 
 if (verbosity.ge.2) then
     write(*,*) 'read_model_parameters: finished'
 endif
 
+
 return
 end subroutine
 
 
+
+
 !--------------------------------------------------------------------------------------------------!
+
+
 
 
 subroutine read_interactive()
@@ -316,6 +379,11 @@ implicit none
 ! Local variables
 integer :: i, j
 character(len=32) :: reply, fmt_string
+
+
+
+write(0,*) 'WARNING: reading model parameters interactively is no longer supported'
+write(0,*) 'You may not be able to use all available features'
 
 
 ! Open the input file so model parameters can be saved to it
@@ -524,21 +592,34 @@ implicit none
 ! Local variables
 integer :: ios
 character(len=512) :: input_line
+character(len=8) :: exec_name
 logical :: ex
 double precision :: dp
 
 
 
 if (verbosity.ge.3) then
-    write(*,*) '    read_input_file: determining whether to read old or new format'
+    write(*,*) 'read_input_file: determining whether to read old or new format'
 endif
+
+
+
+! Set name of executable
+#ifdef COMPILE_TQTEC
+    exec_name = 'tqtec'
+#elif COMPILE_TQCLIM
+    exec_name = 'tqclim'
+#else
+    exec_name = 'NAME_ERR'
+#endif
+
 
 
 
 ! Check to make sure input file exists
 inquire(file=input_file,exist=ex)
 if (.not.ex) then
-    write(0,*) 'tqtec: could not find input file "',trim(input_file),'"'
+    write(0,*) trim(exec_name)//': could not find input file "',trim(input_file),'"'
     call error_exit(1)
 endif
 
@@ -546,7 +627,7 @@ endif
 ! Check input file can be opened
 open(unit=8,file=input_file,iostat=ios)
 if (ios.ne.0) then
-    write(0,*) 'tqtec: something went wrong trying to open input file "',trim(input_file),'"'
+    write(0,*) trim(exec_name)//': something went wrong trying to open input file "',trim(input_file),'"'
     call error_exit(1)
 endif
 
@@ -571,7 +652,9 @@ return
 end subroutine
 
 
+
 !--------------------------------------------------------------------------------------------------!
+
 
 
 subroutine read_input_file_old()
@@ -888,6 +971,7 @@ implicit none
 integer :: i, j, ios, iend
 character(len=32) :: var, value
 character(len=512) :: input_line
+character(len=8) :: exec_name
 double precision :: max_depth
 logical :: isMaxDepthDefined
 logical :: isLineBlank
@@ -896,7 +980,7 @@ logical :: isLineBlank
 
 
 if (verbosity.ge.3) then
-    write(*,*) '    read_input_file_new: starting'
+    write(*,*) 'read_input_file_new: starting'
 endif
 
 
@@ -905,7 +989,7 @@ endif
 ios = 0
 iend = 0
 isMaxDepthDefined = .false.
-isTectonicActionDefined = .false.
+isActionDefined = .false.
 t_total = -1.0d99
 t_geotherm_output = -1.0d99
 temp_surf = -1.0d99
@@ -917,10 +1001,22 @@ nhorizons = 0
 
 
 
+! Set name of executable
+#ifdef COMPILE_TQTEC
+    exec_name = 'tqtec'
+#elif COMPILE_TQCLIM
+    exec_name = 'tqclim'
+#else
+    exec_name = 'NAME_ERR'
+#endif
+
+
+
+
 ! Open the input file for reading in free format
 open(unit=8,file=input_file,iostat=ios)
 if (ios.ne.0) then
-    write(0,*) 'tqtec: something went wrong trying to open input file "',trim(input_file),'"'
+    write(0,*) trim(exec_name)//': something went wrong trying to open input file "',trim(input_file),'"'
     call error_exit(1)
 endif
 
@@ -944,7 +1040,7 @@ do while (iend.eq.0)
     input_line(i:i) = ' '
     read(input_line,*,iostat=ios) var, value
     if (ios.ne.0) then
-        write(0,*) 'tqtec: something went wrong trying to read "',trim(input_line),'"'
+        write(0,*) trim(exec_name)//': something went wrong trying to read "',trim(input_line),'"'
         call error_exit(1)
     endif
 
@@ -958,6 +1054,9 @@ do while (iend.eq.0)
         read(value,*) temp_surf
     elseif (var.eq.'HF_SURF'.or.var.eq.'hf_surf') then
         read(value,*) hf_surf
+#ifdef COMPILE_TQCLIM
+        hf_surf = hf_surf/1.0d3
+#endif
     elseif (var.eq.'COND_BASE'.or.var.eq.'cond_base') then
         read(value,*) cond_base
     elseif (var.eq.'HP_SURF'.or.var.eq.'hp_surf') then
@@ -1017,7 +1116,7 @@ do while (iend.eq.0)
 
             ! Check for errors during horizon data read
             if (ios.ne.0) then
-                write(0,*) 'tqtec: error reading horizon parameters '
+                write(0,*) trim(exec_name)//': error reading horizon parameters '
                 write(0,*) 'Looking for: dep1(km) dep2(km) ... depN(km)'
                 write(0,*) 'Read:        ',trim(input_line)
                 call error_exit(1)
@@ -1048,12 +1147,12 @@ do while (iend.eq.0)
                     read(8,'(A)') input_line
                 enddo
 
-                read(input_line,*,iostat=ios) (burial_dat(i,j),j=1,4) 
+                read(input_line,*,iostat=ios) (burial_dat(i,j),j=1,4)
                                                  ! start duration thickness conductivity
 
                 ! Check for errors during burial data read
                 if (ios.ne.0) then
-                    write(0,*) 'tqtec: error reading burial parameters for burial event',i
+                    write(0,*) trim(exec_name)//': error reading burial parameters for burial event',i
                     write(0,*) 'Looking for: start(Ma) duration(Ma) thick(km) cond(W/mK)'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
@@ -1061,7 +1160,7 @@ do while (iend.eq.0)
             enddo
 
             ! We have something to do!
-            isTectonicActionDefined = .true.
+            isActionDefined = .true.
         endif
 
 
@@ -1093,7 +1192,7 @@ do while (iend.eq.0)
 
                 ! Check for errors during uplift data read
                 if (ios.ne.0) then
-                    write(0,*) 'tqtec: error reading uplift parameters for uplift event',i
+                    write(0,*) trim(exec_name)//': error reading uplift parameters for uplift event',i
                     write(0,*) 'Looking for: start(Ma) duration(Ma) thick(km)'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
@@ -1102,7 +1201,7 @@ do while (iend.eq.0)
             enddo
 
             ! We have something to do!
-            isTectonicActionDefined = .true.
+            isActionDefined = .true.
         endif
 
 
@@ -1134,7 +1233,7 @@ do while (iend.eq.0)
 
                 ! Check for errors during thrust data read
                 if (ios.ne.0) then
-                    write(0,*) 'tqtec: error reading thrust parameters for thrust event',i
+                    write(0,*) trim(exec_name)//': error reading thrust parameters for thrust event',i
                     write(0,*) 'Looking for: start(Ma) 1(upper)|2(lower) thick_init(km) depth(km) thick_final(km)'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
@@ -1143,7 +1242,7 @@ do while (iend.eq.0)
             enddo
 
             ! We have something to do!
-            isTectonicActionDefined = .true.
+            isActionDefined = .true.
         endif
 
 
@@ -1175,7 +1274,7 @@ do while (iend.eq.0)
 
                 ! Check for errors during heat flow variation data read
                 if (ios.ne.0) then
-                    write(0,*) 'tqtec: error reading heat flow variation parameters for event',i
+                    write(0,*) trim(exec_name)//': error reading heat flow variation parameters for event',i
                     write(0,*) 'Looking for: start(Ma) heatflow(mW/m2)'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
@@ -1184,7 +1283,7 @@ do while (iend.eq.0)
             enddo
 
             ! We have something to do!
-            isTectonicActionDefined = .true.
+            isActionDefined = .true.
         endif
 
 
@@ -1215,7 +1314,7 @@ do while (iend.eq.0)
 
                 ! Check for errors during thickening data read
                 if (ios.ne.0) then
-                    write(0,*) 'tqtec: error reading thickening event parameters for thickening event',i
+                    write(0,*) trim(exec_name)//': error reading thickening event parameters for thickening event',i
                     write(0,*) 'Looking for: start(Ma) duration(Ma) thicken(km) crusttop(km) thick0(km)'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
@@ -1223,7 +1322,7 @@ do while (iend.eq.0)
 
             enddo
             ! We have something to do!
-            isTectonicActionDefined = .true.
+            isActionDefined = .true.
         endif
 
     elseif (var.eq.'THICKENHORIZONS'.or.var.eq.'thickenhorizons'.or.var.eq.'thickenHorizons') then
@@ -1232,15 +1331,85 @@ do while (iend.eq.0)
         elseif (value.eq.'1'.or.value.eq.'Y'.or.value.eq.'y'.or.value.eq.'T') then
             thickenHorizons = .true.
         else
-            write(0,*) 'tqtec: thickenHorizons must be set to T or F'
+            write(0,*) trim(exec_name)//': thickenHorizons must be set to T or F'
             call error_exit(1)
         endif
 
 
+
+    !--- Surface Temperature Step Changes ---!
+    elseif (var.eq.'NTEMPSTEPS') then
+
+        read(value,*) ntempsteps
+
+        if (ntempsteps.gt.0) then
+
+            allocate(temp_step_dat(ntempsteps,2))
+
+            do i = 1,ntempsteps
+
+                ! Skip blank or commented lines
+                read(8,'(A)') input_line
+                do while (isLineBlank(input_line))
+                    read(8,'(A)') input_line
+                enddo
+
+                read(input_line,*,iostat=ios) (temp_step_dat(i,j),j=1,2) ! start temp
+
+                ! Check for errors during temp step change data read
+                if (ios.ne.0) then
+                    write(0,*) trim(exec_name)//': error reading temp step change parameter for event',i
+                    write(0,*) 'Looking for: start(yr) temp(C)'
+                    write(0,*) 'Read:        ',trim(input_line)
+                    call error_exit(1)
+                endif
+            enddo
+
+            ! We have something to do!
+            isActionDefined = .true.
+
+        endif
+
+
+    !--- Surface Temperature Linear Changes ---!
+    elseif (var.eq.'NTEMPRAMPS') then
+
+        read(value,*) ntempramps
+
+        if (ntempramps.gt.0) then
+
+            allocate(temp_ramp_dat(ntempramps,3))
+
+            do i = 1,ntempramps
+
+                ! Skip blank or commented lines
+                read(8,'(A)') input_line
+                do while (isLineBlank(input_line))
+                    read(8,'(A)') input_line
+                enddo
+
+                read(input_line,*,iostat=ios) (temp_ramp_dat(i,j),j=1,3) ! start duration temp
+
+                ! Check for errors during temp ramp change data read
+                if (ios.ne.0) then
+                    write(0,*) trim(exec_name)//': error reading temp ramp change parameter for event',i
+                    write(0,*) 'Looking for: start(yr) duration(yr) temp(C)'
+                    write(0,*) 'Read:        ',trim(input_line)
+                    call error_exit(1)
+                endif
+            enddo
+
+            ! We have something to do!
+            isActionDefined = .true.
+
+        endif
+
+
     else
-        write(0,*) 'tqtec: no variable option named "',trim(var),'"'
+        write(0,*) trim(exec_name)//': no variable option named "',trim(var),'"'
         call error_exit(1)
     endif
+
 
 
     ! Reached the end of the file, exit
@@ -1250,33 +1419,35 @@ do while (iend.eq.0)
 enddo
 
 
+
+
 ! Check that necessary variables have been defined
 if (t_total.lt.0.0) then
-    write(0,*) 'tqtec: t_total has not been defined'
+    write(0,*) trim(exec_name)//': t_total has not been defined'
     call error_exit(1)
 endif
 if (temp_surf.lt.0.0) then
-    write(0,*) 'tqtec: temp_surf has not been defined'
+    write(0,*) trim(exec_name)//': temp_surf has not been defined'
     call error_exit(1)
 endif
 if (hf_surf.lt.0.0) then
-    write(0,*) 'tqtec: hf_surf has not been defined'
+    write(0,*) trim(exec_name)//': hf_surf has not been defined'
     call error_exit(1)
 endif
 if (cond_base.lt.0.0) then
-    write(0,*) 'tqtec: cond_base has not been defined'
+    write(0,*) trim(exec_name)//': cond_base has not been defined'
     call error_exit(1)
 endif
 if (nhorizons.le.0) then
-    write(0,*) 'tqtec: no horizons have been defined'
+    write(0,*) trim(exec_name)//': no horizons have been defined'
     call error_exit(1)
 endif
 if (temp_surf.lt.0.0) then
-    write(0,*) 'tqtec: temp_surf has not been defined'
+    write(0,*) trim(exec_name)//': temp_surf has not been defined'
     call error_exit(1)
 endif
-if (.not.isTectonicActionDefined) then
-    write(0,*) 'tqtec: no tectonic actions have been defined'
+if (.not.isActionDefined) then
+    write(0,*) trim(exec_name)//': no actions have been defined'
     call error_exit(1)
 endif
 
@@ -1471,6 +1642,20 @@ implicit none
 
 ! Local variables
 integer :: i, j, k
+character(len=2) :: zunit
+character(len=2) :: tunit
+double precision :: hf_scale
+
+
+#ifdef COMPILE_TQTEC
+zunit = 'km'
+tunit = 'Ma'
+hf_scale = 1.0d0
+#elif COMPILE_TQCLIM
+zunit = 'm'
+tunit = 'yr'
+hf_scale = 1.0d3
+#endif
 
 
 ! Open the output file
@@ -1483,8 +1668,8 @@ open(unit=7,file=output_file,status='unknown')
 write(7,*) trim(output_file)
 
 ! Model parameters
-write(7,110) dz
-write(7,110) dt
+write(7,'(F14.3,X,A)') dz,zunit
+write(7,'(F14.3,X,A)') dt,tunit
 write(7,110) hp_surf
 write(7,110) hp_dep
 write(7,110) t_total
@@ -1493,13 +1678,13 @@ write(7,110) temp_factor
 write(7,'(I10)') nhorizons
 write(7,110) 0.0 ! II(9)
 write(7,110) 0.0 ! II(10)
-110 format(F7.3)
+110 format(F14.3)
 
 ! Heat flow
 do j = 2,nt_total,2
-    write(7,115) hf(j)
+    write(7,115) hf(j)*hf_scale
 enddo
-115 format(F6.2)
+115 format(E14.6)
 
 ! Temperature and depth of tracked horizons
 do k = 1,nhorizons

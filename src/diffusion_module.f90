@@ -7,11 +7,27 @@
 !     - Kevin Furlong (original version; supervisor)                                               !
 !                                                                                                  !
 ! This module contains variables and subroutines numerically solving the production-diffusion      !
-! differential equation. The derivation of the finite difference approximation and the original    !
-! Matlab program HeAge are from Piotraschke (2012) (MS thesis).                                    !
+! differential equation. The derivation of the spherical finite difference approximation and the   !
+! original Matlab program HeAge are from Piotraschke (2012) (MS thesis).                           !
 !                                                                                                  !
-! The (production-)diffusion equation in a Cartesian coordinate system can be written as (Carslaw  !
-! and Jaeger, 1959):                                                                               !
+! The 3-D production-diffusion equation in a Cartesian coordinate system can be written as         !
+!                                                                                                  !
+!       du             d2u      d2u      d2u                                                       !
+!      ----  =  D * [ ----  +  ----  +  ---- ]  +  P                                               !
+!       dt             dx2      dy2      dz2                                                       !
+!                                                                                                  !
+! where                                                                                            !
+!     u: function that will undergo diffusion (temperature, concentration, topography, etc.)       !
+!     t: time                                                                                      !
+!     D: diffusivity                                                                               !
+!     x, y, z: position                                                                            !
+!     P: rate of production                                                                        !
+!                                                                                                  !
+! For spherical or cylindrical coordinate systems, the right hand side uses the corresponding      !
+! Laplacian operator.                                                                              !
+!                                                                                                  !
+! Assuming diffusion has symmetry so that it only occurs in 1-D, the production-diffusion equation !
+! in a Cartesian coordinate system becomes (Carslaw and Jaeger, 1959)                              !
 !                                                                                                  !
 !       du             d2u                                                                         !
 !      ----  =  D * [ ---- ]  +  P                                                                 !
@@ -24,12 +40,19 @@
 !       dt           r^2     dr           dr                                                       !
 !                                                                                                  !
 ! where                                                                                            !
-!     u: function that will undergo diffusion (temperature, concentration, topography, etc.)       !
-!     t: time                                                                                      !
-!     x: position                                                                                  !
 !     r: radius                                                                                    !
-!     D: diffusivity                                                                               !
-!     P: rate of production                                                                        !
+!                                                                                                  !
+! For 2-D diffusion, the production-diffusion equation in a Cartesian coordinate system becomes    !
+!                                                                                                  !
+!       du             d2u      d2u                                                                !
+!      ----  =  D * [ ----  +  ----  ]  +  P                                                       !
+!       dt             dx2      dy2                                                                !
+!                                                                                                  !
+! Or in a cylindrical coordinate system with different r and z diffusivities:                      !
+!                                                                                                  !
+!       du              1      d         du                d2u                                     !
+!      ----  =  Dr * [ --- * ---- ( r * ---- ) ] + Dz * [ ---- ]  +  P                             !
+!       dt              r     dr         dr                dz2                                     !
 !                                                                                                  !
 ! References:                                                                                      !
 ! Carslaw, H.S., Jaeger, J.C. (1959). Conduction of Heat in Solids. Second Edition. Oxford         !
@@ -193,6 +216,216 @@ contains
 
     ! Solve for the function u at the next time step
     call tridiag(a(:,1),a(:,2),a(:,3),b(:,1),u,n)
+
+
+    return
+    end subroutine
+
+
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+
+    subroutine diffusion_2d_cylinder(u,nnodes_r,nnodes_z,dr,dz,diffusivity_r,diffusivity_z,dt,beta)
+    !----
+    ! Solve the finite difference approximation to the cylindrical diffusion equation for the value
+    ! of the function u(i,j,k) at the next time step u(i,j,k+1), given fixed values at boundary
+    ! nodes (Dirichlet BCs):
+    !
+    !     1/k * [u(i,j,k+1) - u(i,j,k)] =
+    !             Dr/hr^2 * [ beta*(u(i-1,j,k+1) - 2*u(i,j,k+1) + u(i+1,j,k+1))
+    !                           + (1-beta)*(u(i-1,j,k) - 2*u(i,j,k) + u(i+1,j,k) ]
+    !             Dr/(2*r*hr) * [ beta*(u(i+1,j,k+1) - u(i-1,j,k+1))
+    !                                + (1-beta)*(u(i+1,j,k) - u(i-1,j,k) ]
+    !             Dz/hz^2 * [ beta*(u(i,j-1,k+1) - 2*u(i,j,k+1) + u(i,j+1,k+1))
+    !                           + (1-beta)*(u(i,j-1,k) - 2*u(i,j,k) + u(i,j+1,k) ]
+    !
+    !     u: function undergoing diffusion (temperature, concentration, topography, etc.)
+    !     i: current radial node (r-dimension)
+    !     j: current axial node (z-dimension)
+    !     k: time step size
+    !     r: radial position
+    !     hr: space step size in radial direction
+    !     hz: space step size in axial direction
+    !     Dr: diffusivity in the radial direction
+    !     Dz: diffusivity in the axial direction
+    !     beta: implicitness weight
+    !
+    ! This turns into the following system of equations to solve for time step (k+1):
+    !
+    !     (1 + 2*sz*beta + 2*sr1*beta) * u(i,   j  , k+1)
+    !          + (sr2*beta - sr1*beta) * u(i-1, j  , k+1)
+    !          - (sr2*beta + sr1*beta) * u(i+1, j  , k+1)
+    !                        - sz*beta * u(i,   j-1, k+1)
+    !                        - sz*beta * u(i,   j+1, k+1) = 
+    !                                 (1 - 2*sz*beta - 2*sr1*beta) * u(i,j,k) 
+    !                                     + sr1*(1-beta) * (u(i-1.j,k) + u(i+1,j,k))
+    !                                     +  sz*(1-beta) * (u(i,j-1,k) + u(i,j+1,k))
+    !                                     + sr2*(1-beta) * (u(i+1,j,k) - u(i-1,j,k))
+    !
+    !     sz: axial diffusion number (Dz * k/hz^2)
+    !     sr1: radial diffusion number (Dr * k/hr^2)
+    !     sr2: a different radial diffusion constant (Dr * k/(2*r*hr))
+    !
+    ! The system of equations (Ax = b) does not form a trivial tridiagonal A matrix like in 1-D,
+    ! but A has many zeros so we can use a sparse matrix solver.
+    !----
+
+
+    implicit none
+
+    ! Arguments
+    integer :: nnodes_r
+    integer :: nnodes_z
+    double precision :: u(nnodes_r,nnodes_z)
+    double precision :: diffusivity_r
+    double precision :: diffusivity_z
+    double precision :: dr
+    double precision :: dz
+    double precision :: dt
+    double precision :: beta
+
+    ! Local variables
+    double precision :: r
+    double precision :: sz
+    double precision :: sr1
+    double precision :: sr2
+    integer :: i                  ! index for A
+    integer :: n                  ! number of rows/columns in A
+    integer :: nnz                ! number of non-zero entries in A
+    integer :: irow               ! A and b row index 
+    integer :: icol               ! A column index 
+    integer :: ir                 ! radial node index
+    integer :: iz                 ! axial node index
+    double precision, allocatable :: a(:)
+    double precision, allocatable :: b(:)
+    integer, allocatable :: row_indices(:)
+    integer, allocatable :: column_pointers(:)
+
+
+    sz  = diffusivity_z * dt / dz**2
+    sr1 = diffusivity_r * dt / dr**2
+
+    n = nnodes_r*nnodes_z
+    nnz = 5*nnodes_r*nnodes_z ! NEEDS TO BE LARGER FOR BC NODES
+
+    ! Define sparse matrix arrays
+    allocate(a(nnz))
+    allocate(b(n))
+    allocate(row_indices(nnz))
+    allocate(column_pointers(n+1))
+    a = 0.0d0
+    b = 0.0d0
+    row_indices = 0
+    column_pointers = 0
+
+    ! Set A matrix sparse structure and load values
+    i = 1
+    do icol = 1,n ! Sparse matrix storage is column-based
+
+        column_pointers(icol) = i
+
+        do iz = 1,nnodes_z ! Loop through all rows in the column
+            do ir = 1,nnodes_r
+
+                irow = (iz-1)*nnodes_r + ir ! Current row
+
+                r = (dble(ir)-0.5d0)*dr
+                sr2 = diffusivity_r * dt / (2.0d0*r*dr)
+
+                if (iz.eq.1) then                                 ! axial symmetry BC
+                    a(i) = 1.0d0
+                    row_indices(i) = irow
+                    i = i + 1
+                elseif (ir.eq.1) then                             ! radial symmetry BC
+                    a(i) = 1.0d0
+                    row_indices(i) = irow
+                    i = i + 1
+                elseif (iz.eq.nnodes_z) then                      ! constant BC
+                    a(i) = 1.0d0
+                    row_indices(i) = irow
+                    i = i + 1
+                elseif (ir.eq.nnodes_z) then                      ! constant BC
+                    a(i) = 1.0d0
+                    row_indices(i) = irow
+                    i = i + 1                    
+                elseif (icol.eq.irow-1) then
+                    a(i) = beta*(sr2-sr1)                         ! u(i-1,j  ,k+1) coefficient
+                    row_indices(i) = irow
+                    i = i + 1
+                elseif (icol.eq.irow) then
+                    a(i) = 1.0d0 + 2.0d0*sz*beta + 2.0d0*sr1*beta ! u(i  ,j  ,k+1) coefficient
+                    row_indices(i) = irow
+                    i = i + 1
+                elseif (icol.eq.irow+1) then
+                    a(i) = -beta*(sr2+sr1)                        ! u(i-1,j  ,k+1) coefficient
+                    row_indices(i) = irow
+                    i = i + 1
+                elseif (icol.eq.(iz-2)*nnodes_r+ir) then
+                    a(i) = -sz*beta                               ! u(i  ,j-1,k+1) coefficient
+                    row_indices(i) = irow
+                    i = i + 1
+                elseif (icol.eq.(iz-0)*nnodes_r+ir) then
+                    a(i) = -sz*beta                               ! u(i  ,j+1,k+1) coefficient
+                    row_indices(i) = irow
+                    i = i + 1
+                endif
+
+            enddo
+        enddo
+
+    enddo
+    column_pointers(n+1) = nnz+1
+
+
+
+    ! Load b matrix
+    iz = 1
+    do ir = 1,nnodes_r
+        irow = (iz-1)*nnodes_r + ir ! Current row
+        b(irow) = u(ir,iz)
+    enddo
+    iz = nnodes_z
+    do ir = 1,nnodes_r
+        irow = (iz-1)*nnodes_r + ir ! Current row
+        b(irow) = u(ir,iz)
+    enddo
+    ir = 1
+    do iz = 1,nnodes_z
+        irow = (iz-1)*nnodes_r + ir ! Current row
+        b(irow) = u(ir,iz)
+    enddo
+    ir = nnodes_r
+    do iz = 1,nnodes_z
+        irow = (iz-1)*nnodes_r + ir ! Current row
+        b(irow) = u(ir,iz)
+    enddo
+    do iz = 2,nnodes_z-1 ! Loop through all non-BC rows
+        do ir = 2,nnodes_r-2
+            irow = (iz-1)*nnodes_r + ir ! Current row
+            if (ir.eq.1) then
+                b(irow) = u(ir,iz)
+            elseif (iz.eq.1) then
+                b(irow) = u(ir,iz)
+            elseif (ir.eq.nnodes_r.or.iz.eq.nnodes_z) then
+                b(irow) = u(ir,iz)
+            else
+                b(irow) = (1.0d0 - 2.0d0*sz*beta - 2.0d0*sr1*beta)*u(ir,iz) &
+                                     + sr1*(1.0d0-beta)*(u(ir-1,iz)+u(ir+1,iz)) &
+                                     +  sz*(1.0d0-beta)*(u(ir,iz-1)+u(ir,iz+1)) &
+                                     + sr2*(1.0d0-beta)*(u(ir+1,iz)-u(ir-1,iz))
+            endif
+        enddo
+    enddo
+
+
+
+
+    ! Per SuperLU instructions, solve the sparse matrix equation
+    ! call c_fortran_dgssv(iopt,n,nnz,nrhs,values,row_indices,column_pointers,b,ldb,factors,info)
+    call c_fortran_dgssv()
 
 
     return
