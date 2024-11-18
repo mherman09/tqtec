@@ -1790,29 +1790,34 @@ write(*,'(A)') '# note that comments cannot be inserted within parameter blocks 
 write(*,'(A)') '# NUPLIFT= and the definition of the uplift events in the following lines).'
 write(*,'(A)') '#'
 write(*,'(A)') '# This text can be copied or redirected to a file, and used directly as a'
-write(*,'(A)') '# comprehensive example input file with explanations for each parameter:'
+write(*,'(A)') '# comprehensive example input file with explanations for each parameter.'
+write(*,'(A)') '#'
+write(*,'(A)') '# NOTE: The input units are different for TQTec and TQClim:'
+write(*,'(A)') '# UNITS      TQTEC       TQCLIM'
+write(*,'(A)') '# Distance   kilometers  meters'
+write(*,'(A)') '# Time       Ma          years'
 write(*,'(A)') '###################################################################################'
 write(*,'(A)')
 write(*,'(A)')
 write(*,'(A)') '# Example TQTec/TQClim input file in modern format'
 write(*,'(A)')
+write(*,'(A)')
 write(*,'(A)') '#---------- MODEL TIMING PARAMETERS ----------#'
-write(*,'(A)') '# Total model time (tqtec:Ma, tqclim:yr)'
+write(*,'(A)') '# Total model time (Ma|yr)'
 write(*,'(A)') 'T_TOTAL=50'
 write(*,'(A)')
-write(*,'(A)') '# Time step size (tqtec:Ma, tqclim:yr)'
+write(*,'(A)') '# Time step size (Ma|yr)'
 write(*,'(A)') 'DT=0.05'
 write(*,'(A)')
-write(*,'(A)') '# Time between geotherm outputs (tqtec:Ma, tqclim:yr)'
-write(*,'(A)') '# This only matters if -geotherm FILE is specified on the command line'
-write(*,'(A)') 'T_GEOTHERM_OUTPUT=1'
+write(*,'(A)') '# Time between geotherm outputs (Ma|yr)'
+write(*,'(A)') 'T_GEOTHERM_OUTPUT=1   # <== Only used if -geotherm FILE is specified'
 write(*,'(A)')
 write(*,'(A)')
 write(*,'(A)') '#---------- MODEL SPATIAL PARAMETERS ----------#'
-write(*,'(A)') '# Maximum model depth (tqtec:km, tqclim:m)'
+write(*,'(A)') '# Maximum model depth (km|m)'
 write(*,'(A)') 'MAX_DEPTH=100'
 write(*,'(A)')
-write(*,'(A)') '# Vertical node spacing (tqtec:km, tqclim:m)'
+write(*,'(A)') '# Vertical node spacing (km|m)'
 write(*,'(A)') 'DZ=0.1'
 write(*,'(A)')
 write(*,'(A)') '# Alternatively, the number of nodes can be specified and DZ will be calculated'
@@ -1820,32 +1825,51 @@ write(*,'(A)') 'NNODES=1000'
 write(*,'(A)')
 write(*,'(A)')
 write(*,'(A)') '#---------- BOUNDARY CONDITIONS ----------#'
-write(*,'(A)') '# TQTec and TQClim impose surface temperature and heat flow boundary conditions.'
 write(*,'(A)') '# By default, tqtec and tqclim have constant surface temperatures, but there are'
-write(*,'(A)') '# options to have surface temperature vary over time. The surface heat flow is used'
-write(*,'(A)') '# to calculate the heat flow coming from the base ofthe model (the interior of the'
-write(*,'(A)') '# Earth), subtracting the total heat production.'
+write(*,'(A)') '# options to have surface temperature vary over time.'
 write(*,'(A)')
 write(*,'(A)') '# Surface temperature (C)'
 write(*,'(A)') 'TEMP_SURF=10     # <== THIS IS REQUIRED!!! (Even if you want varying surface temps)'
 write(*,'(A)')
-write(*,'(A)') '# The boundary conditions for TQTec and TQClim are heat flow at the base of the'
-write(*,'(A)') '# model (not temperature!). However, the boundary condition input is the heat flow'
-write(*,'(A)') '# at the **surface**. This is the sum of the heat flow from deep in the Earth and'
-write(*,'(A)') '# heat produced by radioactive decay within the model (see HP_SURF and HP_DEP).'
+write(*,'(A)') '# Step temperature changes'
+write(*,'(A)') '# Start_Time(Ma|yr) Temperature_Change(C)'
+write(*,'(A)') 'NTEMPSTEPS=1'
+write(*,'(A)') '0.5 0.5'
+write(*,'(A)')
+write(*,'(A)') '# Ramp temperature changes'
+write(*,'(A)') '# Start_Time(Ma|yr) Duration(tqtec:Ma,tqclim:yr) Temperature_Change(C)'
+write(*,'(A)') 'NTEMPRAMPS=1'
+write(*,'(A)') '1.5 1.0 0.5'
+write(*,'(A)')
+write(*,'(A)')
+write(*,'(A)') '# At the base of the model, TQTec and TQClim have a heat flow (not temperature!)'
+write(*,'(A)') '# boundary condition. However, the boundary condition input value is the heat flow'
+write(*,'(A)') '# at the surface. This is the sum of the heat flow from deep in the Earth and heat'
+write(*,'(A)') '# produced by radioactive decay within the model (see HP_SURF and HP_DEP).'
+write(*,'(A)')
 write(*,'(A)') '# Surface heat flow (mW/m^2 = kW/km^2)'
 write(*,'(A)') 'HF_SURF=75'
+write(*,'(A)')
 write(*,'(A)')
 write(*,'(A)') '# Radioactive heat production in TQTec/TQClim is implemented as exponentially'
 write(*,'(A)') '# decaying from the surface downward. This requires a surface heat production value'
 write(*,'(A)') '# and a depth scale for the exponential decrease.'
+write(*,'(A)')
 write(*,'(A)') '# Surface heat production (uW/m^3)'
 write(*,'(A)') 'HP_SURF=0'
-write(*,'(A)') '# Heat production e-folding depth (tqtec:km, tqclim:m)'
+write(*,'(A)')
+write(*,'(A)') '# Heat production e-folding depth (km|m)'
 write(*,'(A)') 'HP_DEP=5'
 write(*,'(A)')
+write(*,'(A)')
+write(*,'(A)') '#---------- MATERIAL PROPERTIES ----------#'
 write(*,'(A)') '# Thermal conductivity at the base of the model (W/m/K)'
 write(*,'(A)') 'COND_BASE=3.0'
+write(*,'(A)')
+write(*,'(A)') '# Crustal layers with different conductivities'
+write(*,'(A)') '# Layer_Top(km|m) Layer_Thickness(km|m) Conductivity(W/m/K)'
+write(*,'(A)') 'NLAYERS=1'
+write(*,'(A)') '0 10 2.5'
 write(*,'(A)')
 
 call error_exit(1)

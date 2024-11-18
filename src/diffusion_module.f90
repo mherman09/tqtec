@@ -227,6 +227,7 @@ contains
 !--------------------------------------------------------------------------------------------------!
 
 
+#ifdef COMPILE_WITH_SUPERLU
 
     subroutine diffusion_2d_cylinder(u,nnodes_r,nnodes_z,dr,dz,diffusivity_r,diffusivity_z,dt,beta)
     !----
@@ -431,7 +432,7 @@ contains
     return
     end subroutine
 
-
+#endif
 
 
 !--------------------------------------------------------------------------------------------------!
