@@ -5,52 +5,6 @@
 !--------------------------------------------------------------------------------------------------!
 
 
-subroutine usage(str)
-!----
-! Print error statement (if provided) and usage, then exit with error code 1
-!----
-
-implicit none
-
-character(len=*) :: str
-
-! Print error statement if provided as an argument
-if (str.ne.'') then
-    write(0,*) trim(str)
-    write(0,*)
-endif
-
-! Print usage statement
-#ifdef COMPILE_TQTEC
-    write(0,*) 'Usage: tqtec -i|-f INPUT_FILE -o OUTPUT_FILE [-geotherm geotherm_file] [...options...]'
-#elif COMPILE_TQCLIM
-    write(0,*) 'Usage: tqclim -i|-f INPUT_FILE -o OUTPUT_FILE [-geotherm geotherm_file] [...options...]'
-#else
-    write(0,*) 'No usage statement for this pre-processor option...exiting'
-    call error_exit(1)
-#endif
-write(0,*)
-write(0,*) 'INPUTS'
-write(0,*) '-f INPUT_FILE            Input model parameter file (type "tqtec -fd" for details)'
-write(0,*) '-i[nteractive]           Interactively defined model parameters (deprecated)'
-write(0,*)
-write(0,*) 'OUTPUTS'
-write(0,*) '-o OUTPUT_FILE           Output temperature-depth-time file for specified horizons'
-write(0,*) '-geotherm GEOTHERM_FILE  Geotherms (output frequency defined in INPUT_FILE)'
-write(0,*) '-timing TIMING_FILE      Timing of tectonic actions'
-write(0,*)
-write(0,*) 'OTHER OPTIONS'
-write(0,*) '-v VERBOSITY             Verbosity level'
-write(0,*)
-
-! Exit with error code 1
-call error_exit(1)
-
-stop
-end subroutine
-
-
-!--------------------------------------------------------------------------------------------------!
 
 
 subroutine gcmdln()
@@ -119,7 +73,7 @@ do while (i.le.narg)
 
 
     ! Print input file format
-    elseif (arg.eq.'-fd') then
+    elseif (arg.eq.'-f:d'.or.arg.eq.'-f:details'.or.arg.eq.'-f:example') then
         call print_input_file_details()
 
 
@@ -840,7 +794,7 @@ do i = 1,nthicken
     if (i.eq.1) then
         write(0,*) 'tqtec: reading thickening event data'
         write(0,*) 'For more precise control, use modern mode input'
-        write(0,*) 'Type "tqtec -fd" for details'
+        write(0,*) 'Type "tqtec -f:example" for details'
     endif
     read(8,'(A)',end=1105,iostat=ios) input_line
     read(input_line,*,end=1205,iostat=ios) (thicken_dat(i,j),j=1,5)
@@ -1490,135 +1444,7 @@ return
 end function
 
 
-!--------------------------------------------------------------------------------------------------!
 
-
-subroutine print_input_file_details()
-implicit none
-write(0,*) ''
-write(0,*) 'The model parameters for TQTec are input via user interaction or control files.'
-write(0,*) 'Selecting the "-i" option will lead to a series of prompts that allow you to set'
-write(0,*) 'model parameters interactively. Selecting the "-f" option requires an additional'
-write(0,*) 'argument defining the file name. This file must be in one of two formats:'
-write(0,*)
-write(0,*)
-write(0,*) '1. Original TQTec Input File Format'
-write(0,*) 'This format was originally fixed format, although TQTec no longer requires'
-write(0,*) 'parameters to have strict widths, only that they be in the right order:'
-write(0,*)
-write(0,*) ' <input_file>'
-write(0,*) ' <total_time_ma> <geotherm_output_ma> <temp_surf_c> <hf_surf_mW/m2> <cond_base_W/mk> <hp_surf_uW/m3> [<hp_dep_km>]'
-write(0,*) ' <nlayers>'
-write(0,*) ' <layer_1_dep_top_km> <layer_1_thick_km> <layer_1_cond_W/mk>'
-write(0,*) ' :'
-write(0,*) ' <horizon_1_dep_km> <horizon_2_dep_km> ...'
-write(0,*) ' <nburial>'
-write(0,*) ' <burial_1_start_ma> <burial_1_duration_ma> <burial_1_thick_km> <burial_1_cond_W/mk>'
-write(0,*) ' :'
-write(0,*) ' <nuplift>'
-write(0,*) ' <uplift_1_start_ma> <uplift_1_duration_ma> <uplift_1_thick_km>'
-write(0,*) ' :'
-write(0,*) ' <nthrust>'
-write(0,*) '  <thrust_1_start_ma> <upper1_or_lower2> <thrust_1_base_km> <thrust_1_depth_km> <thrust_1_thick_km>'
-write(0,*) ' :'
-write(0,*) ' <nthicken>'
-write(0,*) '  <thicken_1_start_ma> <thicken_1_duration_ma> <thicken_1_amount_km> <thicken_1_top_km> <thicken_1_thick0_km>'
-write(0,*) ' :'
-write(0,*)
-write(0,*)
-write(0,*) '2. Modern TQTec Input File Format'
-write(0,*) 'This format sets parameters (in any order) using the format PAR=value. Comments can'
-write(0,*) 'be added to the file by starting a line with "#", but note that comments cannot'
-write(0,*) 'be inserted within parameter blocks (e.g., between NUPLIFT= and the definition of'
-write(0,*) 'the uplift events in the following lines)'
-write(0,*)
-write(0,*) 'T_TOTAL=total_time                      [Ma]'
-write(0,*) 'T_GEOTHERM_OUTPUT=time_geotherm_output  [Ma]'
-write(0,*) 'TEMP_SURF=temp_surf                     [Celsius]'
-write(0,*) 'HF_SURF=hf_surf                         [mW/m2]'
-write(0,*) 'COND_BASE=cond_base                     [W/mK]'
-write(0,*) 'HP_SURF=hp_surf                         [uW/m3]'
-write(0,*) 'HP_DEP=hp_dep                           [km]'
-write(0,*) '# Define bottom of model with number of nodes or depth'
-write(0,*) 'NNODES=nnodes'
-write(0,*) 'MAX_DEPTH=max_depth                     [km]'
-write(0,*) '# Node spacing'
-write(0,*) 'DZ=dz                                   [km]'
-write(0,*) 'NLAYERS=nlayers'
-write(0,*) '<layer_1_dep_top_km> <layer_1_thick_km> <layer_1_cond_W/mk>'
-write(0,*) ' :'
-write(0,*) '# Depth horizons to track'
-write(0,*) 'NHORIZONS=nhorizons'
-write(0,*) '<horizon_1_dep_km> <horizon_2_dep_km> ...'
-write(0,*) '# Burial events'
-write(0,*) 'NBURIAL=nburial'
-write(0,*) '<burial_1_start_ma> <burial_1_duration_ma> <burial_1_thick_km> <burial_1_cond_W/mk>'
-write(0,*)  ':'
-write(0,*) '# Uplift/erosion events'
-write(0,*) 'NUPLIFT=nuplift'
-write(0,*) '<uplift_1_start_ma> <uplift_1_duration_ma> <uplift_1_thick_km>'
-write(0,*) ':'
-write(0,*) '# Thrust faulting events (1: track in uhanging wall; 2: track in footwall)'
-write(0,*) 'NTHRUST=nthrust'
-write(0,*) '<thrust_1_start_ma> <upper1_or_lower2> <thrust_1_base_km> <thrust_1_depth_km> <thrust_1_thick_km>'
-write(0,*) ':'
-write(0,*) '# Surface heat flow variations'
-write(0,*) 'NHFVARS=nhfvars'
-write(0,*) '<hf_var_1_start_ma> <hf_var_1_value_mW/m2>'
-write(0,*) ':'
-write(0,*) ' NTHICKEN=nthicken'
-write(0,*) '  <thicken_1_start_ma> <thicken_1_duration_ma> <thicken_1_amount_km> <thicken_1_top_km> <thicken_1_thick0_km>'
-write(0,*) ' :'
-write(0,*) 'thickenHorizons=[T|F]'
-write(0,*)
-write(0,*)
-write(0,*) 'Example of the same model in the different formats:'
-write(0,*)
-write(0,*) 'Original Format:'
-write(0,*) ' tqtec.in'
-write(0,*) '         50         5    0.0000   30.0000    3.0000    0.0000'
-write(0,*) '          0'
-write(0,*) '   2.0000  4.0000  6.0000  8.0000 10.0000 12.0000 14.0000 16.0000 18.0000 20.0000'
-write(0,*) '          1'
-write(0,*) '    10.0000   10.0000    5.0000    2.0000'
-write(0,*) '          1'
-write(0,*) '    20.0000   20.0000   10.0000'
-write(0,*) '          1'
-write(0,*) '    40.0000         1   25.0000    0.0000  25.0000'
-write(0,*) '          1'
-write(0,*) '     5.0000    2.0000    1.0000    0.0000   9.0000'
-write(0,*)
-write(0,*)
-write(0,*) 'Modern Format:'
-write(0,*) 'T_TOTAL=50'
-write(0,*) 'T_GEOTHERM_OUTPUT=5'
-write(0,*) 'TEMP_SURF=0'
-write(0,*) 'HF_SURF=30'
-write(0,*) 'COND_BASE=3'
-write(0,*) 'HP_SURF=0'
-write(0,*) 'HP_DEP=0'
-write(0,*) 'NLAYERS=0'
-write(0,*) 'NHORIZONS=10'
-write(0,*) '2 4 6 8 10 12 14 16 18 20'
-write(0,*) 'NBURIAL=1'
-write(0,*) '10 10 5 2'
-write(0,*) 'NUPLIFT=2'
-write(0,*) '20 20 10'
-write(0,*) '45 2 1'
-write(0,*) 'NTHRUST=1'
-write(0,*) '40 1 25 0 25'
-write(0,*) 'NHFVARS=1'
-write(0,*) '15 10'
-write(0,*) 'NTHICKEN=1'
-write(0,*) '5 2 1 0 9   [For additional controls on thickening parameters, see Modern Format above]'
-
-
-
-
-write(0,*) ''
-call error_exit(1)
-return
-end subroutine
 
 
 
@@ -1872,6 +1698,162 @@ write(*,*)
 ! write(0,*) 'hfvar(:,2):     ',hfvar(:,2)
 
 return
+end subroutine
+
+
+
+
+
+
+
+
+
+
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!------------------------------- PROGRAM INFORMATION SUBROUTINES ----------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+
+
+
+
+
+
+subroutine usage(str)
+!----
+! Print error statement (if provided) and usage, then exit with error code 1
+!----
+
+implicit none
+
+character(len=*) :: str
+
+! Print error statement if provided as an argument
+if (str.ne.'') then
+    write(0,*) trim(str)
+    write(0,*)
+endif
+
+! Print usage statement
+#ifdef COMPILE_TQTEC
+    write(0,*) 'Usage: tqtec -i|-f INPUT_FILE -o OUTPUT_FILE [-geotherm geotherm_file] [...options...]'
+#elif COMPILE_TQCLIM
+    write(0,*) 'Usage: tqclim -i|-f INPUT_FILE -o OUTPUT_FILE [-geotherm geotherm_file] [...options...]'
+#else
+    write(0,*) 'No usage statement for this pre-processor option...exiting'
+    call error_exit(1)
+#endif
+write(0,*)
+write(0,*) 'INPUTS'
+write(0,*) '-f INPUT_FILE            Input model parameter file (type "tqtec -f:example" for example)'
+write(0,*) '-i[nteractive]           Interactively defined model parameters (deprecated)'
+write(0,*)
+write(0,*) 'OUTPUTS'
+write(0,*) '-o OUTPUT_FILE           Output temperature-depth-time file for specified horizons'
+write(0,*) '-geotherm GEOTHERM_FILE  Geotherms (output frequency defined in INPUT_FILE)'
+write(0,*) '-timing TIMING_FILE      Timing of tectonic actions'
+write(0,*)
+write(0,*) 'OTHER OPTIONS'
+write(0,*) '-v VERBOSITY             Verbosity level'
+write(0,*) '-f:example               Print example input file and exit'
+write(0,*)
+
+! Exit with error code 1
+call error_exit(1)
+
+stop
+end subroutine
+
+
+
+
+!--------------------------------------------------------------------------------------------------!
+
+
+
+subroutine print_input_file_details()
+!----
+! Print an example input file in modern input mode and exit
+!----
+
+implicit none
+
+write(*,'(A)')
+write(*,'(A)') '###################################################################################'
+write(*,'(A)') '# The model parameters for TQTec and TQClim are input via control files.'
+write(*,'(A)') '# Originally, TQTec had users interactively input parameters, but that option has'
+write(*,'(A)') '# been abandoned in favor of using a control file in a flexible, commentable,'
+write(*,'(A)') '# modern input format. This format sets parameters (in any order) using the format'
+write(*,'(A)') '# PAR=value. Comments can be added to the file by starting a line with "#", but'
+write(*,'(A)') '# note that comments cannot be inserted within parameter blocks (e.g., between'
+write(*,'(A)') '# NUPLIFT= and the definition of the uplift events in the following lines).'
+write(*,'(A)') '#'
+write(*,'(A)') '# This text can be copied or redirected to a file, and used directly as a'
+write(*,'(A)') '# comprehensive example input file with explanations for each parameter:'
+write(*,'(A)') '###################################################################################'
+write(*,'(A)')
+write(*,'(A)')
+write(*,'(A)') '# Example TQTec/TQClim input file in modern format'
+write(*,'(A)')
+write(*,'(A)') '#---------- MODEL TIMING PARAMETERS ----------#'
+write(*,'(A)') '# Total model time (tqtec:Ma, tqclim:yr)'
+write(*,'(A)') 'T_TOTAL=50'
+write(*,'(A)')
+write(*,'(A)') '# Time step size (tqtec:Ma, tqclim:yr)'
+write(*,'(A)') 'DT=0.05'
+write(*,'(A)')
+write(*,'(A)') '# Time between geotherm outputs (tqtec:Ma, tqclim:yr)'
+write(*,'(A)') '# This only matters if -geotherm FILE is specified on the command line'
+write(*,'(A)') 'T_GEOTHERM_OUTPUT=1'
+write(*,'(A)')
+write(*,'(A)')
+write(*,'(A)') '#---------- MODEL SPATIAL PARAMETERS ----------#'
+write(*,'(A)') '# Maximum model depth (tqtec:km, tqclim:m)'
+write(*,'(A)') 'MAX_DEPTH=100'
+write(*,'(A)')
+write(*,'(A)') '# Vertical node spacing (tqtec:km, tqclim:m)'
+write(*,'(A)') 'DZ=0.1'
+write(*,'(A)')
+write(*,'(A)') '# Alternatively, the number of nodes can be specified and DZ will be calculated'
+write(*,'(A)') 'NNODES=1000'
+write(*,'(A)')
+write(*,'(A)')
+write(*,'(A)') '#---------- BOUNDARY CONDITIONS ----------#'
+write(*,'(A)') '# TQTec and TQClim impose surface temperature and heat flow boundary conditions.'
+write(*,'(A)') '# By default, tqtec and tqclim have constant surface temperatures, but there are'
+write(*,'(A)') '# options to have surface temperature vary over time. The surface heat flow is used'
+write(*,'(A)') '# to calculate the heat flow coming from the base ofthe model (the interior of the'
+write(*,'(A)') '# Earth), subtracting the total heat production.'
+write(*,'(A)')
+write(*,'(A)') '# Surface temperature (C)'
+write(*,'(A)') 'TEMP_SURF=10     # <== THIS IS REQUIRED!!! (Even if you want varying surface temps)'
+write(*,'(A)')
+write(*,'(A)') '# The boundary conditions for TQTec and TQClim are heat flow at the base of the'
+write(*,'(A)') '# model (not temperature!). However, the boundary condition input is the heat flow'
+write(*,'(A)') '# at the **surface**. This is the sum of the heat flow from deep in the Earth and'
+write(*,'(A)') '# heat produced by radioactive decay within the model (see HP_SURF and HP_DEP).'
+write(*,'(A)') '# Surface heat flow (mW/m^2 = kW/km^2)'
+write(*,'(A)') 'HF_SURF=75'
+write(*,'(A)')
+write(*,'(A)') '# Radioactive heat production in TQTec/TQClim is implemented as exponentially'
+write(*,'(A)') '# decaying from the surface downward. This requires a surface heat production value'
+write(*,'(A)') '# and a depth scale for the exponential decrease.'
+write(*,'(A)') '# Surface heat production (uW/m^3)'
+write(*,'(A)') 'HP_SURF=0'
+write(*,'(A)') '# Heat production e-folding depth (tqtec:km, tqclim:m)'
+write(*,'(A)') 'HP_DEP=5'
+write(*,'(A)')
+write(*,'(A)') '# Thermal conductivity at the base of the model (W/m/K)'
+write(*,'(A)') 'COND_BASE=3.0'
+write(*,'(A)')
+
+call error_exit(1)
+
+
+return
+
+
 end subroutine
 
 
