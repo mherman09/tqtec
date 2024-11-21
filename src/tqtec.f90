@@ -148,6 +148,9 @@ end module tqtec
 
 
 
+
+
+
 !==================================================================================================!
 !==================================================================================================!
 !==================================================================================================!
@@ -183,7 +186,7 @@ character(len=2) :: time_unit
 
 
 
-! Set name of executable
+! Set name of executable and associated variables
 #ifdef COMPILE_TQTEC
     exec_name = 'tqtec'
     time_unit = 'Ma'
@@ -198,7 +201,7 @@ character(len=2) :: time_unit
 
 
 ! Initialize default model parameters
-call initialize_defaults()                            ! tqtec_io.f90 (SHOULD THIS BE IN THIS FILE?)
+call initialize_defaults()                            ! tqtec_io.f90
 
 
 
@@ -213,8 +216,10 @@ endif
 
 
 
-! Read control file or user input from standard input (deprecated)
+! Read control file or user input from standard input
 call read_model_parameters()                          ! tqtec_io.f90
+
+
 
 
 
@@ -245,7 +250,7 @@ endif
 
 
 ! Print the geotherm to a file (-geotherm flag)
-if (geotherm_file.ne.'') then
+if (geotherm_file.ne.'') then                         ! tqtec_io.f90
     call print_geotherm( &
         geotherm_file,   &
         0,               &

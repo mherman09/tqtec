@@ -12,6 +12,7 @@ subroutine gcmdln()
 ! Parse tqtec command line arguments defining input/output modes and files
 !----
 
+
 use tqtec, only: input_file, &
                  input_mode, &
                  output_file, &
@@ -22,12 +23,15 @@ use tqtec, only: input_file, &
                  dz, &
                  dt
 
+
 implicit none
+
 
 ! Local variables
 character(len=512) :: arg
 character(len=8) :: exec_name
 integer :: i, j, ios, narg
+
 
 
 ! Initialize control variables
@@ -81,7 +85,8 @@ do while (i.le.narg)
     elseif (arg.eq.'-i'.or.arg.eq.'-interactive') then
         input_mode = 'user'
         write(0,*) 'WARNING: Interactive mode is no longer supported and may not work properly'
-        write(0,*) 'We recommend that you use an input file (-f)'
+        write(0,*) 'We recommend that you use an input file (-f) in modern format'
+        write(0,*) 'Type "'//trim(exec_name)//' -f:example" to see an example input file'
 
 
     ! Output file
@@ -153,7 +158,13 @@ end subroutine
 
 
 
+
+
+
 !--------------------------------------------------------------------------------------------------!
+
+
+
 
 
 
@@ -162,6 +173,7 @@ subroutine initialize_defaults()
 !----
 ! Initialize default model parameters
 !----
+
 
 use tqtec, only: nnodes, &
                  dz, &
@@ -173,7 +185,10 @@ use tqtec, only: nnodes, &
                  nuplift, &
                  nthrust, &
                  verbosity
+
+
 implicit none
+
 
 ! Variable = value       ! Value in old tqtec
 nnodes = 5000            ! N=1200                 ! number of finite difference spatial nodes
@@ -192,12 +207,18 @@ nuplift = 0              ! NUEP                   ! number of uplift/erosion eve
 nthrust = 0              ! NTP                    ! number of thrust events
 verbosity = 0                                     ! program verbosity
 
+
 return
+
 end subroutine
 
 
 
+
+
 !--------------------------------------------------------------------------------------------------!
+
+
 
 
 
@@ -211,12 +232,15 @@ subroutine read_model_parameters()
 ! Determine how to handle output
 !----
 
+
 use tqtec, only: input_mode, &
                  input_file, &
                  output_file, &
                  verbosity
 
+
 implicit none
+
 
 ! Local variables
 character(len=32) :: reply
@@ -292,7 +316,10 @@ endif
 
 
 return
+
 end subroutine
+
+
 
 
 
@@ -306,6 +333,7 @@ subroutine read_interactive()
 !----
 ! Manually enter model parameters and tectonic events
 !----
+
 
 use tqtec, only: input_file, &
                  t_total, &
@@ -328,7 +356,9 @@ use tqtec, only: input_file, &
                  nhfvars, &
                  hfvar
 
+
 implicit none
+
 
 ! Local variables
 integer :: i, j
@@ -527,10 +557,16 @@ write(*,*) 'To re-use this file, run tqtec -f ',trim(input_file)
 
 
 return
+
 end subroutine
 
 
+
+
 !--------------------------------------------------------------------------------------------------!
+
+
+
 
 
 subroutine read_input_file()
@@ -538,10 +574,13 @@ subroutine read_input_file()
 ! Determine whether to read fixed format (original) or free format (new) input file
 !----
 
+
 use tqtec, only: input_file, &
                  verbosity
 
+
 implicit none
+
 
 ! Local variables
 integer :: ios
@@ -603,11 +642,17 @@ endif
 
 
 return
+
 end subroutine
 
 
 
+
+
 !--------------------------------------------------------------------------------------------------!
+
+
+
 
 
 
@@ -881,51 +926,41 @@ if (verbosity.ge.3) then
 endif
 
 return
+
 end subroutine
+
+
 
 
 !--------------------------------------------------------------------------------------------------!
 
 
+
+
+
 subroutine read_input_file_new()
 !----
-! Read tqtec input file in more flexible format, e.g.:
+! Read tqtec input file in flexible, commentable, modern format. Variables are defined as:
 !
-! T_TOTAL=50
-! T_GEOTHERM_OUTPUT=5
-! TEMP_SURF=0
-! HF_SURF=30
-! COND_BASE=3
-! HP_SURF=0
-! HP_DEP=0
-! NLAYERS=0
-! NHORIZONS=10
-! 2 4 6 8 10 12 14 16 18 20
-! NBURIAL=1
-! 10 10 5 2
-! NUPLIFT=2
-! 20 20 10
-! 45 2 1
-! NTHRUST=1
-! 40 1 25 0 25
-! NHFVARS=1
-! 45 34
-! NTHICKEN=1
-! 5 2 1 0 9
-! NNODES=
-! DZ=
-! MAX_DEPTH=
+!     VAR=value
+!
+! Anything after "#" is ignored (commented), and blank lines are ignored.
 !----
+
 
 use tqtec
 
+
 implicit none
+
 
 ! Local variables
 integer :: i, j, ios, iend
 character(len=32) :: var, value
 character(len=512) :: input_line
 character(len=8) :: exec_name
+character(len=2) :: dist_unit
+character(len=2) :: time_unit
 double precision :: max_depth
 logical :: isMaxDepthDefined
 logical :: isLineBlank
@@ -959,8 +994,12 @@ thickenHorizons = .true.
 ! Set name of executable
 #ifdef COMPILE_TQTEC
     exec_name = 'tqtec'
+    dist_unit = 'km'
+    time_unit = 'Ma'
 #elif COMPILE_TQCLIM
     exec_name = 'tqclim'
+    dist_unit = 'm'
+    time_unit = 'yr'
 #else
     exec_name = 'NAME_ERR'
 #endif
@@ -1000,7 +1039,7 @@ do while (iend.eq.0)
     endif
 
 
-    ! Big if statement to handle all cases of VAR definitions
+    ! Big if statement to handle all VAR definitions
     if (var.eq.'T_TOTAL'.or.var.eq.'t_total') then
         read(value,*) t_total
     elseif (var.eq.'T_GEOTHERM_OUTPUT'.or.var.eq.'t_geotherm_output') then
@@ -1072,7 +1111,7 @@ do while (iend.eq.0)
             ! Check for errors during horizon data read
             if (ios.ne.0) then
                 write(0,*) trim(exec_name)//': error reading horizon parameters '
-                write(0,*) 'Looking for: dep1(km) dep2(km) ... depN(km)'
+                write(0,*) 'Looking for: dep1(',trim(dist_unit),') ... depN(',trim(dist_unit),')'
                 write(0,*) 'Read:        ',trim(input_line)
                 call error_exit(1)
             endif
@@ -1108,7 +1147,9 @@ do while (iend.eq.0)
                 ! Check for errors during burial data read
                 if (ios.ne.0) then
                     write(0,*) trim(exec_name)//': error reading burial parameters for burial event',i
-                    write(0,*) 'Looking for: start(Ma) duration(Ma) thick(km) cond(W/mK)'
+                    write(0,*) 'Looking for: start(',trim(time_unit),') ',&
+                                             'duration(',trim(time_unit),') ',&
+                                             'thick(',trim(dist_unit),') cond(W/m/K)'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
                 endif
@@ -1148,7 +1189,9 @@ do while (iend.eq.0)
                 ! Check for errors during uplift data read
                 if (ios.ne.0) then
                     write(0,*) trim(exec_name)//': error reading uplift parameters for uplift event',i
-                    write(0,*) 'Looking for: start(Ma) duration(Ma) thick(km)'
+                    write(0,*) 'Looking for: start(',trim(time_unit),') ',&
+                                             'duration(',trim(time_unit),') ',&
+                                             'thick(',trim(dist_unit),')'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
                 endif
@@ -1189,7 +1232,10 @@ do while (iend.eq.0)
                 ! Check for errors during thrust data read
                 if (ios.ne.0) then
                     write(0,*) trim(exec_name)//': error reading thrust parameters for thrust event',i
-                    write(0,*) 'Looking for: start(Ma) 1(upper)|2(lower) thick_init(km) depth(km) thick_final(km)'
+                    write(0,*) 'Looking for: start(',trim(time_unit),') 1(upper)|2(lower) ',&
+                                             'thick_init(',trim(dist_unit),') ',&
+                                             'depth(',trim(dist_unit),') ',&
+                                             'thick_final(',trim(dist_unit),')'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
                 endif
@@ -1230,7 +1276,7 @@ do while (iend.eq.0)
                 ! Check for errors during heat flow variation data read
                 if (ios.ne.0) then
                     write(0,*) trim(exec_name)//': error reading heat flow variation parameters for event',i
-                    write(0,*) 'Looking for: start(Ma) heatflow(mW/m2)'
+                    write(0,*) 'Looking for: start(',trim(time_unit),') heatflow(mW/m^2)'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
                 endif
@@ -1274,7 +1320,11 @@ do while (iend.eq.0)
                 ! Check for errors during thickening data read
                 if (ios.ne.0) then
                     write(0,*) trim(exec_name)//': error reading thickening event parameters for thickening event',i
-                    write(0,*) 'Looking for: start(Ma) duration(Ma) thicken(km) crusttop(km) thick0(km)'
+                    write(0,*) 'Looking for: start(',trim(time_unit),') ',&
+                                             'duration(',trim(time_unit),') ',&
+                                             'thicken(',trim(dist_unit),') ',&
+                                             'crusttop(',trim(dist_unit),') ',&
+                                             'thick0(',trim(dist_unit),')'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
                 endif
@@ -1318,7 +1368,7 @@ do while (iend.eq.0)
                 ! Check for errors during temp step change data read
                 if (ios.ne.0) then
                     write(0,*) trim(exec_name)//': error reading temp step change parameter for event',i
-                    write(0,*) 'Looking for: start(yr) temp(C)'
+                    write(0,*) 'Looking for: start(',trim(time_unit),') temp(C)'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
                 endif
@@ -1352,7 +1402,8 @@ do while (iend.eq.0)
                 ! Check for errors during temp ramp change data read
                 if (ios.ne.0) then
                     write(0,*) trim(exec_name)//': error reading temp ramp change parameter for event',i
-                    write(0,*) 'Looking for: start(yr) duration(yr) temp(C)'
+                    write(0,*) 'Looking for: start(',trim(time_unit),') ',&
+                                             'duration(',trim(time_unit),') temp(C)'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
                 endif
@@ -1386,7 +1437,9 @@ do while (iend.eq.0)
                 ! Check for errors during temp sinusoid data read
                 if (ios.ne.0) then
                     write(0,*) trim(exec_name)//': error reading temp sinusoid change parameter for event',i
-                    write(0,*) 'Looking for: start(yr) duration(yr) amplitude(C) frequency(/yr)'
+                    write(0,*) 'Looking for: start(',trim(time_unit),') ',&
+                                             'duration(',trim(time_unit),') ',&
+                                             'amplitude(C) frequency(1/',trim(time_unit),')'
                     write(0,*) 'Read:        ',trim(input_line)
                     call error_exit(1)
                 endif
@@ -1456,6 +1509,7 @@ endif
 
 
 return
+
 end subroutine
 
 
@@ -1584,7 +1638,11 @@ end subroutine
 
 
 
+
+
 !--------------------------------------------------------------------------------------------------!
+
+
 
 
 
