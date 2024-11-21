@@ -1364,6 +1364,40 @@ do while (iend.eq.0)
         endif
 
 
+    !--- Surface Temperature Linear Changes ---!
+    elseif (var.eq.'NTEMPSIN') then
+
+        read(value,*) ntempsin
+
+        if (ntempsin.gt.0) then
+
+            allocate(temp_sin_dat(ntempsin,4))
+
+            do i = 1,ntempsin
+
+                ! Skip blank or commented lines
+                read(8,'(A)') input_line
+                do while (isLineBlank(input_line))
+                    read(8,'(A)') input_line
+                enddo
+
+                read(input_line,*,iostat=ios) (temp_sin_dat(i,j),j=1,4) ! start duration amp freq
+
+                ! Check for errors during temp sinusoid data read
+                if (ios.ne.0) then
+                    write(0,*) trim(exec_name)//': error reading temp sinusoid change parameter for event',i
+                    write(0,*) 'Looking for: start(yr) duration(yr) amplitude(C) frequency(/yr)'
+                    write(0,*) 'Read:        ',trim(input_line)
+                    call error_exit(1)
+                endif
+            enddo
+
+            ! We have something to do!
+            isActionDefined = .true.
+
+        endif
+
+
     else
         write(0,*) trim(exec_name)//': no variable option named "',trim(var),'"'
         call error_exit(1)
@@ -1425,7 +1459,13 @@ return
 end subroutine
 
 
+
+
+
 !--------------------------------------------------------------------------------------------------!
+
+
+
 
 
 function isLineBlank(input_line)
@@ -1460,6 +1500,8 @@ end function
 !-------------------------------------- OUTPUTS ---------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
+
+
 
 
 subroutine output()
@@ -1540,7 +1582,11 @@ return
 end subroutine
 
 
+
+
 !--------------------------------------------------------------------------------------------------!
+
+
 
 
 subroutine print_geotherm( &
@@ -1599,7 +1645,15 @@ return
 end subroutine
 
 
+
+
+
+
 !--------------------------------------------------------------------------------------------------!
+
+
+
+
 
 
 subroutine print_model_parameters()
@@ -1791,7 +1845,19 @@ end subroutine
 
 
 
+
+
+
+
+
 !--------------------------------------------------------------------------------------------------!
+
+
+
+
+
+
+
 
 
 
@@ -1823,15 +1889,17 @@ prog_name = 'TQTec'
 time_unit = 'Ma'
 dist_unit = 'km'
 t_total = '100'
-dt = '0.1'
+dt = '0.01'
 dt_geotherm = '1'
 max_depth = '50'
 dz = '0.01'
 ntempsteps = '0'
 tempstepdat = ''
+ntempramps = '0'
+temprampdat = ''
 nhfvars = '1'
-hfvardat = '10 90'
-horizondat = '0 5 10 15 20 25 30 35 40 45'
+hfvardat = '85 90'
+horizondat = '0 1 2 3 4 5 6 7 8 9'
 #elif COMPILE_TQCLIM
 prog_name = 'TQClim'
 time_unit = 'yr'
@@ -1945,11 +2013,12 @@ write(*,'(A)') '#0 10 2.5'
 write(*,'(A)')
 write(*,'(A)')
 write(*,'(A)') '#---------- HORIZON TRACKING ----------#'
-write(*,'(A)') '# Track samples that start at specified depths (km|m)'
+write(*,'(A)') '# Track samples that start at specified depths ('//trim(dist_unit)//')'
 write(*,'(A)') 'NHORIZONS=10'
 write(*,'(A)') trim(horizondat)
 write(*,'(A)')
 write(*,'(A)')
+
 write(*,'(A)') '#---------- TECTONIC EVENTS ----------#'
 #ifdef COMPILE_TQTEC
 write(*,'(A)') '# TQTec operates by specifying tectonic actions that affect the thermal regime.'
@@ -1957,15 +2026,16 @@ write(*,'(A)') '# Several tectonic actions are available: burial, uplift/erosion
 write(*,'(A)') '# thrust sheet emplacement, and bulk thickening/thinning.'
 write(*,'(A)')
 write(*,'(A)') '# Burial events (material added to top)'
-write(*,'(A)') '# Start('//trim(time_unit)//') Duration('//trim(time_unit)//') Thickness(km|m) '//&
-                  'Conductivity(W/m/K)'
+write(*,'(A)') '# Start('//trim(time_unit)//') Duration('//trim(time_unit)//') '//&
+                  'Thickness('//trim(dist_unit)//') Conductivity(W/m/K)'
 write(*,'(A)') 'NBURIAL=1'
-write(*,'(A)') '10.5 0.5 1.0 2.0'
+write(*,'(A)') '25 5 2.5 2.0'
 write(*,'(A)')
 write(*,'(A)') '# Uplift/erosion events (material removed from top)'
-write(*,'(A)') '# Start('//trim(time_unit)//') Duration('//trim(time_unit)//') Thickness(km|m)'
+write(*,'(A)') '# Start('//trim(time_unit)//') Duration('//trim(time_unit)//') '//&
+                  'Thickness('//trim(dist_unit)//')'
 write(*,'(A)') 'NUPLIFT=1'
-write(*,'(A)') '11.5 0.5 1.0'
+write(*,'(A)') '45 5.0 6.0'
 write(*,'(A)')
 write(*,'(A)') '# Thrust sheet emplacement events (model duplicated and added to top)'
 write(*,'(A)') '# The user chooses whether to track the horizons that are duplicated in the'
@@ -1973,17 +2043,18 @@ write(*,'(A)') '# hanging wall (upper plate) or footwall (lower plate). The init
 write(*,'(A)') '# of the thrust sheet is the amount that is duplicated, the depth is where the'
 write(*,'(A)') '# bottom of the thrust sheet is emplaced (often 0), and the final thickness takes'
 write(*,'(A)') '# into account any material from the hanging wall that was quickly eroded.'
-write(*,'(A)') '# Start('//trim(time_unit)//') HW(1)|FW(2) Init_Thickness(km|m) Depth(km|m) '//&
-                  'Final_Thickness(km|m)'
+write(*,'(A)') '# Start('//trim(time_unit)//') HW(1)|FW(2) Init_Thickness('//trim(dist_unit)//') '//&
+                  'Depth('//trim(dist_unit)//') Final_Thickness('//trim(dist_unit)//')'
 write(*,'(A)') 'NTHRUST=1'
-write(*,'(A)') '12.5  1  0.5  0.0  0.5'
+write(*,'(A)') '5  1  4  0  4'
 write(*,'(A)')
 write(*,'(A)') '# Thickening/thinning events'
 write(*,'(A)') '# Set thickening to a negative value to thin the crust'
-write(*,'(A)') '# Start('//trim(time_unit)//') Duration('//trim(time_unit)//') Thickening(km|m) '//&
-                  'Top_Of_Crust(km|m) Initial_Thickness(km|m)'
+write(*,'(A)') '# Start('//trim(time_unit)//') Duration('//trim(time_unit)//') '//&
+                  'Thickening('//trim(dist_unit)//') Top_Of_Crust('//trim(dist_unit)//') '//&
+                  'Initial_Thickness('//trim(dist_unit)//')'
 write(*,'(A)') 'NTHICKEN=1'
-write(*,'(A)') '13.5 0.5 1.0 5.0 10.0'
+write(*,'(A)') '65  5  3  2 6'
 write(*,'(A)')
 write(*,'(A)') '# By default, tracked horizons will move with thickening crust, but user can'
 write(*,'(A)') '# specify that the horizons remain at the same depth throughout thickening event.'
@@ -1993,6 +2064,7 @@ write(*,'(A)') '# This TQClim example does not include tectonic actions because 
 write(*,'(A)') '# TQClim is on shallower processes occurring over shorter timescales. However,'
 write(*,'(A)') '# tectonic actions can be used in TQClim. To see them, type "tqtec -f:example".'
 #endif
+
 write(*,'(A)')
 
 call error_exit(1)

@@ -132,10 +132,10 @@ integer, allocatable :: horizon_shift(:,:)
 
 integer :: ntempsteps !---------------------------! number of surface temperature step variations
 integer :: ntempramps !---------------------------! number of surface temperature ramp variations
-logical :: isTempSin !----------------------------! Is temperature varying sinusoidally?
+integer :: ntempsin   !---------------------------! number of surface temperature ramp variations
 double precision, allocatable :: temp_step_dat(:,:)   ! (1) start (2) new temp
 double precision, allocatable :: temp_ramp_dat(:,:)   ! (1) start (2) duration (3) temp change
-double precision :: temp_sin_dat(3)                   ! (1) amplitude (2) frequency (3) phase
+double precision, allocatable :: temp_sin_dat(:,:)    ! (1) start (2) duration (3) amp (4) freq
 double precision, allocatable :: temp_surf_var(:)     ! surface temperature variations over time
 
 

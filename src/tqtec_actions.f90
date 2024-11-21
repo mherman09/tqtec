@@ -43,6 +43,8 @@ use tqtec, only: timing_file, &
                  temp_step_dat, &
                  ntempramps, &
                  temp_ramp_dat, &
+                 ntempsin, &
+                 temp_sin_dat, &
                  temp_surf_var
 
 implicit none
@@ -62,6 +64,9 @@ double precision :: delta_depth
 integer :: intqt(nhfvars)
 integer, allocatable :: total_shift(:)
 double precision :: thickening_ratio
+double precision :: amp
+double precision :: freq
+double precision, parameter :: pi = 4.0d0*atan(1.0d0)
 logical :: isThinning
 
 
@@ -93,7 +98,8 @@ endif
 
 
 !**************************************************************************************************!
-! *** Burial Events ***
+! *** Burial Events *******************************************************************************!
+!**************************************************************************************************!
 do i = 1,nburial
     nstart = int(burial_dat(i,1)/dt)              ! Starting timestep
     nduration = int(burial_dat(i,2)/dt)           ! Duration in timesteps
@@ -116,6 +122,7 @@ enddo
 
 !**************************************************************************************************!
 ! *** Uplift/Erosion Events ***********************************************************************!
+!**************************************************************************************************!
 do i = 1,nuplift
     nstart = int(uplift_dat(i,1)/dt)              ! Starting timestep
     nduration = int(uplift_dat(i,2)/dt)           ! Duration in timesteps
@@ -137,6 +144,7 @@ enddo
 
 !**************************************************************************************************!
 ! *** Thrust Events *******************************************************************************!
+!**************************************************************************************************!
 do i = 1,nthrust
     nstart = int(thrust_dat(i,1)/dt) + 1          ! Timestep of thrust faulting
     action(nstart) = 3                            ! Set thrust action code = 3
@@ -147,6 +155,7 @@ enddo
 
 !**************************************************************************************************!
 ! *** Surface Heat Flow Changes *******************************************************************!
+!**************************************************************************************************!
 hf_surf_var = hf_surf                             ! Initialize surface heat flow at initial value
 do i = 1,nhfvars
     intqt(i) = int(hfvar(i,1)/dt)                 ! Timestep of heat flow change
@@ -182,6 +191,7 @@ enddo
 
 !**************************************************************************************************!
 ! *** Bulk Crustal Thickening/Thinning ************************************************************!
+!**************************************************************************************************!
 do i = 1,nthicken
 
     ! Check whether we are thickening or thinning
@@ -266,6 +276,12 @@ do i = 1,nthicken
 enddo
 
 
+
+
+!**************************************************************************************************!
+! *** Surface Temperature Variations **************************************************************!
+!**************************************************************************************************!
+
 ! Add step temperature changes to surface temperature
 do i = 1,ntempsteps
     jbeg = int(temp_step_dat(i,1)/dt)
@@ -291,6 +307,23 @@ do i = 1,ntempramps
         temp_surf_var(j) = temp_surf_var(j) + temp_ramp_dat(i,3)
     enddo
 enddo
+
+! Add sinusoidal temperature variations to surface temperature
+do i = 1,ntempsin
+    jbeg = int(temp_sin_dat(i,1)/dt) + 1
+    jend = jbeg + int(temp_sin_dat(i,2)/dt) - 1
+    amp = temp_sin_dat(i,3)
+    freq = temp_sin_dat(i,4)
+    if (jend.gt.nt_total) then
+        write(0,*) jbeg,jend,nt_total
+        write(0,*) 'tqclim: end of temperature sinusoid period goes beyond model duration'
+        call error_exit(1)
+    endif
+    do j = jbeg,jend
+        temp_surf_var(j) = temp_surf_var(j) + amp*sin(2.0d0*pi*freq*dble(j-jbeg)*dt)
+    enddo
+enddo
+
 
 
 
