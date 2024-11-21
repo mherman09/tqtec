@@ -1872,12 +1872,12 @@ endif
 
 ! Print usage statement
 #ifdef COMPILE_TQTEC
-    write(0,*) 'Usage: tqtec -i|-f INPUT_FILE -o OUTPUT_FILE [-geotherm geotherm_file] [...options...]'
+write(0,*) 'Usage: tqtec -i|-f INPUT_FILE -o OUTPUT_FILE [-geotherm geotherm_file] [...options...]'
 #elif COMPILE_TQCLIM
-    write(0,*) 'Usage: tqclim -i|-f INPUT_FILE -o OUTPUT_FILE [-geotherm geotherm_file] [...options...]'
+write(0,*) 'Usage: tqclim -i|-f INPUT_FILE -o OUTPUT_FILE [-geotherm geotherm_file] [...options...]'
 #else
-    write(0,*) 'No usage statement for this pre-processor option...exiting'
-    call error_exit(1)
+write(0,*) 'No usage statement for this pre-processor option...exiting'
+call error_exit(1)
 #endif
 write(0,*)
 write(0,*) 'INPUTS'
@@ -1938,9 +1938,19 @@ character(len=1) :: ntempsteps
 character(len=6) :: tempstepdat
 character(len=1) :: ntempramps
 character(len=10) :: temprampdat
+character(len=1) :: ntempsin
+character(len=10) :: tempsindat
 character(len=1) :: nhfvars
 character(len=5) :: hfvardat
 character(len=64) :: horizondat
+character(len=1) :: nburial
+character(len=12) :: burialdat
+character(len=1) :: nuplift
+character(len=10) :: upliftdat
+character(len=1) :: nthrust
+character(len=9) :: thrustdat
+character(len=1) :: nthicken
+character(len=10) :: thickendat
 
 #ifdef COMPILE_TQTEC
 prog_name = 'TQTec'
@@ -1955,9 +1965,19 @@ ntempsteps = '0'
 tempstepdat = ''
 ntempramps = '0'
 temprampdat = ''
+ntempsin = '0'
+tempsindat = ''
 nhfvars = '1'
 hfvardat = '85 90'
 horizondat = '0 1 2 3 4 5 6 7 8 9'
+nburial = '1'
+burialdat = '25 5 2.5 2.0'
+nuplift = '1'
+upliftdat = '45 5.0 6.0'
+nthrust = '1'
+thrustdat = '5 1 4 0 4'
+nthicken = '1'
+thickendat = '65 5 3 2 6'
 #elif COMPILE_TQCLIM
 prog_name = 'TQClim'
 time_unit = 'yr'
@@ -1971,9 +1991,19 @@ ntempsteps = '1'
 tempstepdat = '100 -5'
 ntempramps = '1'
 temprampdat = '1100 200 5'
+ntempsin = '1'
+tempsindat = '0 2000 1 1'
 nhfvars = '0'
 hfvardat = ''
 horizondat = '0 50 100 150 200 250 300 350 400 450'
+nburial = '0'
+burialdat = ''
+nuplift = '0'
+upliftdat = ''
+nthrust = '0'
+thrustdat = ''
+nthicken = '0'
+thickendat = ''
 #endif
 
 write(*,'(A)')
@@ -2018,6 +2048,10 @@ write(*,'(A)')
 write(*,'(A)') '#---------- BOUNDARY CONDITIONS ----------#'
 write(*,'(A)') '# By default, '//trim(prog_name)//' has constant surface temperatures, but options'
 write(*,'(A)') '# described below allow the user vary the surface temperature over time.'
+#ifdef COMPILE_TQTEC
+write(*,'(A)') '# In this example, the number of surface temperature variations is set to 0,'
+write(*,'(A)') '# so the surface temperature remains constant throughout the model.'
+#endif
 write(*,'(A)')
 write(*,'(A)') '# Surface temperature - constant, initial value (C)'
 write(*,'(A)') '# This is required even if you want varying surface temperatures!'
@@ -2032,6 +2066,12 @@ write(*,'(A)') '# Ramp temperature changes'
 write(*,'(A)') '# Start_Time('//trim(time_unit)//') Duration('//trim(time_unit)//') Temperature_Change(C)'
 write(*,'(A)') 'NTEMPRAMPS='//ntempramps
 write(*,'(A)') trim(temprampdat)
+write(*,'(A)')
+write(*,'(A)') '# Cyclic temperature changes'
+write(*,'(A)') '# Start_Time('//trim(time_unit)//') Duration('//trim(time_unit)//') Amplitude(C) '//&
+                  'Frequency(1/'//trim(time_unit)//')'
+write(*,'(A)') 'NTEMPSIN='//ntempsin
+write(*,'(A)') trim(tempsindat)
 write(*,'(A)')
 write(*,'(A)')
 write(*,'(A)') '# At the base of the model, '//trim(prog_name)//' has a heat flow (not temperature!)'
@@ -2078,22 +2118,26 @@ write(*,'(A)')
 write(*,'(A)')
 
 write(*,'(A)') '#---------- TECTONIC EVENTS ----------#'
-#ifdef COMPILE_TQTEC
-write(*,'(A)') '# TQTec operates by specifying tectonic actions that affect the thermal regime.'
-write(*,'(A)') '# Several tectonic actions are available: burial, uplift/erosion (exhumation),'
+write(*,'(A)') '# '//trim(prog_name)//' operates by specifying tectonic actions that affect the thermal'
+write(*,'(A)') '# regime. Several tectonic actions are available: burial, uplift/erosion (exhumation),'
 write(*,'(A)') '# thrust sheet emplacement, and bulk thickening/thinning.'
+#if COMPILE_TQCLIM
+write(*,'(A)') '# This TQClim example does not include tectonic actions because the focus of'
+write(*,'(A)') '# TQClim is on shallower processes occurring over shorter timescales. However,'
+write(*,'(A)') '# tectonic actions can be used in TQClim.'
+#endif
 write(*,'(A)')
 write(*,'(A)') '# Burial events (material added to top)'
 write(*,'(A)') '# Start('//trim(time_unit)//') Duration('//trim(time_unit)//') '//&
                   'Thickness('//trim(dist_unit)//') Conductivity(W/m/K)'
-write(*,'(A)') 'NBURIAL=1'
-write(*,'(A)') '25 5 2.5 2.0'
+write(*,'(A)') 'NBURIAL='//trim(nburial)
+write(*,'(A)') trim(burialdat)
 write(*,'(A)')
 write(*,'(A)') '# Uplift/erosion events (material removed from top)'
 write(*,'(A)') '# Start('//trim(time_unit)//') Duration('//trim(time_unit)//') '//&
                   'Thickness('//trim(dist_unit)//')'
-write(*,'(A)') 'NUPLIFT=1'
-write(*,'(A)') '45 5.0 6.0'
+write(*,'(A)') 'NUPLIFT='//trim(nuplift)
+write(*,'(A)') trim(upliftdat)
 write(*,'(A)')
 write(*,'(A)') '# Thrust sheet emplacement events (model duplicated and added to top)'
 write(*,'(A)') '# The user chooses whether to track the horizons that are duplicated in the'
@@ -2103,26 +2147,24 @@ write(*,'(A)') '# bottom of the thrust sheet is emplaced (often 0), and the fina
 write(*,'(A)') '# into account any material from the hanging wall that was quickly eroded.'
 write(*,'(A)') '# Start('//trim(time_unit)//') HW(1)|FW(2) Init_Thickness('//trim(dist_unit)//') '//&
                   'Depth('//trim(dist_unit)//') Final_Thickness('//trim(dist_unit)//')'
-write(*,'(A)') 'NTHRUST=1'
-write(*,'(A)') '5  1  4  0  4'
+write(*,'(A)') 'NTHRUST='//trim(nthrust)
+write(*,'(A)') trim(thrustdat)
 write(*,'(A)')
 write(*,'(A)') '# Thickening/thinning events'
 write(*,'(A)') '# Set thickening to a negative value to thin the crust'
 write(*,'(A)') '# Start('//trim(time_unit)//') Duration('//trim(time_unit)//') '//&
                   'Thickening('//trim(dist_unit)//') Top_Of_Crust('//trim(dist_unit)//') '//&
                   'Initial_Thickness('//trim(dist_unit)//')'
-write(*,'(A)') 'NTHICKEN=1'
-write(*,'(A)') '65  5  3  2 6'
+write(*,'(A)') 'NTHICKEN='//trim(nthicken)
+write(*,'(A)') trim(thickendat)
 write(*,'(A)')
 write(*,'(A)') '# By default, tracked horizons will move with thickening crust, but user can'
 write(*,'(A)') '# specify that the horizons remain at the same depth throughout thickening event.'
+#ifdef COMPILE_TQTEC
 write(*,'(A)') 'thickenHorizons=T'
 #elif COMPILE_TQCLIM
-write(*,'(A)') '# This TQClim example does not include tectonic actions because the focus of'
-write(*,'(A)') '# TQClim is on shallower processes occurring over shorter timescales. However,'
-write(*,'(A)') '# tectonic actions can be used in TQClim. To see them, type "tqtec -f:example".'
+write(*,'(A)') '#thickenHorizons=T'
 #endif
-
 write(*,'(A)')
 
 call error_exit(1)
