@@ -345,10 +345,10 @@ do while (istep.lt.nt_total)
         ! Duplicate material and insert it (thrusting)
         if (iplate.eq.1) then
             ! Track horizons in the hanging wall (upper plate) of the thrust sheet
-            call thrust_upperplate()
+            call thrust('upper')
         elseif (iplate.eq.2) then
             ! Track horizons in the footwall (lower plate) of the thrust sheet
-            call thrust_lowerplate()
+            call thrust('lower')
         endif
     endif
 

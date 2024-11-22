@@ -134,7 +134,7 @@ enddo
 !**************************************************************************************************!
 do i = 1,nthrust
     nstart = int(thrust_dat(i,1)/dt) + 1          ! Timestep of thrust faulting
-    action_array(j) = action_array(j) + 4
+    action_array(nstart) = action_array(nstart) + 4
     thrust_step(i) = nstart                       ! Save thrust timestep for each thrust action
     ! THTYPE(I): thrust_dat(i,2)
 enddo
@@ -477,8 +477,21 @@ do i = 1,nthrust
     thrust_dep = int(thrust_dat(i,4)/dz)  ! Depth of emplacement, in nodes
     thick_end = int(thrust_dat(i,5)/dz)   ! Final thickness of thrust sheet, in nodes
 
+    if (thrust_dat(i,5).le.0.0d0) then
+        write(0,*) 'Final thrust sheet thickness must be greater than 0'
+        write(0,*) 'Final thickness:   ',thrust_dat(i,5)
+        call error_exit(1)
+    endif
     if (thick_init.lt.thick_end) then
-        write(0,*) 'tqtec: final thrust sheet thickness must be <= initial thickness'
+        write(0,*) 'Final thrust sheet thickness must be <= initial thickness'
+        write(0,*) 'Initial thickness: ',thrust_dat(i,3)
+        write(0,*) 'Final thickness:   ',thrust_dat(i,5)
+        call error_exit(1)
+    endif
+    if (thrust_dat(i,4).gt.thrust_dat(i,4)) then
+        write(0,*) 'Thrust sheet emplacement depth must be less than or equal to final thickness'
+        write(0,*) 'Emplacement depth: ',thrust_dat(i,4)
+        write(0,*) 'Final thickness:   ',thrust_dat(i,5)
         call error_exit(1)
     endif
     if (2*thick_init.ge.nnodes) then
@@ -621,118 +634,7 @@ end subroutine
 
 
 
-subroutine thrust_upperplate()
-!----
-! Generate a thrust fault, keeping the horizons in the upper plate
-!----
-
-use tqtec, only: verbosity, &
-                 nnodes, &
-                 istep, &
-                 dz, &
-                 conductivity, &
-                 temp, &
-                 hp, &
-                 nhorizons, &
-                 depth_node, &
-                 temp_surf, &
-                 nthrust, &
-                 thrust_step, &
-                 thrust_dat
-
-implicit none
-
-! Local variables
-integer :: i, k, ismooth, nsmooth
-integer :: thick_init, thrust_dep, thick_end, ierosion
-double precision :: upl_conductivity(nnodes), upl_hp(nnodes), upl_temp(nnodes)
-
-
-if (verbosity.ge.3) then
-    write(*,*) '    thrusting horizons into upper plate...'
-endif
-
-
-! Set the number of smoothing passes
-nsmooth = 10
-
-! Set the thrust number
-k = 0
-do i = 1,nthrust
-    if (thrust_step(i).eq.istep) then
-        k = i
-        exit
-    endif
-enddo
-
-! Save thrust sheet parameters
-thick_init = int(thrust_dat(k,3)/dz)  ! Thickness prior to thrusting, in nodes
-thrust_dep = int(thrust_dat(k,4)/dz)  ! Depth of emplacement, in nodes
-thick_end = int(thrust_dat(k,5)/dz)   ! Final thickness of thrust sheet, in nodes
-
-
-! C     COPY THE PART OF THE ARRAY THAT WILL BE THRUSTED AND ERODE OFF
-! C     AMOUNT THAT GETS ERODED DURING THRUST EVENT.
-ierosion = thick_init - thick_end
-do i = ierosion+1,thick_init
-    upl_conductivity(i-ierosion) = conductivity(i)
-    upl_hp(i-ierosion) = hp(i)
-    upl_temp(i-ierosion) = temp(i)
-enddo
-
-! C     REMOVE THE OLD ARRAY (LOWER PLATE) DOWN TO THE DEPTH OF
-! C     EMPLACEMENT AND MOVE THE REST OF THE ARRAY DOWN TO MAKE ROOM
-! C     FOR THE UPPER PLATE.
-do i = thrust_dep+1,nnodes
-    conductivity(i-thrust_dep) = conductivity(i)
-    hp(i-thrust_dep) = hp(i)
-    temp(i-thrust_dep) = temp(i)
-enddo
-do i = nnodes,thick_end+1,-1
-    conductivity(i) = conductivity(i-thick_end)
-    hp(i) = hp(i-thick_end)
-    temp(i) = temp(i-thick_end)
-enddo
-
-! C     PUT THE TWO ARRAYS TOGETHER
-! I.e., put the thrust sheet on top
-do i = 1,thick_end
-    conductivity(i) = upl_conductivity(i)
-    hp(i) = upl_hp(i)
-    temp(i) = upl_temp(i)
-enddo
-
-! C     MOVE POINTS OF INTEREST AROUND FOR UPPER PLATE:
-! I.e., move the specified horizons into the upper plate
-do i = 1,nhorizons
-    depth_node(i) = depth_node(i) - ierosion
-    if (depth_node(i).le.0) then
-        depth_node(i) = 0
-    endif
-enddo
-! WHAT HAPPENS IF THE THRUST SHEET IS THINNER THAN THE DEEPEST HORIZON? THIS HORIZON CANNOT GO INTO
-! THE UPPER PLATE THEN...
-
-! Smooth temperatures where there is a sharp thermal gradient due to instantaneous thrusting
-do ismooth = 1,nsmooth
-    temp(1) = (temp_surf+temp(2))/2.0d0
-    temp(2) = (temp(1)+temp(2)+temp(3))/3.0d0
-    do i = 3,2*thick_init
-        temp(i) = (temp(i-2)+temp(i-1)+temp(i)+temp(i+1)+temp(i+2))/5.0d0
-    enddo
-enddo
-! NOTE: Smoothing does not take into account a thrust sheet emplaced at depth
-
-return
-end subroutine
-
-
-
-!--------------------------------------------------------------------------------------------------!
-
-
-
-subroutine thrust_lowerplate()
+subroutine thrust(plate)
 !----
 ! Generate a thrust fault, moving the horizons to the lower plate
 !----
@@ -751,7 +653,13 @@ use tqtec, only: verbosity, &
                  thrust_step, &
                  thrust_dat
 
+
 implicit none
+
+
+! Arguments
+character(len=*) :: plate
+
 
 ! Local variables
 integer :: i, k, ismooth, nsmooth
@@ -759,13 +667,15 @@ integer :: thick_init, thrust_dep, thick_end, ierosion, dnode
 double precision :: upl_conductivity(nnodes), upl_hp(nnodes), upl_temp(nnodes)
 
 
+
 if (verbosity.ge.3) then
-    write(*,*) '    thrusting horizons into lower plate...'
+    write(*,*) '    thrusting horizons into ',trim(plate),' plate...'
 endif
 
 
 ! Set the number of smoothing passes
 nsmooth = 10
+
 
 ! Set the thrust number
 k = 0
@@ -775,51 +685,74 @@ do i = 1,nthrust
         exit
     endif
 enddo
+if (k.le.0.or.k.gt.nthrust) then
+    write(0,*) 'Error setting thrust number at istep=',istep
+    call error_exit(1)
+endif
 
-! Save thrust sheet parameters
-thick_init = int(thrust_dat(k,3)/dz)  ! Thickness prior to thrusting, in nodes
+
+! Save thrust sheet geometric parameters
+thick_init = int(thrust_dat(k,3)/dz)  ! Thickness of thrust sheet prior to thrusting, in nodes
 thrust_dep = int(thrust_dat(k,4)/dz)  ! Depth of emplacement, in nodes
 thick_end = int(thrust_dat(k,5)/dz)   ! Final thickness of thrust sheet, in nodes
 
 
-dnode = thick_end - thrust_dep
-
-! C     COPY THE PART OF THE ARRAY THAT WILL BE THRUSTED AND ERODE OFF
-! C     THE AMOUNT THAT GETS ERODED DURING THE THRUST EVENT.
+! Number of nodes to be instantaneously removed from the top of the thrust sheet
 ierosion = thick_init - thick_end
+
+! Save the properties of nodes in the thrust sheet, minus the nodes eroded off the top
 do i = ierosion+1,thick_init
     upl_conductivity(i-ierosion) = conductivity(i)
     upl_hp(i-ierosion) = hp(i)
     upl_temp(i-ierosion) = temp(i)
 enddo
 
-! C     REMOVE THE OLD ARRAY (LOWER PLATE) DOWN TO THE DEPTH OF
-! C     EMPLACEMENT AND MOVE THE REST OF THE ARRAY DOWN TO MAKE ROOM
-! C     FOR THE UPPER PLATE.
+
+! Copy the existing model array (the lower plate/footwall) from the depth of thrust sheet
+! emplacement to the base of the model to the top of the model. This removes the array 
+! representing the lower plate/footwall from the surface down to the depth of emplacement.
 do i = thrust_dep+1,nnodes
     conductivity(i-thrust_dep) = conductivity(i)
     hp(i-thrust_dep) = hp(i)
     temp(i-thrust_dep) = temp(i)
 enddo
+
+
+! Shift the model array (lower plate/footwall) down by the final thickness of the thrust sheet
+! to make room for the duplicated nodes (upper plate/hanging wall)
 do i = nnodes,thick_end+1,-1
     conductivity(i) = conductivity(i-thick_end)
     hp(i) = hp(i-thick_end)
     temp(i) = temp(i-thick_end)
 enddo
 
-! C     PUT THE TWO ARRAYS TOGETHER
-! I.e., put the thrust sheet on top
+
+! Put the thrust sheet nodes (upper plate/hanging wall) on top
 do i = 1,thick_end
     conductivity(i) = upl_conductivity(i)
     hp(i) = upl_hp(i)
     temp(i) = upl_temp(i)
 enddo
 
-! C     MOVE POINTS OF INTEREST AROUND
-! C     FOR LOWER PLATE:
-do i = 1,nhorizons
-    depth_node(i) = depth_node(i) + dnode
-enddo
+
+! Move tracked horizons into correct location in upper or lower plate
+if (plate.eq.'upper') then
+    do i = 1,nhorizons
+        depth_node(i) = depth_node(i) - ierosion
+        if (depth_node(i).le.0) then
+            depth_node(i) = 0
+        endif
+    enddo
+elseif (plate.eq.'lower') then
+    dnode = thick_end - thrust_dep
+    do i = 1,nhorizons
+        depth_node(i) = depth_node(i) + dnode
+    enddo
+else
+    write(0,*) 'no plate named "',trim(plate),'"'
+    call error_exit(1)
+endif
+
 
 ! Smooth temperatures where there is a sharp thermal gradient due to instantaneous thrusting
 do ismooth = 1,nsmooth
