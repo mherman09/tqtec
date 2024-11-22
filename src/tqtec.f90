@@ -85,7 +85,14 @@ double precision :: temp_base_adj                 ! temp at node nnodes+1 (c)
 
 ! Thermal/tectonic/climate events
 logical :: isActionDefined
-integer, allocatable :: action(:)                 ! burial (1), erosion (2), thrust (3)
+integer, allocatable :: action_array(:)           ! Tectonic/thermal/climatic actions encoded as
+                                                  ! base 2 digits (saved as base 10):
+                                                  ! 0|1 0|1 0|1 0|1 0|1
+                                                  !  ^   ^   ^   ^   ^--- bury
+                                                  !  |   |   |   |------- uplift/erode
+                                                  !  |   |   |----------- thrust
+                                                  !  |   |--------------- thicken
+                                                  !  |------------------- thin
 
 integer :: nburial !------------------------------! number of burial events
 double precision, allocatable :: burial_dat(:,:)  ! burial_dat(:,1): start (Ma)
@@ -132,10 +139,10 @@ integer, allocatable :: horizon_shift(:,:)
 
 integer :: ntempsteps !---------------------------! number of surface temperature step variations
 integer :: ntempramps !---------------------------! number of surface temperature ramp variations
-integer :: ntempsin   !---------------------------! number of surface temperature ramp variations
+integer :: ntempcycles !--------------------------! number of surface temperature ramp variations
 double precision, allocatable :: temp_step_dat(:,:)   ! (1) start (2) new temp
 double precision, allocatable :: temp_ramp_dat(:,:)   ! (1) start (2) duration (3) temp change
-double precision, allocatable :: temp_sin_dat(:,:)    ! (1) start (2) duration (3) amp (4) freq
+double precision, allocatable :: temp_cycle_dat(:,:)  ! (1) start (2) duration (3) amp (4) freq
 double precision, allocatable :: temp_surf_var(:)     ! surface temperature variations over time
 
 
@@ -296,7 +303,7 @@ do while (istep.lt.nt_total)
             write(*,'(X,A,I6,A,I6)') trim(exec_name)//': working on step',istep,' of',nt_total
         endif
     elseif (verbosity.ge.3) then
-        if (istep.lt.nt_total.and.action(istep).eq.0) then
+        if (istep.lt.nt_total.and.action_array(istep).eq.0) then
             write(*,'(X,A,I6,A,I6,A)',advance='no') trim(exec_name)//': working on step',istep,&
                                                     ' of',nt_total,char(13)
         else
@@ -306,16 +313,20 @@ do while (istep.lt.nt_total)
 
 
 
-    ! Thermal/tectonic/climate actions (in tqtec_actions.f90)
-    if (action(istep).eq.1) then
-        ! Add material to the top of the model (burial)
+    ! Thermal/tectonic/climate actions                ! tqtec_actions.f90
+
+    ! Add material to the top of the model (burial)
+    if (mod(action_array(istep)/1,2).eq.1) then
         call bury()
+    endif
 
-    elseif (action(istep).eq.2) then
-        ! Remove material from the top of the model (uplift + erosion)
+    ! Remove material from the top of the model (uplift + erosion)
+    if (mod(action_array(istep)/2,2).eq.1) then
         call erode()
+    endif
 
-    elseif (action(istep).eq.3) then
+    ! Duplicate and emplace material (thrust sheet)
+    if (mod(action_array(istep)/4,2).eq.1) then
         ! Get thrust event number
         j = 0
         do i = 1,nthrust
@@ -339,8 +350,10 @@ do while (istep.lt.nt_total)
             ! Track horizons in the footwall (lower plate) of the thrust sheet
             call thrust_lowerplate()
         endif
+    endif
 
-    elseif (abs(action(istep)).eq.4) then
+    ! Add or remove material within model (crustal thickening/thinning)
+    if (mod(action_array(istep)/8,2).eq.1.or.mod(action_array(istep)/16,2).eq.1) then
         ! Check to see if this is a new crustal thickening/thinning event
         do i = 1,nthicken
             if (thicken_start(i).eq.istep) then
@@ -351,19 +364,18 @@ do while (istep.lt.nt_total)
             endif
         enddo
         ! Add or remove a node within the model interior (thickening/thinning)
-        if (action(istep).gt.0) then
+        if (mod(action_array(istep)/8,2).eq.1) then
             call thicken()
-        else
+        elseif (mod(action_array(istep)/16,2).eq.1) then
             call thin()
+        else
+            write(0,*) trim(exec_name)//': somehow you got in the thickening/thinning action block'
+            write(0,*) 'But action code',action_array(istep),' does not indicate either action...'
+            call error_exit(1)
         endif
 
-    elseif (action(istep).ne.0) then
-        write(0,*)
-        write(0,*) trim(exec_name)//' error defining action flag'
-        write(0,*) 'No action flag number',action(istep)
-        call error_exit(1)
-
     endif
+
 
 
     ! Check if horizons should be shifted at this timestep

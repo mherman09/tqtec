@@ -10,42 +10,9 @@ subroutine setup_action_arrays()
 ! Construct arrays to control tectonic action events
 !----
 
-use tqtec, only: timing_file, &
-                 verbosity, &
-                 nt_total, &
-                 dz, &
-                 dt, &
-                 nhorizons, &
-                 depth_node, &
-                 cond_base, &
-                 hf_surf, &
-                 hp_surf, &
-                 hp_dep, &
-                 nburial, &
-                 burial_dat, &
-                 nuplift, &
-                 uplift_dat, &
-                 nthrust, &
-                 thrust_dat, &
-                 thrust_step, &
-                 nhfvars, &
-                 hfvar, &
-                 bas_grad, &
-                 action, &
-                 burial_cond, &
-                 nthicken, &
-                 thicken_dat, &
-                 thicken_start, &
-                 crust_dat, &
-                 thickenHorizons, &
-                 horizon_shift, &
-                 ntempsteps, &
-                 temp_step_dat, &
-                 ntempramps, &
-                 temp_ramp_dat, &
-                 ntempsin, &
-                 temp_sin_dat, &
-                 temp_surf_var
+
+use tqtec
+
 
 implicit none
 
@@ -68,6 +35,16 @@ double precision :: amp
 double precision :: freq
 double precision, parameter :: pi = 4.0d0*atan(1.0d0)
 logical :: isThinning
+character(len=6) :: exec_name
+
+
+
+! Set executable name
+#ifdef COMPILE_TQTEC
+exec_name = 'tqtec'
+#elif COMPILE_TQCLIM
+exec_name = 'tqclim'
+#endif
 
 
 
@@ -77,12 +54,12 @@ endif
 
 
 
-! Initialize global tectonic action arrays
+! Initialize global action arrays
 call init_action_arrays()
 
 
 
-! Initialize local tectonic action arrays
+! Initialize local action arrays
 if (allocated(total_shift)) then
     deallocate(total_shift)
 endif
@@ -111,7 +88,7 @@ do i = 1,nburial
     do j = jbeg,jend
         arg = dble(j-nstart)*rate - dble(ct)      ! Test for burying at this timestep
         if (arg.ge.1.0d0) then
-            action(j) = 1                         ! Set burial action code = 1
+            action_array(j) = action_array(j) + 1
             burial_cond(j) = burial_dat(i,4)
             ct = ct + 1
         endif
@@ -130,11 +107,21 @@ do i = 1,nuplift
     rate = dble(nthick)/dble(nduration)           ! Rate in nodes/timestep
     jbeg = nstart + 1                             ! First timestep
     jend = nstart + nduration                     ! Last timestep
+    if (jbeg.le.0) then
+        write(0,*) trim(exec_name)//': uplift event timing error'
+        write(0,*) 'Start time must be >= 0'
+        call error_exit(1)
+    endif
+    if (jend.gt.nt_total) then
+        write(0,*) trim(exec_name)//': uplift event timing error'
+        write(0,*) 'Duration set too long, event runs past end of model'
+        call error_exit(1)
+    endif
     ct = 0                                        ! Initialize counter for uplift increments
     do j = jbeg,jend
         arg = dble(j-nstart)*rate - dble(ct)      ! Test for eroding at this timestep
         if (arg.ge.1.0d0) then
-            action(j) = 2                         ! Set uplift action code = 2
+            action_array(j) = action_array(j) + 2
             ct = ct + 1
         endif
     enddo
@@ -147,10 +134,11 @@ enddo
 !**************************************************************************************************!
 do i = 1,nthrust
     nstart = int(thrust_dat(i,1)/dt) + 1          ! Timestep of thrust faulting
-    action(nstart) = 3                            ! Set thrust action code = 3
+    action_array(j) = action_array(j) + 4
     thrust_step(i) = nstart                       ! Save thrust timestep for each thrust action
     ! THTYPE(I): thrust_dat(i,2)
 enddo
+
 
 
 !**************************************************************************************************!
@@ -177,7 +165,8 @@ endif
 
 ! Check that heat production is never greater than surface heat flow
 if (hp_surf*hp_dep.ge.maxval(hf_surf_var)) then
-    write(0,*) 'tqtec: total heat production ',hp_surf*hp_dep,' is greater than surface heat flow'
+    write(0,*) trim(exec_name)//': total heat production ',hp_surf*hp_dep,' is greater than '//&
+               'surface heat flow'
     call error_exit(1)
 endif
 
@@ -204,7 +193,7 @@ do i = 1,nthicken
 
     ! Make sure thinning amount is less than crustal thickness
     if (isThinning .and. thicken_dat(i,3).ge.thicken_dat(i,5)) then
-        write(0,*) 'tqtec: thinning magnitude must be less than crustal thickness'
+        write(0,*) trim(exec_name)//': thinning magnitude must be less than crustal thickness'
         write(0,*) 'thinning amount   =',thicken_dat(i,3)
         write(0,*) 'crustal thickness =',thicken_dat(i,5)
         call error_exit(1)
@@ -223,9 +212,9 @@ do i = 1,nthicken
         if (arg.ge.1.0d0) then
 
             if (isThinning) then
-                action(j) = -4                    ! Set thinning action code = -4
+                action_array(j) = action_array(j) + 16
             else
-                action(j) = 4                     ! Set thickening action code = 4
+                action_array(j) = action_array(j) + 8
             endif
             ct = ct + 1
 
@@ -239,6 +228,9 @@ do i = 1,nthicken
             endif
         endif
     enddo
+    if (isThinning) then
+        thicken_dat(i,3) = -thicken_dat(i,3)
+    endif
 
     ! Check whether tracked horizons should move during thickening/thinning
     if (thickenHorizons) then
@@ -296,7 +288,7 @@ do i = 1,ntempramps
     jbeg = int(temp_ramp_dat(i,1)/dt)
     jend = jbeg + int(temp_ramp_dat(i,2)/dt)
     if (jend.gt.nt_total) then
-        write(0,*) 'tqclim: end of temperature ramp period goes beyond model duration'
+        write(0,*) trim(exec_name)//': end of temperature ramp period goes beyond model duration'
         call error_exit(1)
     endif
     rate = temp_ramp_dat(i,3)/temp_ramp_dat(i,2)
@@ -309,14 +301,14 @@ do i = 1,ntempramps
 enddo
 
 ! Add sinusoidal temperature variations to surface temperature
-do i = 1,ntempsin
-    jbeg = int(temp_sin_dat(i,1)/dt) + 1
-    jend = jbeg + int(temp_sin_dat(i,2)/dt) - 1
-    amp = temp_sin_dat(i,3)
-    freq = temp_sin_dat(i,4)
+do i = 1,ntempcycles
+    jbeg = int(temp_cycle_dat(i,1)/dt) + 1
+    jend = jbeg + int(temp_cycle_dat(i,2)/dt) - 1
+    amp = temp_cycle_dat(i,3)
+    freq = temp_cycle_dat(i,4)
     if (jend.gt.nt_total) then
         write(0,*) jbeg,jend,nt_total
-        write(0,*) 'tqclim: end of temperature sinusoid period goes beyond model duration'
+        write(0,*) trim(exec_name)//': end of temperature sinusoid period goes beyond model duration'
         call error_exit(1)
     endif
     do j = jbeg,jend
@@ -327,7 +319,7 @@ enddo
 
 
 
-! Print timing of tectonic actions to file
+! Print timing of actions to file
 if (timing_file.ne.'') then
     open(unit=13,file=timing_file,status='unknown')
     do i = 1,nburial
@@ -341,6 +333,18 @@ if (timing_file.ne.'') then
     enddo
     do i = 1,nthicken
         write(13,*) 'thicken',i,thicken_dat(i,1),thicken_dat(i,1)+thicken_dat(i,2)
+    enddo
+    do i = 1,nhfvars
+        write(13,*) 'hfvar',i,hfvar(i,1)
+    enddo
+    do i = 1,ntempsteps
+        write(13,*) 'temp_step',i,temp_step_dat(i,1)
+    enddo
+    do i = 1,ntempramps
+        write(13,*) 'temp_ramp',i,temp_ramp_dat(i,1),temp_ramp_dat(i,1)+temp_ramp_dat(i,2)
+    enddo
+    do i = 1,ntempcycles
+        write(13,*) 'temp_step',i,temp_cycle_dat(i,1),temp_cycle_dat(i,1)+temp_cycle_dat(i,2)
     enddo
     close(13)
 endif
@@ -357,7 +361,13 @@ end subroutine
 
 
 
+
+
+
 !--------------------------------------------------------------------------------------------------!
+
+
+
 
 
 
@@ -366,29 +376,15 @@ subroutine init_action_arrays()
 ! Allocate memory to tectonic action arrays and initialize their values
 !----
 
-use tqtec, only: nt_total, &
-                 nhorizons, &
-                 action, &
-                 nburial, &
-                 burial_cond, &
-                 bas_grad, &
-                 nthrust, &
-                 thrust_step, &
-                 crust_dat, &
-                 nthicken, &
-                 thicken_start, &
-                 thickenHorizons, &
-                 horizon_shift, &
-                 temp_surf, &
-                 temp_surf_var
+use tqtec
 
 
 implicit none
 
 
 ! Free memory from tectonic action arrays - these should not be allocated, but ¯\_(ツ)_/¯
-if (allocated(action)) then
-    deallocate(action)
+if (allocated(action_array)) then
+    deallocate(action_array)
 endif
 if (allocated(burial_cond)) then
     deallocate(burial_cond)
@@ -414,13 +410,13 @@ endif
 ! DO NOT NEED TO STORE CONDUCTIVITY AND BASE TEMP GRADIENT FOR ALL TIMESTEPS.
 ! THOSE ARRAYS ARE MOSTLY ZEROS!
 allocate(temp_surf_var(nt_total))
-allocate(action(nt_total))         ! action code at each timestep: 0=no action, >0=action
+allocate(action_array(nt_total))    ! action code at each timestep: 0=no action, >0=action
 if (nburial.gt.0) then
-    allocate(burial_cond(nt_total))! conductivity of material added to model during burial step
+    allocate(burial_cond(nt_total)) ! conductivity of material added to model during burial step
 endif
-allocate(bas_grad(nt_total))       ! temperature gradient at the base of the model
+allocate(bas_grad(nt_total))        ! temperature gradient at the base of the model
 if (nthrust.gt.0) then
-    allocate(thrust_step(nthrust)) ! timestep for each thrust action
+    allocate(thrust_step(nthrust))  ! timestep for each thrust action
 endif
 if (nthicken.gt.0) then
     allocate(crust_dat(nthicken,2))
@@ -432,7 +428,7 @@ endif
 
 
 ! Initialize arrays
-action = 0
+action_array = 0
 temp_surf_var = temp_surf
 if (nburial.gt.0) then
     burial_cond = 0.0d0
@@ -456,6 +452,8 @@ end subroutine
 
 
 !--------------------------------------------------------------------------------------------------!
+
+
 
 
 subroutine check_actions()
@@ -497,6 +495,10 @@ enddo
 
 return
 end subroutine
+
+
+
+
 
 
 

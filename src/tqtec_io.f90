@@ -1416,15 +1416,15 @@ do while (iend.eq.0)
 
 
     !--- Surface Temperature Linear Changes ---!
-    elseif (var.eq.'NTEMPSIN') then
+    elseif (var.eq.'NTEMPCYCLES') then
 
-        read(value,*) ntempsin
+        read(value,*) ntempcycles
 
-        if (ntempsin.gt.0) then
+        if (ntempcycles.gt.0) then
 
-            allocate(temp_sin_dat(ntempsin,4))
+            allocate(temp_cycle_dat(ntempcycles,4))
 
-            do i = 1,ntempsin
+            do i = 1,ntempcycles
 
                 ! Skip blank or commented lines
                 read(8,'(A)') input_line
@@ -1432,11 +1432,11 @@ do while (iend.eq.0)
                     read(8,'(A)') input_line
                 enddo
 
-                read(input_line,*,iostat=ios) (temp_sin_dat(i,j),j=1,4) ! start duration amp freq
+                read(input_line,*,iostat=ios) (temp_cycle_dat(i,j),j=1,4) ! start duration amp freq
 
                 ! Check for errors during temp sinusoid data read
                 if (ios.ne.0) then
-                    write(0,*) trim(exec_name)//': error reading temp sinusoid change parameter for event',i
+                    write(0,*) trim(exec_name)//': error reading cyclic temp changes for event',i
                     write(0,*) 'Looking for: start(',trim(time_unit),') ',&
                                              'duration(',trim(time_unit),') ',&
                                              'amplitude(C) frequency(1/',trim(time_unit),')'
@@ -1938,8 +1938,8 @@ character(len=1) :: ntempsteps
 character(len=6) :: tempstepdat
 character(len=1) :: ntempramps
 character(len=10) :: temprampdat
-character(len=1) :: ntempsin
-character(len=10) :: tempsindat
+character(len=1) :: ntempcycles
+character(len=10) :: tempcycledat
 character(len=1) :: nhfvars
 character(len=5) :: hfvardat
 character(len=64) :: horizondat
@@ -1965,8 +1965,8 @@ ntempsteps = '0'
 tempstepdat = ''
 ntempramps = '0'
 temprampdat = ''
-ntempsin = '0'
-tempsindat = ''
+ntempcycles = '0'
+tempcycledat = ''
 nhfvars = '1'
 hfvardat = '85 90'
 horizondat = '0 1 2 3 4 5 6 7 8 9'
@@ -1991,8 +1991,8 @@ ntempsteps = '1'
 tempstepdat = '100 -5'
 ntempramps = '1'
 temprampdat = '1100 200 5'
-ntempsin = '1'
-tempsindat = '0 2000 1 1'
+ntempcycles = '1'
+tempcycledat = '0 2000 1 1'
 nhfvars = '0'
 hfvardat = ''
 horizondat = '0 50 100 150 200 250 300 350 400 450'
@@ -2070,8 +2070,8 @@ write(*,'(A)')
 write(*,'(A)') '# Cyclic temperature changes'
 write(*,'(A)') '# Start_Time('//trim(time_unit)//') Duration('//trim(time_unit)//') Amplitude(C) '//&
                   'Frequency(1/'//trim(time_unit)//')'
-write(*,'(A)') 'NTEMPSIN='//ntempsin
-write(*,'(A)') trim(tempsindat)
+write(*,'(A)') 'NTEMPCYCLES='//ntempcycles
+write(*,'(A)') trim(tempcycledat)
 write(*,'(A)')
 write(*,'(A)')
 write(*,'(A)') '# At the base of the model, '//trim(prog_name)//' has a heat flow (not temperature!)'
