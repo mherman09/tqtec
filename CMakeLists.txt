@@ -53,6 +53,9 @@ add_dependencies(petro tqteclib)
 target_link_libraries(petro tqteclib)
 install(TARGETS petro DESTINATION bin)
 
+add_executable(build_temp_history src/build_temp_history.f90)
+install(TARGETS build_temp_history DESTINATION bin)
+
 # add_executable(ftage src/ftage.f90)
 # install(TARGETS ftage DESTINATION bin)
 
