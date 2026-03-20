@@ -172,7 +172,8 @@ endif
 
 ! Propagate surface heat flow down to base and calculate temperature gradient
 do j = 1,nt_total
-    bas_grad(j) = (hf_surf_var(j)-hp_surf*hp_dep)*dz/cond_base
+    bas_grad(j) = ( hf_surf_var(j) &
+                        - (hp_surf*hp_dep)*(1.0d0-exp(-dble(nnodes)*dz/hp_dep))) * dz/cond_base
 enddo
 
 
@@ -709,7 +710,7 @@ enddo
 
 
 ! Copy the existing model array (the lower plate/footwall) from the depth of thrust sheet
-! emplacement to the base of the model to the top of the model. This removes the array 
+! emplacement to the base of the model to the top of the model. This removes the array
 ! representing the lower plate/footwall from the surface down to the depth of emplacement.
 do i = thrust_dep+1,nnodes
     conductivity(i-thrust_dep) = conductivity(i)
