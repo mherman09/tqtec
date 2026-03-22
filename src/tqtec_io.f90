@@ -184,6 +184,11 @@ use tqtec, only: nnodes, &
                  nburial, &
                  nuplift, &
                  nthrust, &
+                 nthicken, &
+                 nhfvars, &
+                 ntempsteps, &
+                 ntempramps, &
+                 ntempcycles, &
                  verbosity
 
 
@@ -205,6 +210,11 @@ diffusivity = 32.0d0     ! D1=32.0                ! thermal diffusivity (m^2/yr 
 nburial = 0              ! NBP                    ! number of burial events
 nuplift = 0              ! NUEP                   ! number of uplift/erosion events
 nthrust = 0              ! NTP                    ! number of thrust events
+nthicken = 0             ! NTP                    ! number of thickening events
+nhfvars = 0              ! NTP                    ! number of heat flow variation events
+ntempsteps = 0
+ntempramps = 0
+ntempcycles = 0
 verbosity = 0                                     ! program verbosity
 
 
