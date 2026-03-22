@@ -232,7 +232,7 @@ call read_model_parameters()                          ! tqtec_io.f90
 
 ! Check that model is deep enough to include all depth horizons of interest
 if (dz*dble(nnodes).lt.maxval(depth)) then
-    write(0,*) trim(exec_name)//': model extent is shallower than deepest horizon'
+    write(0,*) trim(exec_name)//' [ERROR]: model extent is shallower than deepest horizon'
     call error_exit(1)
 endif
 
@@ -288,7 +288,7 @@ do while (istep.lt.nt_total)
     ! Calculate the updated temperatures at each node (***THE MAIN FINITE DIFFERENCE PROCEDURE***)
     call update_temps(nnodes,ierr)                    ! tqtec.f90
     if (ierr.ne.0) then
-        write(0,*) trim(exec_name)//': error in update_temps() TRID algorithm at step',istep
+        write(0,*) trim(exec_name)//' [ERROR]: error in update_temps() TRID algorithm at step',istep
         call error_exit(1)
     endif
 
@@ -336,11 +336,11 @@ do while (istep.lt.nt_total)
             endif
         enddo
         if (j.eq.0) then
-            write(0,*) trim(exec_name)//': error setting thrust number at timestep',istep
+            write(0,*) trim(exec_name)//' [ERROR]: error setting thrust number at timestep',istep
         endif
         iplate = int(thrust_dat(j,2))
         if (iplate.eq.0) then
-            write(0,*) trim(exec_name)//': error setting thrust number at timestep',istep
+            write(0,*) trim(exec_name)//' [ERROR]: error setting thrust number at timestep',istep
         endif
         ! Duplicate material and insert it (thrusting)
         if (iplate.eq.1) then

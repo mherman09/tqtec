@@ -972,6 +972,8 @@ character(len=8) :: exec_name
 character(len=2) :: dist_unit
 character(len=2) :: time_unit
 double precision :: max_depth
+logical :: isNnodesDefined
+logical :: isDzDefined
 logical :: isMaxDepthDefined
 logical :: isLineBlank
 
@@ -987,6 +989,8 @@ endif
 ! Initialize variables
 ios = 0
 iend = 0
+isNnodesDefined = .false.
+isDzDefined = .false.
 isMaxDepthDefined = .false.
 isActionDefined = .false.
 t_total = -1.0d99
@@ -1049,11 +1053,19 @@ do while (iend.eq.0)
     endif
 
 
-    ! Big if statement to handle all VAR definitions
+    !---- BIG IF STATEMENT TO HANDLE ALL INPUT VARIABLES ----!
+
+    ! Model duration and timesteps
     if (var.eq.'T_TOTAL'.or.var.eq.'t_total') then
         read(value,*) t_total
+    elseif (var.eq.'DT'.or.var.eq.'dt') then
+        read(value,*) dt
+
+    ! Geotherm output interval
     elseif (var.eq.'T_GEOTHERM_OUTPUT'.or.var.eq.'t_geotherm_output') then
         read(value,*) t_geotherm_output
+
+    ! Surface temperature and heat flow boundary conditions
     elseif (var.eq.'TEMP_SURF'.or.var.eq.'temp_surf') then
         read(value,*) temp_surf
     elseif (var.eq.'HF_SURF'.or.var.eq.'hf_surf') then
@@ -1061,27 +1073,10 @@ do while (iend.eq.0)
 #ifdef COMPILE_TQCLIM
         hf_surf = hf_surf/1.0d3
 #endif
+
+    ! Material properties
     elseif (var.eq.'COND_BASE'.or.var.eq.'cond_base') then
         read(value,*) cond_base
-    elseif (var.eq.'HP_SURF'.or.var.eq.'hp_surf') then
-        read(value,*) hp_surf
-    elseif (var.eq.'HP_DEP'.or.var.eq.'hp_dep') then
-        read(value,*) hp_dep
-    elseif (var.eq.'NNODES'.or.var.eq.'nnodes') then
-        read(value,*) nnodes
-    elseif (var.eq.'DZ'.or.var.eq.'dz') then
-        read(value,*) dz
-        if (isMaxDepthDefined) then
-            nnodes = int(max_depth/dz)
-        endif
-    elseif (var.eq.'MAX_DEPTH'.or.var.eq.'max_depth'.or.var.eq.'DEPTH_MAX'.or.var.eq.'depth_max') then
-        read(value,*) max_depth
-        nnodes = int(max_depth/dz)
-        isMaxDepthDefined = .true.
-    elseif (var.eq.'DT'.or.var.eq.'dt') then
-        read(value,*) dt
-
-
     elseif (var.eq.'NLAYERS'.or.var.eq.'nlayers') then
         read(value,*) nlayers
         if (nlayers.gt.0) then
@@ -1093,6 +1088,25 @@ do while (iend.eq.0)
                 read(8,*) (layer(i,j),j=1,3)                ! top thickness conductivity
             enddo
         endif
+
+    ! Heat production
+    elseif (var.eq.'HP_SURF'.or.var.eq.'hp_surf') then
+        read(value,*) hp_surf
+    elseif (var.eq.'HP_DEP'.or.var.eq.'hp_dep') then
+        read(value,*) hp_dep
+
+    ! Model geometry
+    elseif (var.eq.'NNODES'.or.var.eq.'nnodes') then
+        read(value,*) nnodes
+        isNnodesDefined = .true.
+    elseif (var.eq.'DZ'.or.var.eq.'dz') then
+        read(value,*) dz
+        isDzDefined = .true.
+    elseif (var.eq.'MAX_DEPTH' .or. var.eq.'max_depth' &
+                .or. var.eq.'DEPTH_MAX' .or. var.eq.'depth_max' &
+                .or. var.eq.'maxdep' .or. var.eq.'MAXDEP') then
+        read(value,*) max_depth
+        isMaxDepthDefined = .true.
 
 
     !--- Tracked Horizons ---!
@@ -1462,50 +1476,76 @@ do while (iend.eq.0)
 
 
     else
+
         write(0,*) trim(exec_name)//': no variable option named "',trim(var),'"'
         call error_exit(1)
+
+
     endif
 
+    !---- WHEW! IF STATEMENT OVER! ----!
 
 
     ! Reached the end of the file, exit
     3451 if (iend.ne.0) then
         exit
     endif
+
 enddo
 
 
 
 
-! Check that necessary variables have been defined
+! Check total model time
 if (t_total.lt.0.0) then
-    write(0,*) trim(exec_name)//': t_total has not been defined'
+    write(0,*) trim(exec_name)//' [ERROR]: t_total has not been defined'
     call error_exit(1)
 endif
+
+! Check surface boundary conditions
 if (temp_surf.lt.0.0) then
-    write(0,*) trim(exec_name)//': temp_surf has not been defined'
+    write(0,*) trim(exec_name)//' [ERROR]: temp_surf has not been defined'
     call error_exit(1)
 endif
 if (hf_surf.lt.0.0) then
-    write(0,*) trim(exec_name)//': hf_surf has not been defined'
+    write(0,*) trim(exec_name)//' [ERROR]: hf_surf has not been defined'
     call error_exit(1)
 endif
+
+! Check conductivity
 if (cond_base.lt.0.0) then
-    write(0,*) trim(exec_name)//': cond_base has not been defined'
+    write(0,*) trim(exec_name)//' [ERROR]: cond_base has not been defined'
     call error_exit(1)
 endif
+
+! Check horizons
 if (nhorizons.le.0) then
-    write(0,*) trim(exec_name)//': no horizons have been defined'
+    write(0,*) trim(exec_name)//' [ERROR]: no horizons have been defined'
     call error_exit(1)
 endif
-if (temp_surf.lt.0.0) then
-    write(0,*) trim(exec_name)//': temp_surf has not been defined'
-    call error_exit(1)
-endif
+
+! Check whether anything will happen in model run
 if (.not.isActionDefined) then
-    write(0,*) trim(exec_name)//': no actions have been defined'
-    call error_exit(1)
+    write(0,*) trim(exec_name)//' [WARNING]: no actions have been defined'
 endif
+
+! Check node geometry parameters
+if (isMaxDepthDefined) then
+    if (isNnodesDefined.and.isDzDefined) then
+        write(0,*) trim(exec_name)//' [WARNING]: nnodes, dz, and max_depth are all defined in input file'
+        write(0,*) 'Using nnodes and dz to define node geometry'
+    elseif (isNnodesDefined) then
+        dz = max_depth/dble(nnodes)
+    elseif (isDzDefined) then
+        nnodes = int(max_depth/dz)
+    else
+        write(0,*) trim(exec_name)//' [WARNING]: only max_depth is defined in input file'
+        write(0,*) 'Using max_depth and default nnodes to define node geometry'
+        dz = max_depth/dble(nnodes)
+    endif
+endif
+
+
 
 close(8)
 

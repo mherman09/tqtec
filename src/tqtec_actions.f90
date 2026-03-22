@@ -345,7 +345,7 @@ if (timing_file.ne.'') then
         write(13,*) 'temp_ramp',i,temp_ramp_dat(i,1),temp_ramp_dat(i,1)+temp_ramp_dat(i,2)
     enddo
     do i = 1,ntempcycles
-        write(13,*) 'temp_step',i,temp_cycle_dat(i,1),temp_cycle_dat(i,1)+temp_cycle_dat(i,2)
+        write(13,*) 'temp_cycle',i,temp_cycle_dat(i,1),temp_cycle_dat(i,1)+temp_cycle_dat(i,2)
     enddo
     close(13)
 endif
